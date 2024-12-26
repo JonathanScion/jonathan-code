@@ -7,3 +7,4 @@
 sqlparse==0.5.2
     # via ContextFreeSQL (pyproject.toml)
 sqlglot
+psycopg2-binary
