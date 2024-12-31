@@ -25,3 +25,5 @@ env/
 venv/
 ENV/
 ._atomic-*
+*.tmp
+~$
