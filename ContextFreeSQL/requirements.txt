@@ -9,3 +9,5 @@ sqlparse==0.5.2
 sqlglot
 psycopg2-binary
 python-dotenv
+pandas
+numpy

@@ -1,0 +1,316 @@
+import os
+from infra.database import Database
+from psycopg2.extras import RealDictCursor #!see if we need this
+import pandas as pd
+import numpy as np
+
+
+def load_tables():   
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql =  """SELECT  table_schema || '.' || table_name as object_id, table_name as EntName, 'U' as type,  null as crdate, table_schema as EntSchema, table_schema, table_name,
+                            null as schema_ver, 
+                            NULL as ident_seed, 
+                            NULL as ident_incr, Now() as db_now, null as table_sql  
+                            FROM information_schema.TABLES E where TABLE_TYPE LIKE '%TABLE%'
+                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" #!do i need to put in {os.getenv('DB_SCHEMA')} as prefix to all table names? sample sql before was: f"SELECT * FROM {os.getenv('DB_SCHEMA')}.family"        
+        cur.execute(sql)
+         
+        results = cur.fetchall()
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def load_tables_columns():
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, CHARACTER_MAXIMUM_LENGTH as max_length ,
+                            NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
+                             null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS ""col_unsigned"", 
+                            NULL AS ""EXTRA"", 
+                            0 AS is_computed, null AS computed_definition ,
+                            case WHEN is_identity  = 'YES' then 1 WHEN is_identity  = 'NO' then 0 END AS is_identity, 
+                            identity_generation, identity_start as indent_seed, identity_increment as indent_incr, identity_maximum, identity_minimum, identity_cycle
+                            FROM information_schema.COLUMNS C
+                             where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') """
+        cur.execute(sql)
+        results = cur.fetchall()
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def load_tables_indexes():
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+  
+        sql= """SELECT
+                scm.nspname  || '.' || t.relname as object_id, /*t.oid as object_id,*/ i.oid as index_oid,
+                scm.nspname As table_schema,
+                t.relname as table_name,
+                i.relname as index_name, i.relname as name,
+                ix.indisunique as is_unique,
+                indisclustered as is_clustered,
+                0 as index_id, 0 as type,--not implementing for PG right now, as MSSQL indexes are so different
+                0 as is_hypothetical,
+                NULL as data_space_name,
+                null as ignore_dup_key,
+                indisprimary as is_primary_key,
+                case cnst.contype when 'u' then 1 else 0 end as is_unique_constraint, --! is there such in pg?
+                cnst.contype  as is_unique_constraint1,
+                ix.indkey,
+                am.amname as index_type,
+                NULL as is_padded ,
+                0 as is_disabled, --! can index be disabled in postgres?
+                null as allow_row_locks,
+                null as allow_page_locks,
+                null as no_recompute,
+                null as has_filter,
+                null as filter_definition,
+                null as type_desc,
+                null as secondary_type_desc,
+                null as fill_factor,
+                null as type_desc, --for MSSQL comparisons
+                idx.indexdef as index_sql --PG provides full CREATE INDEX actually. could even compare only on this field (and schma)name and table_name)
+            from
+                pg_index ix 
+                inner Join pg_class i  ON i.oid = ix.indexrelid
+                inner Join pg_class t on t.oid = ix.indrelid --indrelid Is the oid of the table
+                inner Join pg_namespace scm on  t.relnamespace = scm.oid
+                inner JOIN pg_class cls ON cls.oid=ix.indexrelid inner JOIN pg_am am ON am.oid=cls.relam
+                inner join pg_indexes idx on idx.schemaname=scm.nspname and idx.tablename=t.relname and idx.indexname=i.relname
+                Left Join pg_constraint cnst on t.oid = cnst.conrelid And i.oid=cnst.conindid And cnst.contype='u'	
+            where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')"
+                results = cur.fetchall()"""
+        
+        cur.execute(f"SELECT * FROM {os.getenv('DB_SCHEMA')}.family")
+        results = cur.fetchall()
+
+        return results
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+def load_tables_indexes_columns(tbl_cols, tbl_indexes):
+    """
+    Main function that processes PostgreSQL index columns.
+    
+    Args:
+        tbl_cols (DataFrame): Table with column information
+        tbl_indexes (DataFrame): Table with index information
+    
+    Returns:
+        DataFrame: Processed index columns with proper schema
+    """
+    # First create empty output DataFrame with correct schema
+    output = pd.DataFrame(columns=[
+        'object_id', 'index_id', 'index_name', 'table_schema', 'table_name',
+        'col_name', 'name', 'user_type_name', 'index_column_id', 'is_descending_key',
+        'column_id', 'key_ordinal', 'is_included_column', 'partition_ordinal'
+    ]).astype({
+        'object_id': 'string',
+        'index_id': 'int32',
+        'index_name': 'string',
+        'table_schema': 'string',
+        'table_name': 'string',
+        'col_name': 'string',
+        'name': 'string',
+        'user_type_name': 'string',
+        'index_column_id': 'int32',
+        'is_descending_key': 'bool',
+        'column_id': 'int64',
+        'key_ordinal': 'int64',
+        'is_included_column': 'bool',
+        'partition_ordinal': 'uint8'
+    })
+    
+    # Explode the indkey arrays into separate rows
+    index_cols = tbl_indexes.explode('indkey').reset_index()
+    
+    # Add ordinal position (1-based)
+    index_cols['ordinal'] = index_cols.groupby('index')['indkey'].cumcount() + 1
+    
+    # Merge with columns table
+    result = pd.merge(
+        index_cols,
+        tbl_cols,
+        left_on=['table_schema', 'table_name', 'indkey'],
+        right_on=['table_schema', 'table_name', 'column_id']
+    )
+    
+    # Format output according to schema
+    output = pd.DataFrame({
+        'object_id': result['object_id'],
+        'index_id': result['index_id'],
+        'index_name': result['index_name'],
+        'table_schema': result['table_schema'],
+        'table_name': result['table_name'],
+        'col_name': result['col_name'],
+        'name': result['col_name'],
+        'user_type_name': result['user_type_name'],
+        'index_column_id': result['ordinal'],
+        'is_descending_key': False,
+        'column_id': result['column_id'],
+        'key_ordinal': result['ordinal'],
+        'is_included_column': False,
+        'partition_ordinal': 0
+    })
+    
+    return output
+ 
+
+
+  
+def load_tables_foreign_keys():
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        sql = """SELECT fk.conrelid as fkey_table_id, fk.confrelid as rkey_table_id, fk.oid AS fkey_constid,fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name, ns_f.nspname as rkey_table_schema,t_f.relname as rkey_table_name,
+            CASE confdeltype
+            WHEN 'c' THEN 1
+            ELSE 0
+            END AS IsDeleteCascade,
+            CASE confupdtype
+            WHEN 'c' THEN 1
+            ELSE 0
+            END AS IsUpdateCascade,
+            confupdtype,
+            confdeltype,
+            fk.conkey as f_cols,confkey as r_cols, 0 as IsDisabled, 0 as IsNotRepl, 0 as IsNotTrusted, 0 as is_system_named
+                        FROM pg_catalog.pg_constraint fk 
+                            inner join pg_class t on fk.conrelid = t.oid
+                            inner join pg_namespace ns on ns.oid = t.relnamespace
+                            inner join pg_class t_f on fk.confrelid=t_f.oid
+                                inner join pg_namespace ns_f on ns_f.oid = t_f.relnamespace
+                        where fk.contype = 'f'"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        
+        return results
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def process_fk_cols_pg(tbl_cols, tbl_fks):
+    """
+    Process PostgreSQL foreign key columns.
+    
+    Args:
+        tbl_cols (DataFrame): Table with column information
+        tbl_fks (DataFrame): Table with foreign key information
+    
+    Returns:
+        DataFrame: Processed foreign key columns with proper schema
+    """
+    # Create empty output DataFrame with correct schema
+    output = pd.DataFrame(columns=[
+        'fkey_table_id', 'fkey_constid', 'fkey_name', 'keyno',
+        'fkey_table_schema', 'fkey_table_name',
+        'rkey_table_schema', 'rkey_table_name',
+        'fkey_col_name', 'rkey_col_name'
+    ]).astype({
+        'fkey_table_id': 'string',
+        'fkey_constid': 'string',
+        'fkey_name': 'string',
+        'keyno': 'int32',
+        'fkey_table_schema': 'string',
+        'fkey_table_name': 'string',
+        'rkey_table_schema': 'string',
+        'rkey_table_name': 'string',
+        'fkey_col_name': 'string',
+        'rkey_col_name': 'string'
+    })
+    
+    # Create rows list to store results
+    rows = []
+    
+    # Process each FK row
+    for _, fk_row in tbl_fks.iterrows():
+        f_cols = fk_row['f_cols']  # foreign key columns
+        r_cols = fk_row['r_cols']  # referenced columns
+        
+        # Process each pair of columns
+        for idx, (f_col_id, r_col_id) in enumerate(zip(f_cols, r_cols)):
+            # Get foreign key column info
+            f_mask = (
+                (tbl_cols['table_schema'] == str(fk_row['fkey_table_schema'])) &
+                (tbl_cols['table_name'] == str(fk_row['fkey_table_name'])) &
+                (tbl_cols['column_id'] == str(f_col_id))
+            )
+            f_col = tbl_cols[f_mask].iloc[0]
+            
+            # Get referenced column info
+            r_mask = (
+                (tbl_cols['table_schema'] == str(fk_row['rkey_table_schema'])) &
+                (tbl_cols['table_name'] == str(fk_row['rkey_table_name'])) &
+                (tbl_cols['column_id'] == str(r_col_id))
+            )
+            r_col = tbl_cols[r_mask].iloc[0]
+            
+            # Create new row
+            new_row = {
+                'fkey_table_id': fk_row['fkey_table_id'],
+                'fkey_constid': fk_row['fkey_constid'],
+                'fkey_name': fk_row['fkey_name'],
+                'keyno': idx,
+                'fkey_table_schema': fk_row['fkey_table_schema'],
+                'fkey_table_name': fk_row['fkey_table_name'],
+                'rkey_table_schema': fk_row['rkey_table_schema'],
+                'rkey_table_name': fk_row['rkey_table_name'],
+                'fkey_col_name': f_col['col_name'],
+                'rkey_col_name': r_col['col_name']
+            }
+            rows.append(new_row)
+    
+    # Convert rows to DataFrame
+    if rows:
+        output = pd.DataFrame(rows)
+    
+    return output
+     
+#def load_tables_defaults():
+     #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
+
+
