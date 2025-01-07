@@ -5,7 +5,15 @@ import pandas as pd
 import numpy as np
 
 
-def load_tables():   
+def load_all_schema():
+    _load_tables()
+    _load_tables_columns()
+    _load_tables_indexes()
+    _process_index_cols_pg()
+    _load_tables_foreign_keys()
+    _process_fk_cols_pg()
+
+def _load_tables():   
     conn = None
     cur = None
     try:
@@ -32,8 +40,7 @@ def load_tables():
         if conn:
             conn.close()
 
-
-def load_tables_columns():
+def _load_tables_columns():
     conn = None
     cur = None
     try:
@@ -62,8 +69,7 @@ def load_tables_columns():
         if conn:
             conn.close()
 
-
-def load_tables_indexes():
+def _load_tables_indexes():
     conn = None
     cur = None
     try:
@@ -123,7 +129,7 @@ def load_tables_indexes():
         if conn:
             conn.close()
 
-def load_tables_indexes_columns(tbl_cols, tbl_indexes):
+def _process_index_cols_pg(tbl_cols, tbl_indexes):
     """
     Main function that processes PostgreSQL index columns.
     
@@ -190,10 +196,7 @@ def load_tables_indexes_columns(tbl_cols, tbl_indexes):
     
     return output
  
-
-
-  
-def load_tables_foreign_keys():
+def _load_tables_foreign_keys():
     conn = None
     cur = None
     try:
@@ -232,8 +235,7 @@ def load_tables_foreign_keys():
         if conn:
             conn.close()
 
-
-def process_fk_cols_pg(tbl_cols, tbl_fks):
+def _process_fk_cols_pg(tbl_cols, tbl_fks):
     """
     Process PostgreSQL foreign key columns.
     
