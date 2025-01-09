@@ -7,11 +7,11 @@ import numpy as np
 
 def load_all_schema():
     _load_tables()
-    _load_tables_columns()
-    _load_tables_indexes()
-    _process_index_cols_pg()
-    _load_tables_foreign_keys()
-    _process_fk_cols_pg()
+    tbl_cols = _load_tables_columns()
+    tbl_indexes = _load_tables_indexes()
+    tbl_index_cols = _process_index_cols_pg(tbl_cols, tbl_indexes)
+    tbl_fks = _load_tables_foreign_keys()
+    tbl_fk_cols = _process_fk_cols_pg(tbl_cols, tbl_fks)
 
 def _load_tables():   
     conn = None
@@ -24,7 +24,7 @@ def _load_tables():
                             NULL as ident_seed, 
                             NULL as ident_incr, Now() as db_now, null as table_sql  
                             FROM information_schema.TABLES E where TABLE_TYPE LIKE '%TABLE%'
-                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" #!do i need to put in {os.getenv('DB_SCHEMA')} as prefix to all table names? sample sql before was: f"SELECT * FROM {os.getenv('DB_SCHEMA')}.family"        
+                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" #!do i need to put in {os.getenv('DB_SCHEMA')} as prefix to all table names? sample sql before was: sql        
         cur.execute(sql)
          
         results = cur.fetchall()
@@ -46,10 +46,10 @@ def _load_tables_columns():
     try:
         conn = Database.connect_to_aurora()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, CHARACTER_MAXIMUM_LENGTH as max_length ,
-                            NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
-                             null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS ""col_unsigned"", 
-                            NULL AS ""EXTRA"", 
+        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, 
+                            CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
+                             null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS col_unsigned, 
+                            NULL AS extra, 
                             0 AS is_computed, null AS computed_definition ,
                             case WHEN is_identity  = 'YES' then 1 WHEN is_identity  = 'NO' then 0 END AS is_identity, 
                             identity_generation, identity_start as indent_seed, identity_increment as indent_incr, identity_maximum, identity_minimum, identity_cycle
@@ -115,7 +115,7 @@ def _load_tables_indexes():
             where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')"
                 results = cur.fetchall()"""
         
-        cur.execute(f"SELECT * FROM {os.getenv('DB_SCHEMA')}.family")
+        cur.execute(sql)
         results = cur.fetchall()
 
         return results
@@ -130,17 +130,10 @@ def _load_tables_indexes():
             conn.close()
 
 def _process_index_cols_pg(tbl_cols, tbl_indexes):
-    """
-    Main function that processes PostgreSQL index columns.
+    # Convert lists to DataFrames if they aren't already
+    tbl_cols = pd.DataFrame(tbl_cols) if not isinstance(tbl_cols, pd.DataFrame) else tbl_cols
+    tbl_indexes = pd.DataFrame(tbl_indexes) if not isinstance(tbl_indexes, pd.DataFrame) else tbl_indexes
     
-    Args:
-        tbl_cols (DataFrame): Table with column information
-        tbl_indexes (DataFrame): Table with index information
-    
-    Returns:
-        DataFrame: Processed index columns with proper schema
-    """
-    # First create empty output DataFrame with correct schema
     output = pd.DataFrame(columns=[
         'object_id', 'index_id', 'index_name', 'table_schema', 'table_name',
         'col_name', 'name', 'user_type_name', 'index_column_id', 'is_descending_key',
@@ -161,6 +154,9 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
         'is_included_column': 'bool',
         'partition_ordinal': 'uint8'
     })
+    
+    if tbl_indexes.empty:
+        return output
     
     # Explode the indkey arrays into separate rows
     index_cols = tbl_indexes.explode('indkey').reset_index()
@@ -236,16 +232,9 @@ def _load_tables_foreign_keys():
             conn.close()
 
 def _process_fk_cols_pg(tbl_cols, tbl_fks):
-    """
-    Process PostgreSQL foreign key columns.
-    
-    Args:
-        tbl_cols (DataFrame): Table with column information
-        tbl_fks (DataFrame): Table with foreign key information
-    
-    Returns:
-        DataFrame: Processed foreign key columns with proper schema
-    """
+    tbl_cols = pd.DataFrame(tbl_cols) if not isinstance(tbl_cols, pd.DataFrame) else tbl_cols
+    tbl_fks = pd.DataFrame(tbl_fks) if not isinstance(tbl_fks, pd.DataFrame) else tbl_fks
+
     # Create empty output DataFrame with correct schema
     output = pd.DataFrame(columns=[
         'fkey_table_id', 'fkey_constid', 'fkey_name', 'keyno',
