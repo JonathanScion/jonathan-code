@@ -27,3 +27,4 @@ ENV/
 ._atomic-*
 *.tmp
 ~$
+theSome.sql

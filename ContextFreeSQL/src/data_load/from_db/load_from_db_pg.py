@@ -3,15 +3,41 @@ from infra.database import Database
 from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
+from dataclasses import dataclass
 
 
-def load_all_schema():
-    _load_tables()
+@dataclass
+class TableSchema:
+    tables: pd.DataFrame
+    columns: pd.DataFrame
+    indexes: pd.DataFrame
+    index_columns: pd.DataFrame
+    foreign_keys: pd.DataFrame
+    fk_columns: pd.DataFrame
+
+
+def load_all_schema() -> TableSchema:
+    #try:
+    #    raise Exception("This is a general error message")
+    #except Exception as e:
+    #    print (f"some exception happened: {e}")
+    
+    
+    tbl_tables = _load_tables()
     tbl_cols = _load_tables_columns()
     tbl_indexes = _load_tables_indexes()
     tbl_index_cols = _process_index_cols_pg(tbl_cols, tbl_indexes)
     tbl_fks = _load_tables_foreign_keys()
     tbl_fk_cols = _process_fk_cols_pg(tbl_cols, tbl_fks)
+
+    return TableSchema(
+        tables = tbl_tables,
+        columns=tbl_cols,
+        indexes=tbl_indexes,
+        index_columns=tbl_index_cols,
+        foreign_keys=tbl_fks,
+        fk_columns=tbl_fk_cols
+    )
 
 def _load_tables():   
     conn = None
@@ -112,9 +138,8 @@ def _load_tables_indexes():
                 inner JOIN pg_class cls ON cls.oid=ix.indexrelid inner JOIN pg_am am ON am.oid=cls.relam
                 inner join pg_indexes idx on idx.schemaname=scm.nspname and idx.tablename=t.relname and idx.indexname=i.relname
                 Left Join pg_constraint cnst on t.oid = cnst.conrelid And i.oid=cnst.conindid And cnst.contype='u'	
-            where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')"
-                results = cur.fetchall()"""
-        
+            where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')"""
+            
         cur.execute(sql)
         results = cur.fetchall()
 
@@ -157,9 +182,17 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
     
     if tbl_indexes.empty:
         return output
+
+    # Convert indkey to list of integers and explode
+    index_cols = tbl_indexes.copy()
+    index_cols['indkey'] = index_cols['indkey'].apply(lambda x: [int(i) for i in str(x).split()])
+    index_cols = index_cols.explode('indkey').reset_index()
     
-    # Explode the indkey arrays into separate rows
-    index_cols = tbl_indexes.explode('indkey').reset_index()
+    # Convert indkey to int64 to match column_id type
+    index_cols['indkey'] = index_cols['indkey'].astype('int64')
+    
+    # Ensure column_id is int64
+    tbl_cols['column_id'] = pd.to_numeric(tbl_cols['column_id'], errors='coerce').astype('int64')
     
     # Add ordinal position (1-based)
     index_cols['ordinal'] = index_cols.groupby('index')['indkey'].cumcount() + 1
@@ -173,9 +206,13 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
     )
     
     # Format output according to schema
+    # Construct the object_id from schema and table name if not present
+    if 'object_id' not in result.columns:
+        result['object_id'] = result['table_schema'] + '.' + result['table_name']
+    
     output = pd.DataFrame({
         'object_id': result['object_id'],
-        'index_id': result['index_id'],
+        'index_id': result.get('index_id', 0),  # Default to 0 if not present
         'index_name': result['index_name'],
         'table_schema': result['table_schema'],
         'table_name': result['table_name'],
@@ -191,7 +228,8 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
     })
     
     return output
- 
+
+
 def _load_tables_foreign_keys():
     conn = None
     cur = None
@@ -254,13 +292,23 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks):
         'rkey_col_name': 'string'
     })
     
+    if tbl_fks.empty:
+        return output
+
+    # Ensure column_id is int64
+    tbl_cols['column_id'] = pd.to_numeric(tbl_cols['column_id'], errors='coerce').astype('int64')
+    
+    # Convert f_cols and r_cols to lists of integers
+    tbl_fks['f_cols'] = tbl_fks['f_cols'].apply(lambda x: [int(i) for i in str(x).split()])
+    tbl_fks['r_cols'] = tbl_fks['r_cols'].apply(lambda x: [int(i) for i in str(x).split()])
+    
     # Create rows list to store results
     rows = []
     
     # Process each FK row
     for _, fk_row in tbl_fks.iterrows():
-        f_cols = fk_row['f_cols']  # foreign key columns
-        r_cols = fk_row['r_cols']  # referenced columns
+        f_cols = fk_row['f_cols']  # foreign key columns (now list of integers)
+        r_cols = fk_row['r_cols']  # referenced columns (now list of integers)
         
         # Process each pair of columns
         for idx, (f_col_id, r_col_id) in enumerate(zip(f_cols, r_cols)):
@@ -268,22 +316,38 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks):
             f_mask = (
                 (tbl_cols['table_schema'] == str(fk_row['fkey_table_schema'])) &
                 (tbl_cols['table_name'] == str(fk_row['fkey_table_name'])) &
-                (tbl_cols['column_id'] == str(f_col_id))
+                (tbl_cols['column_id'] == f_col_id)  # Now comparing integers
             )
-            f_col = tbl_cols[f_mask].iloc[0]
+            
+            # Handle potential missing matches
+            f_col_match = tbl_cols[f_mask]
+            if f_col_match.empty:
+                print(f"Warning: No match found for foreign key column {f_col_id} in table {fk_row['fkey_table_schema']}.{fk_row['fkey_table_name']}")
+                continue
+            f_col = f_col_match.iloc[0]
             
             # Get referenced column info
             r_mask = (
                 (tbl_cols['table_schema'] == str(fk_row['rkey_table_schema'])) &
                 (tbl_cols['table_name'] == str(fk_row['rkey_table_name'])) &
-                (tbl_cols['column_id'] == str(r_col_id))
+                (tbl_cols['column_id'] == r_col_id)  # Now comparing integers
             )
-            r_col = tbl_cols[r_mask].iloc[0]
+            
+            # Handle potential missing matches
+            r_col_match = tbl_cols[r_mask]
+            if r_col_match.empty:
+                print(f"Warning: No match found for referenced column {r_col_id} in table {fk_row['rkey_table_schema']}.{fk_row['rkey_table_name']}")
+                continue
+            r_col = r_col_match.iloc[0]
+            
+            # Construct fkey_table_id and fkey_constid if they're not present
+            fkey_table_id = fk_row.get('fkey_table_id', f"{fk_row['fkey_table_schema']}.{fk_row['fkey_table_name']}")
+            fkey_constid = fk_row.get('fkey_constid', str(idx))
             
             # Create new row
             new_row = {
-                'fkey_table_id': fk_row['fkey_table_id'],
-                'fkey_constid': fk_row['fkey_constid'],
+                'fkey_table_id': fkey_table_id,
+                'fkey_constid': fkey_constid,
                 'fkey_name': fk_row['fkey_name'],
                 'keyno': idx,
                 'fkey_table_schema': fk_row['fkey_table_schema'],
@@ -300,7 +364,7 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks):
         output = pd.DataFrame(rows)
     
     return output
-     
+
 #def load_tables_defaults():
      #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
 

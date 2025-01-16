@@ -1,0 +1,17 @@
+{    
+    "configurations": [
+        {            
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "python": "${workspaceFolder}/venv/Scripts/python.exe",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/ContextFreeSQL",
+                "DOTENV_PATH": "${workspaceFolder}/ContextFreeSQL/.env"
+            }
+        }
+    ]
+}
