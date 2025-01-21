@@ -1,45 +1,69 @@
 import os
-from infra.database import Database
+from pydantic import BaseModel
+from src.infra.database import Database
 from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
-from dataclasses import dataclass
 
 
-@dataclass
-class TableSchema:
+class DBSchema(BaseModel):
+    schemas: pd.DataFrame
     tables: pd.DataFrame
     columns: pd.DataFrame
     indexes: pd.DataFrame
-    index_columns: pd.DataFrame
+    index_cols: pd.DataFrame
     foreign_keys: pd.DataFrame
-    fk_columns: pd.DataFrame
+    fk_cols: pd.DataFrame
+
+    class Config:
+        arbitrary_types_allowed = True  # Needed for pd.DataFrame
 
 
-def load_all_schema() -> TableSchema:
-    #try:
-    #    raise Exception("This is a general error message")
-    #except Exception as e:
-    #    print (f"some exception happened: {e}")
+def load_all_schema() -> DBSchema:
     
-    
-    tbl_tables = _load_tables()
-    tbl_cols = _load_tables_columns()
-    tbl_indexes = _load_tables_indexes()
-    tbl_index_cols = _process_index_cols_pg(tbl_cols, tbl_indexes)
-    tbl_fks = _load_tables_foreign_keys()
-    tbl_fk_cols = _process_fk_cols_pg(tbl_cols, tbl_fks)
+    schemas=_load_schemas()
+    tables = _load_tables()
+    cols = _load_tables_columns()
+    indexes = _load_tables_indexes()
+    index_cols = _process_index_cols_pg(cols, indexes)
+    foreign_keys = _load_tables_foreign_keys()
+    fk_cols = _process_fk_cols_pg(cols, foreign_keys)
 
-    return TableSchema(
-        tables = tbl_tables,
-        columns=tbl_cols,
-        indexes=tbl_indexes,
-        index_columns=tbl_index_cols,
-        foreign_keys=tbl_fks,
-        fk_columns=tbl_fk_cols
+    return DBSchema(
+        schemas = schemas,
+        tables = tables,
+        columns = cols,
+        indexes = indexes,
+        index_cols = index_cols,
+        foreign_keys = foreign_keys,
+        fk_cols = fk_cols
     )
 
-def _load_tables():   
+def _load_schemas() -> pd.DataFrame:
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql =  """select schema_name, schema_owner as principal_name from information_schema.schemata 
+                    WHERE schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and schema_name NOT LIKE 'pg_temp%' and schema_name NOT LIKE 'pg_toast%'"""
+        cur.execute(sql)
+         
+        results = cur.fetchall()
+        
+        return pd.DataFrame(results)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_tables() -> pd.DataFrame:   
     conn = None
     cur = None
     try:
@@ -55,7 +79,7 @@ def _load_tables():
          
         results = cur.fetchall()
         
-        return results
+        return pd.DataFrame(results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -66,7 +90,7 @@ def _load_tables():
         if conn:
             conn.close()
 
-def _load_tables_columns():
+def _load_tables_columns() -> pd.DataFrame:
     conn = None
     cur = None
     try:
@@ -84,7 +108,7 @@ def _load_tables_columns():
         cur.execute(sql)
         results = cur.fetchall()
         
-        return results
+        return pd.DataFrame(results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -95,7 +119,7 @@ def _load_tables_columns():
         if conn:
             conn.close()
 
-def _load_tables_indexes():
+def _load_tables_indexes() -> pd.DataFrame:
     conn = None
     cur = None
     try:
@@ -143,7 +167,7 @@ def _load_tables_indexes():
         cur.execute(sql)
         results = cur.fetchall()
 
-        return results
+        return pd.DataFrame(results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -154,7 +178,7 @@ def _load_tables_indexes():
         if conn:
             conn.close()
 
-def _process_index_cols_pg(tbl_cols, tbl_indexes):
+def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
     # Convert lists to DataFrames if they aren't already
     tbl_cols = pd.DataFrame(tbl_cols) if not isinstance(tbl_cols, pd.DataFrame) else tbl_cols
     tbl_indexes = pd.DataFrame(tbl_indexes) if not isinstance(tbl_indexes, pd.DataFrame) else tbl_indexes
@@ -181,7 +205,7 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
     })
     
     if tbl_indexes.empty:
-        return output
+        return pd.DataFrame(output)
 
     # Convert indkey to list of integers and explode
     index_cols = tbl_indexes.copy()
@@ -230,7 +254,7 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes):
     return output
 
 
-def _load_tables_foreign_keys():
+def _load_tables_foreign_keys() -> pd.DataFrame:
     conn = None
     cur = None
     try:
@@ -258,7 +282,7 @@ def _load_tables_foreign_keys():
         cur.execute(sql)
         results = cur.fetchall()
         
-        return results
+        return pd.DataFrame(results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -269,7 +293,7 @@ def _load_tables_foreign_keys():
         if conn:
             conn.close()
 
-def _process_fk_cols_pg(tbl_cols, tbl_fks):
+def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
     tbl_cols = pd.DataFrame(tbl_cols) if not isinstance(tbl_cols, pd.DataFrame) else tbl_cols
     tbl_fks = pd.DataFrame(tbl_fks) if not isinstance(tbl_fks, pd.DataFrame) else tbl_fks
 

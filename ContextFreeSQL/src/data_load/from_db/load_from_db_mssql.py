@@ -2,7 +2,7 @@ import os
 from infra.database import Database
 
 
-
+# need to implement load_schemas. see all the logic to excludes specific schemas in WHERE clause at CreateDBStateSchemas
 def load_tables():   
 "SELECT  o.object_id , o.name as EntName,o.name as table_name, o.type, o.create_date as crdate, SCHEMA_NAME(o.schema_id) as EntSchema,SCHEMA_NAME(o.schema_id) as table_schema, 0 as schema_ver, IDENT_SEED('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_seed], IDENT_INCR('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_incr] FROM sys.objects o (nolock)  
                         WHERE o.type IN ('U') AND  OBJECTPROPERTY(o.object_id, 'IsMSShipped')=0 "
