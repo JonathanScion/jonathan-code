@@ -53,7 +53,7 @@ class DBSyntax:
 @dataclass
 class ScriptingOptions:
    # General scripting options
-   remove_all_extra_ents: bool = False
+   remove_all_extra_ents: bool = True
    column_collation: bool = True 
    code_compare_no_white_space: bool = True
    as_transaction: bool = False

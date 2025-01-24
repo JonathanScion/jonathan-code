@@ -55,10 +55,7 @@ def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name
        script.write(f"{align}\tEXECUTE {exec_str_name};\n")
        script.write(f"{align}END IF;\n")
        script.write(f"{align}schemaChanged = True;\n")  # !no! what if its only data?? fix also for MS (but maybe its ok... see where this one is used
-       script.write("\n")
        
-   script.write("\n")
-
 
 
 def parse_pg_array(array_str):

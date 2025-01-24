@@ -17,14 +17,16 @@ def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOp
     """
     db_syntax = DBSyntax.get_syntax(dbtype)
     buffer = StringIO()
-    
-    # 1. Add header
-    header = build_script_header(db_syntax, 'theSome.sql')
-    buffer.write(header)
 
     if dbtype == DBType.PostgreSQL:
         buffer.write("DO $$\n")
         buffer.write("BEGIN --overall code\n")
+         
+    # 1. Add header
+    header = build_script_header(db_syntax, 'theSome.sql')
+    buffer.write(header)
+
+   
     
     # 2. State tables
     # TODO: Complete this section
