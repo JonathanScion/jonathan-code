@@ -18,13 +18,13 @@ def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOp
     db_syntax = DBSyntax.get_syntax(dbtype)
     buffer = StringIO()
     
-    # PostgreSQL-specific header
-    if dbtype == DBType.PostgreSQL:
-        buffer.write("DO $$\n")
-    
     # 1. Add header
     header = build_script_header(db_syntax, 'theSome.sql')
     buffer.write(header)
+
+    if dbtype == DBType.PostgreSQL:
+        buffer.write("DO $$\n")
+        buffer.write("BEGIN --overall code\n")
     
     # 2. State tables
     # TODO: Complete this section
@@ -34,6 +34,15 @@ def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOp
     buffer.write(create_schemas.getvalue())
     buffer.write(drop_schemas.getvalue())
     
+    #end out buffer
+    if dbtype == DBType.PostgreSQL:
+        buffer.write("END; --overall code\n")  # close all openings of PG code
+        buffer.write("$$\n")
+        buffer.write(";select * from scriptoutput\n")
+
+    elif dbtype == DBType.MSSQL:
+        buffer.write("SET NOCOUNT OFF\n")
+
     # Get final string and clean up
     result = buffer.getvalue()
     buffer.close()
@@ -41,17 +50,7 @@ def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOp
     return result
 
 
-def build_script_header(db_syntax: DBSyntax, filename: str) -> str:
-    """
-    Builds script header using StringIO.
-    
-    Args:
-        db_syntax: Database syntax configuration
-        filename: Output file name
-    
-    Returns:
-        str: Header content
-    """
+def build_script_header(db_syntax: DBSyntax, filename: str) -> str:   
     header = StringIO()
     
     # Write header lines

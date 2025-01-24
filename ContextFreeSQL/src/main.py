@@ -16,8 +16,11 @@ def main():
     schema = load_all_schema()
     # Process results...
 
-    generate_all_script(schema, DBType.PostgreSQL, script_ops )
+    script = generate_all_script(schema, DBType.PostgreSQL, script_ops )
 
+    with open(r'C:\Users\yonis\source\repos\veteran-developer\ContextFreeSQL\tests\sample_out.sql', 'w') as f:
+       f.write(script)
+       
 print(sys.executable)  # Shows which Python is running
 #print(sys.version)
 main()

@@ -58,3 +58,14 @@ def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name
        script.write("\n")
        
    script.write("\n")
+
+
+
+def parse_pg_array(array_str):
+    # Remove curly braces and split
+    if pd.isna(array_str):
+        return []
+    clean_str = str(array_str).strip('{}[]')
+    if not clean_str:
+        return []
+    return [int(x.strip()) for x in clean_str.split(',')]

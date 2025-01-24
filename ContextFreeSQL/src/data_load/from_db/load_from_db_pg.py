@@ -4,6 +4,7 @@ from src.infra.database import Database
 from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
+from src.utils import funcs as utils
 
 
 class DBSchema(BaseModel):
@@ -74,7 +75,7 @@ def _load_tables() -> pd.DataFrame:
                             NULL as ident_seed, 
                             NULL as ident_incr, Now() as db_now, null as table_sql  
                             FROM information_schema.TABLES E where TABLE_TYPE LIKE '%TABLE%'
-                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" #!do i need to put in {os.getenv('DB_SCHEMA')} as prefix to all table names? sample sql before was: sql        
+                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" 
         cur.execute(sql)
          
         results = cur.fetchall()
@@ -323,8 +324,8 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
     tbl_cols['column_id'] = pd.to_numeric(tbl_cols['column_id'], errors='coerce').astype('int64')
     
     # Convert f_cols and r_cols to lists of integers
-    tbl_fks['f_cols'] = tbl_fks['f_cols'].apply(lambda x: [int(i) for i in str(x).split()])
-    tbl_fks['r_cols'] = tbl_fks['r_cols'].apply(lambda x: [int(i) for i in str(x).split()])
+    tbl_fks['f_cols'] = tbl_fks['f_cols'].apply(utils.parse_pg_array)
+    tbl_fks['r_cols'] = tbl_fks['r_cols'].apply(utils.parse_pg_array)
     
     # Create rows list to store results
     rows = []
