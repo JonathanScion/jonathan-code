@@ -76,3 +76,14 @@ class ScriptingOptions:
    instance_id: int = 0
    instance_id_at: str = ""  # for presentation purposes
    rndph_db_id: int = 0
+
+
+@dataclass
+class ScriptTableOptions:
+    table_name: str = None
+    column_identity: bool = True
+    indexes: bool = True
+    foreign_keys: bool = True
+    defaults: bool = True
+    check_constraints: bool = True
+    extended_props: bool = True
