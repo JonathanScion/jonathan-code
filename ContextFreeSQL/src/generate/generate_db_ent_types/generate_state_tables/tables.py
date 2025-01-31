@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pandas as pd
 from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
-
+from src.generate.generate_create_table import get_create_table_from_sys_tables
 
 @dataclass
 class DBInfo:
@@ -146,24 +146,7 @@ def create_db_state_tables(
     db_ext_props: pd.DataFrame
 ) -> None:
     # Define DB-specific variables based on DB type
-    var_lang = {
-        DBType.MSSQL: {
-            "temp_table_create": "CREATE TABLE #",
-            "temp_table_prefix": "#",
-            "nvarchar_type": "nvarchar",
-            "max_length_str": "(max)",
-            "boolean_type": "bit",
-            "variable_prefix": "@"
-        },
-        DBType.PostgreSQL: {
-            "temp_table_create": "CREATE TEMP TABLE ",
-            "temp_table_prefix": "",
-            "nvarchar_type": "character varying",
-            "max_length_str": "",
-            "boolean_type": "boolean",
-            "variable_prefix": ""
-        }
-    }[db_info.src_db_type]
+   
 
     # Start building script
     script_builder.append("--tables")
@@ -188,15 +171,15 @@ def create_db_state_tables(
 
     # Create ScriptTables table
     script_builder.extend([
-        f"{var_lang['temp_table_create']}ScriptTables",
+        f"{db_syntax.temp_table_create}ScriptTables",
         "(",
-        f"\ttable_schema {var_lang['nvarchar_type']} (128) not null,",
-        f"\ttable_name {var_lang['nvarchar_type']} (128) not null,",
-        f"\tSQL_CREATE {var_lang['nvarchar_type']} {var_lang['max_length_str']} null,",
-        f"\tSQL_DROP {var_lang['nvarchar_type']} {var_lang['max_length_str']} null,",
-        f"\tcol_diff {var_lang['boolean_type']} NULL,",
-        f"\tindex_diff {var_lang['boolean_type']} NULL,",
-        f"\tfk_diff {var_lang['boolean_type']} NULL,",
+        f"\ttable_schema {db_syntax.nvarchar_type} (128) not null,",
+        f"\ttable_name {db_syntax.nvarchar_type} (128) not null,",
+        f"\tSQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,",
+        f"\tSQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,",
+        f"\tcol_diff {db_syntax.boolean_type} NULL,",
+        f"\tindex_diff {db_syntax.boolean_type} NULL,",
+        f"\tfk_diff {db_syntax.boolean_type} NULL,",
         "\ttableStat smallint null",
         ");",
         ""

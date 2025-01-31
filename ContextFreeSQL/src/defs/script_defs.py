@@ -48,6 +48,8 @@ class DBSyntax:
                     temp_table_create="CREATE TEMP TABLE ",
                     boolean_true_value="true"
                 )
+                
+
     
     
 @dataclass
@@ -87,3 +89,12 @@ class ScriptTableOptions:
     defaults: bool = True
     check_constraints: bool = True
     extended_props: bool = True
+    
+    
+class DBEntScriptState(Enum):
+    Add = 1
+    Alter = 2
+    Drop = 3
+    InLine = 4
+    
+    

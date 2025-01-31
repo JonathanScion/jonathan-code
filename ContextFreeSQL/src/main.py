@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from src.data_load.from_db.load_from_db_pg import load_all_schema
 from src.generate.generate_script import generate_all_script
+from src.generate.generate_create_table import  get_create_table_from_sys_tables
 from src.defs.script_defs import DBType, ScriptingOptions
 
 def main():
@@ -14,9 +15,11 @@ def main():
     script_ops = ScriptingOptions() #! get this from command line (optional param, can point to a file)
 
     schema = load_all_schema()
-    # Process results...
 
-    script = generate_all_script(schema, DBType.PostgreSQL, script_ops )
+    #2025/01/30: test, just call the CREATE TABLE generator
+    temp_create_table = get_create_table_from_sys_tables(schema)
+    print (temp_create_table)
+    #script = generate_all_script(schema, DBType.PostgreSQL, script_ops )
 
     with open(r'C:\Users\yonis\source\repos\veteran-developer\ContextFreeSQL\tests\sample_out.sql', 'w') as f:
        f.write(script)

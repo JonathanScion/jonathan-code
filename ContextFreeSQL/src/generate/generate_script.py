@@ -4,11 +4,11 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 
 
-def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOptions) -> str:
-    db_syntax = DBSyntax.get_syntax(dbtype)
+def generate_all_script(schema: DBSchema, db_type: DBType, scrpt_ops: ScriptingOptions) -> str:
+    db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
-    if dbtype == DBType.PostgreSQL:
+    if db_type == DBType.PostgreSQL:
         buffer.write("DO $$\n")
         buffer.write("BEGIN --overall code\n")
 
@@ -33,16 +33,16 @@ def generate_all_script(schema: DBSchema, dbtype: DBType, scrpt_ops: ScriptingOp
     # TODO: Complete this section
     # bOnlyData = tblEnts.Select("ScriptSchema=False AND ScriptData=True").Length > 0
     # if oScriptOps.ScriptSchemas and (not bOnlyData):
-    schemas_buffer = create_db_state_schemas(dbtype, schema.tables, schema.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+    schemas_buffer = create_db_state_schemas(db_type, schema.tables, schema.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
     buffer.write(schemas_buffer.getvalue())
     
     #end out buffer
-    if dbtype == DBType.PostgreSQL:
+    if db_type == DBType.PostgreSQL:
         buffer.write("END; --overall code\n")  # close all openings of PG code
         buffer.write("$$\n")
         buffer.write(";select * from scriptoutput\n")
 
-    elif dbtype == DBType.MSSQL:
+    elif db_type == DBType.MSSQL:
         buffer.write("SET NOCOUNT OFF\n")
 
     # Get final string and clean up
