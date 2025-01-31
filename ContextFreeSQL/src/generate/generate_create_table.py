@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, List, Tuple
 import pandas as pd
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
-
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
+from src.data_load.from_db.load_from_db_pg import DBSchema
 
 @dataclass
 class ScriptTableOptions:
@@ -15,21 +15,22 @@ class ScriptTableOptions:
     check_constraints: bool = True
     extended_props: bool = True
 
+"""class DBSchema(BaseModel):
+    schemas: pd.DataFrame
+    tables: pd.DataFrame
+    columns: pd.DataFrame
+    indexes: pd.DataFrame
+    index_cols: pd.DataFrame
+    foreign_keys: pd.DataFrame
+    fk_cols: pd.DataFrame
+    """
 def get_create_table_from_sys_tables(
     conn_str: str,
     db_type: DBType,
     table_schema: str,
     table_name: str,
-    db_tables: pd.DataFrame,
-    db_tables_cols: pd.DataFrame,
-    db_tables_indexes: pd.DataFrame,
-    db_tables_indexes_cols: pd.DataFrame,
-    db_tables_fks: pd.DataFrame,
-    db_tables_fks_cols: pd.DataFrame,
-    db_defaults: pd.DataFrame,
-    db_check_constraints: pd.DataFrame,
-    db_ext_props: pd.DataFrame,
-    script_table_ops: Optional[ScriptTableOptions] = None,
+    schema_tables : DBSchema,
+    script_table_ops: ScriptTableOptions,
     pre_add_constraints_data_checks: bool = False,    
     as_temp_table: bool = False
 ) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -42,11 +43,12 @@ def get_create_table_from_sys_tables(
     
     try:
    
+        db_syntax = DBSyntax.get_syntax(db_type)
 
         # Get the table information
-        table_rows = db_tables[
-            (db_tables['EntSchema'] == table_schema) & 
-            (db_tables['EntName'] == table_name)
+        table_rows = schema_tables.tables[
+            (schema_tables.tables['EntSchema'] == table_schema) & 
+            (schema_tables.tables['EntName'] == table_name)
         ]
         
         if len(table_rows) == 0:
@@ -66,14 +68,14 @@ def get_create_table_from_sys_tables(
 
         # Start CREATE TABLE statement
         if as_temp_table:
-            create_table_lines.append(f"{var_lang['temp_table_create']}{full_table_name}")
+            create_table_lines.append(f"{db_syntax.temp_table_create}{full_table_name}")
         else:
             create_table_lines.append(f"CREATE TABLE {full_table_name}")
         create_table_lines.append("(")
 
         # Add columns
-        col_rows = db_tables_cols[
-            db_tables_cols['object_id'] == table_row['object_id']
+        col_rows = schema_tables.columns[
+            schema_tables.columns['object_id'] == table_row['object_id']
         ].sort_values('column_id')
 
         for idx, col_row in col_rows.iterrows():
@@ -89,51 +91,53 @@ def get_create_table_from_sys_tables(
         create_table_lines.append(");")
 
         # Add indexes if requested
-        if script_table_ops.indexes and db_tables_indexes is not None:
-            idx_rows = db_tables_indexes[
-                db_tables_indexes['object_id'] == table_row['object_id']
+        """ reactivate all below once above is working (wnat to see basic table and columns... index\fk add later)
+        if script_table_ops.indexes and schema_tables.indexes is not None:
+            idx_rows = schema_tables.indexes[
+                schema_tables.indexes['object_id'] == table_row['object_id']
             ]
             
             for _, idx_row in idx_rows.iterrows():
                 if db_type == DBType.MSSQL:
-                    idx_cols = db_tables_indexes_cols[
-                        (db_tables_indexes_cols['object_id'] == table_row['object_id']) &
-                        (db_tables_indexes_cols['index_id'] == idx_row['index_id'])
+                    idx_cols = schema_tables.indexes_cols[
+                        (schema_tables.indexes_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.indexes_cols['index_id'] == idx_row['index_id'])
                     ]
                 else:
-                    idx_cols = db_tables_indexes_cols[
-                        (db_tables_indexes_cols['object_id'] == table_row['object_id']) &
-                        (db_tables_indexes_cols['index_name'] == idx_row['index_name'])
+                    idx_cols = schema_tables.indexes_cols[
+                        (schema_tables.indexes_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.indexes_cols['index_name'] == idx_row['index_name'])
                     ]
                 
                 create_table_lines.append(get_index_sql(idx_row, idx_cols, db_type) + ";")
 
         # Add foreign keys if requested
-        if script_table_ops.foreign_keys and db_tables_fks is not None:
-            fk_rows = db_tables_fks[
-                (db_tables_fks['fkey_table_schema'] == table_schema) &
-                (db_tables_fks['fkey_table_name'] == table_name)
+        if script_table_ops.foreign_keys and schema_tables.fks is not None:
+            fk_rows = schema_tables.fks[
+                (schema_tables.fks['fkey_table_schema'] == table_schema) &
+                (schema_tables.fks['fkey_table_name'] == table_name)
             ]
             
             for _, fk_row in fk_rows.iterrows():
-                fk_cols = db_tables_fks_cols[
-                    (db_tables_fks_cols['fkey_table_schema'] == fk_row['fkey_table_schema']) &
-                    (db_tables_fks_cols['fkey_table_name'] == fk_row['fkey_table_name']) &
-                    (db_tables_fks_cols['fk_name'] == fk_row['fk_name'])
+                fk_cols = schema_tables.fk_cols[
+                    (schema_tables.fk_cols['fkey_table_schema'] == fk_row['fkey_table_schema']) &
+                    (schema_tables.fk_cols['fkey_table_name'] == fk_row['fkey_table_name']) &
+                    (schema_tables.fk_cols['fk_name'] == fk_row['fk_name'])
                 ]
                 create_table_lines.append(get_fk_sql(fk_row, fk_cols, db_type) + ";")
 
         # Add defaults if requested
-        if script_table_ops.defaults and db_defaults is not None:
-            default_rows = db_defaults[
-                (db_defaults['table_schema'] == table_schema) &
-                (db_defaults['table_name'] == table_name)
+        if script_table_ops.defaults and schema_tables.defaults is not None:
+            default_rows = schema_tables.defaults[
+                (schema_tables.defaults['table_schema'] == table_schema) &
+                (schema_tables.defaults['table_name'] == table_name)
             ]
             
             for _, default_row in default_rows.iterrows():
                 create_table_lines.append(get_default_sql(db_type, default_row))
             create_table_lines.append("")
 
+        ""to be completed later, once we do MSSQL, if at all
         # Add check constraints if requested
         if script_table_ops.check_constraints and db_check_constraints is not None:
             check_rows = db_check_constraints[
@@ -154,9 +158,120 @@ def get_create_table_from_sys_tables(
             
             for _, ext_prop_row in ext_prop_rows.iterrows():
                 create_table_lines.append(get_ext_prop_sql(ext_prop_row, "TABLE", False, False))
-
+"""
         return True, "\n".join(create_table_lines).strip(), None
 
     except Exception as e:
         error_msg = f"Error occurred: {str(e)}"
         return False, None, error_msg
+    
+    
+
+
+def get_col_sql(
+    sys_cols_row: pd.Series, 
+    table_owner: str, 
+    table_name: str, 
+    script_state: DBEntScriptState, 
+    db_type: DBType, 
+    column_identity: bool = True, 
+    force_allow_null: bool = False, 
+    actual_size: bool = False
+) -> str:
+    sql = []
+
+    # Check for default constraint
+    has_default = False
+    if 'col_default_name' in sys_cols_row.index:
+        has_default = not pd.isna(sys_cols_row['col_default_name'])
+
+    # Build ALTER TABLE part
+    if script_state in [DBEntScriptState.Add, DBEntScriptState.Alter]:
+        sql.append("ALTER TABLE ")
+        if db_type == DBType.MSSQL:
+            sql.append(f"[{table_owner}].[{table_name}] ")
+        else:
+            sql.append(f"{table_owner}.{table_name} ")
+
+        if script_state == DBEntScriptState.Add:
+            sql.append("ADD ")
+        else:
+            if db_type == DBType.MSSQL:
+                sql.append("ALTER COLUMN ")
+            elif db_type == DBType.PostgreSQL:
+                sql.append("ALTER COLUMN ")
+            elif db_type == DBType.MySQL:
+                sql.append("MODIFY ")
+
+    actual_type = str(sys_cols_row['user_type_name'])
+
+    # Column name
+    if db_type == DBType.MSSQL:
+        sql.append(f"[{str(sys_cols_row['col_name'])}] ")
+    elif db_type == DBType.PostgreSQL:
+        sql.append(f"{str(sys_cols_row['col_name'])} ")
+        if script_state == DBEntScriptState.Alter:
+            sql.append(" TYPE ")
+    elif db_type == DBType.MySQL:
+        sql.append(f"{str(sys_cols_row['col_name'])} ")
+
+    # Check if computed
+    if sys_cols_row.get('is_computed', False):
+        sql.append(f"AS {sys_cols_row['computed_definition']}")
+        return "".join(sql)
+
+    # Type
+    if db_type == DBType.MSSQL:
+        sql.append(f" [{actual_type}] ")
+    else:
+        sql.append(f" {actual_type} ")
+
+    # Add size, precision, scale (assuming Utils.AddSizePrecisionScale is implemented elsewhere)
+    type_size_prec_scale = add_size_precision_scale(sys_cols_row, actual_size)
+    if type_size_prec_scale:
+        sql.append(type_size_prec_scale)
+
+    # MySQL unsigned
+    if 'col_unsigned' in sys_cols_row.index:
+        if sys_cols_row.get('col_unsigned', False):
+            sql.append(" UNSIGNED ")
+
+    # Collation
+    collation_field = "collation_name"
+    if not pd.isna(sys_cols_row.get(collation_field)):
+        sql.append(f" COLLATE {sys_cols_row[collation_field]}")
+
+    # NULL/NOT NULL
+    if force_allow_null:
+        sql.append(" NULL ")
+    else:
+        is_null_field = "is_nullable"
+        if db_type == DBType.MSSQL:
+            sql.append(" NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL ")
+        elif db_type == DBType.PostgreSQL:
+            if script_state == DBEntScriptState.Alter:
+                null_value = " NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL "
+                sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} SET {null_value}")
+            else:
+                sql.append(" NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL ")
+
+    # Identity/Auto Increment
+    if column_identity:
+        if db_type == DBType.MSSQL:
+            if sys_cols_row.get('is_Identity', False):
+                if script_state == DBEntScriptState.Alter:
+                    print_warning = (f"PRINT 'Field {table_owner}.{table_name}.{sys_cols_row['col_name']} "
+                                   "needs to have an Identity on it, but this cannot be done via script. "
+                                   "Make sure to add Identity to that field via enterprise manager'\n")
+                else:
+                    sql.append(f" IDENTITY ({sys_cols_row['seed_value']},{sys_cols_row['increment_value']})")
+        else:
+            extra_val = str(sys_cols_row.get('EXTRA', ''))
+            if 'auto_increment' in extra_val.lower():
+                sql.append(" AUTO_INCREMENT")
+
+    return "".join(sql)
+
+def add_size_precision_scale(row: pd.Series, actual_size: bool) -> str:
+    # This is a placeholder - implement the actual logic based on your needs
+    return ""

@@ -13,8 +13,10 @@ class DBSchema(BaseModel):
     columns: pd.DataFrame
     indexes: pd.DataFrame
     index_cols: pd.DataFrame
-    foreign_keys: pd.DataFrame
+    fks: pd.DataFrame
     fk_cols: pd.DataFrame
+    defaults: pd.DataFrame
+    
 
     class Config:
         arbitrary_types_allowed = True  # Needed for pd.DataFrame
