@@ -45,9 +45,9 @@ def create_db_state_temp_tables_for_tables(
     
     for idx, row in rows_tables_script.iterrows():
         if db_info.src_db_type == DBType.MSSQL:
-            schema_name = f"'{row['EntSchema']}{row['EntName']}'"
+            schema_name = f"'{row['entschema']}{row['entname']}'"
         elif db_info.src_db_type == DBType.PostgreSQL:
-            schema_name = f"'{row['EntSchema'].lower()}{row['EntName'].lower()}'"
+            schema_name = f"'{row['entschema'].lower()}{row['entname'].lower()}'"
             
         table_schema_name_in_scripting.write(schema_name)
         overall_table_schema_name_in_scripting.write(schema_name)
@@ -193,8 +193,8 @@ def create_db_state_tables(
         got_create_table, create_table, create_table_err = get_create_table_from_sys_tables(
             conn_str=conn_str,
             dst_db_type=db_info.dst_db_type,
-            schema=row['EntSchema'],
-            table_name=row['EntName'],
+            schema=row['entschema'],
+            table_name=row['entname'],
             db_tables=db_tables,
             db_tables_cols=db_tables_cols,
             db_tables_indexes=db_tables_indexes,
@@ -210,13 +210,13 @@ def create_db_state_tables(
 
         # Get database-specific syntax
         db_syntax = DBSyntax.get_syntax(dbtype)
-        ident_level = 1;
+        ident_level = 1
 
         # Format entity name based on DB type
         if db_info.src_db_type == DBType.MSSQL:
-            ent_full_name = f"[{row['EntSchema']}].[{row['EntName'].replace("'", "''")}]"
+            ent_full_name = f"[{row['entschema']}].[{row['entname'].replace("'", "''")}]"
         else:
-            ent_full_name = f"{row['EntSchema']}.{row['EntName']}"
+            ent_full_name = f"{row['entschema']}.{row['entname']}"
 
         if not got_create_table:
             script_builder.append(
@@ -226,8 +226,8 @@ def create_db_state_tables(
         # Insert table info
         script_builder.extend([
             f"INSERT INTO {db_syntax.temp_table_prefix}ScriptTables (table_schema,table_name, SQL_CREATE, SQL_DROP)",
-            f"VALUES ({quote_str_or_null(row['EntSchema'])},",
-            f"{quote_str_or_null(row['EntName'])},",
+            f"VALUES ({quote_str_or_null(row['entschema'])},",
+            f"{quote_str_or_null(row['entname'])},",
             f"{quote_str_or_null(create_table)},",
             f"'DROP TABLE {ent_full_name};');"
         ])

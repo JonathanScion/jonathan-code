@@ -5,32 +5,13 @@ import pandas as pd
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.data_load.from_db.load_from_db_pg import DBSchema
 
-@dataclass
-class ScriptTableOptions:
-    table_name: str = ""
-    column_identity: bool = True
-    indexes: bool = True
-    foreign_keys: bool = True
-    defaults: bool = True
-    check_constraints: bool = True
-    extended_props: bool = True
-
-"""class DBSchema(BaseModel):
-    schemas: pd.DataFrame
-    tables: pd.DataFrame
-    columns: pd.DataFrame
-    indexes: pd.DataFrame
-    index_cols: pd.DataFrame
-    foreign_keys: pd.DataFrame
-    fk_cols: pd.DataFrame
-    """
 def get_create_table_from_sys_tables(
-    conn_str: str,
     db_type: DBType,
     table_schema: str,
     table_name: str,
     schema_tables : DBSchema,
-    script_table_ops: ScriptTableOptions,
+    script_table_ops: ScriptTableOptions = None,
+    force_allow_null: bool,
     pre_add_constraints_data_checks: bool = False,    
     as_temp_table: bool = False
 ) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -47,8 +28,8 @@ def get_create_table_from_sys_tables(
 
         # Get the table information
         table_rows = schema_tables.tables[
-            (schema_tables.tables['EntSchema'] == table_schema) & 
-            (schema_tables.tables['EntName'] == table_name)
+            (schema_tables.tables['entschema'] == table_schema) & 
+            (schema_tables.tables['entname'] == table_name)
         ]
         
         if len(table_rows) == 0:
@@ -57,8 +38,8 @@ def get_create_table_from_sys_tables(
         table_row = table_rows.iloc[0]
         create_table_lines = []
 
-        # Determine full table name based on DB type
-        if script_table_ops.table_name:
+        # Determine full table name based on DB type        
+        if script_table_ops.table_name:  # Checks if not empty
             full_table_name = script_table_ops.table_name
         else:
             if db_type == DBType.MSSQL:

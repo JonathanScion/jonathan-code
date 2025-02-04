@@ -17,8 +17,13 @@ def main():
     schema = load_all_schema()
 
     #2025/01/30: test, just call the CREATE TABLE generator
-    temp_create_table = get_create_table_from_sys_tables(schema)
-    print (temp_create_table)
+    script = get_create_table_from_sys_tables(db_type=DBType.PostgreSQL,                                                          
+                                                            table_schema='public',
+                                                            table_name='students',
+                                                            schema_tables = schema,
+                                                            #script_table_ops = script_ops, #its ScriptTableOptions
+                                                            force_allow_null = False)
+    print (script)
     #script = generate_all_script(schema, DBType.PostgreSQL, script_ops )
 
     with open(r'C:\Users\yonis\source\repos\veteran-developer\ContextFreeSQL\tests\sample_out.sql', 'w') as f:

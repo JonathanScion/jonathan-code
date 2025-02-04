@@ -4,7 +4,7 @@ from infra.database import Database
 
 # need to implement load_schemas. see all the logic to excludes specific schemas in WHERE clause at CreateDBStateSchemas
 def load_tables():   
-"SELECT  o.object_id , o.name as EntName,o.name as table_name, o.type, o.create_date as crdate, SCHEMA_NAME(o.schema_id) as EntSchema,SCHEMA_NAME(o.schema_id) as table_schema, 0 as schema_ver, IDENT_SEED('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_seed], IDENT_INCR('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_incr] FROM sys.objects o (nolock)  
+"SELECT  o.object_id , o.name as entname,o.name as table_name, o.type, o.create_date as crdate, SCHEMA_NAME(o.schema_id) as entschema,SCHEMA_NAME(o.schema_id) as table_schema, 0 as schema_ver, IDENT_SEED('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_seed], IDENT_INCR('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_incr] FROM sys.objects o (nolock)  
                         WHERE o.type IN ('U') AND  OBJECTPROPERTY(o.object_id, 'IsMSShipped')=0 "
 
 
@@ -19,7 +19,7 @@ def load_tables_indexes():
 
 
 def load_tables_indexes_columns():
-         "SELECT i.name as index_name, o.name as EntName, SCHEMA_NAME(o.schema_id) as EntSchema, o.name as table_name, SCHEMA_NAME(o.schema_id) as table_schema, ic.*,c.name AS col_name, COALESCE(TYPE_NAME(c.user_type_id), TYPE_NAME(c.system_type_id)) as user_type_name  " &
+         "SELECT i.name as index_name, o.name as entname, SCHEMA_NAME(o.schema_id) as entschema, o.name as table_name, SCHEMA_NAME(o.schema_id) as table_schema, ic.*,c.name AS col_name, COALESCE(TYPE_NAME(c.user_type_id), TYPE_NAME(c.system_type_id)) as user_type_name  " &
             "FROM sys.objects o  " &
              "INNER JOIN sys.indexes i on o.object_id=i.object_id " &
              "INNER JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id " &
