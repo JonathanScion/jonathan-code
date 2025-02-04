@@ -5,17 +5,16 @@ from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
 from src.utils import funcs as utils
-
+from typing import Optional
 
 class DBSchema(BaseModel):
-    schemas: pd.DataFrame
+    schemas: pd.DataFrame 
     tables: pd.DataFrame
     columns: pd.DataFrame
     indexes: pd.DataFrame
     index_cols: pd.DataFrame
     fks: pd.DataFrame
     fk_cols: pd.DataFrame
-    defaults: pd.DataFrame
     
 
     class Config:
@@ -24,21 +23,23 @@ class DBSchema(BaseModel):
 
 def load_all_schema() -> DBSchema:
     
-    schemas=_load_schemas()
+    schemas = _load_schemas()
     tables = _load_tables()
-    cols = _load_tables_columns()
+    columns = _load_tables_columns()
     indexes = _load_tables_indexes()
-    index_cols = _process_index_cols_pg(cols, indexes)
-    foreign_keys = _load_tables_foreign_keys()
-    fk_cols = _process_fk_cols_pg(cols, foreign_keys)
+    index_cols = _process_index_cols_pg(columns, indexes)
+    fks = _load_tables_foreign_keys()
+    fk_cols = _process_fk_cols_pg(columns, fks)
+    #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format. 
+    #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
 
     return DBSchema(
         schemas = schemas,
         tables = tables,
-        columns = cols,
+        columns = columns,
         indexes = indexes,
         index_cols = index_cols,
-        foreign_keys = foreign_keys,
+        fks = fks,
         fk_cols = fk_cols
     )
 
@@ -72,7 +73,7 @@ def _load_tables() -> pd.DataFrame:
     try:
         conn = Database.connect_to_aurora()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql =  """SELECT  table_schema || '.' || table_name as object_id, table_name as EntName, 'U' as type,  null as crdate, table_schema as EntSchema, table_schema, table_name,
+        sql =  """SELECT  table_schema || '.' || table_name as object_id, table_name as entname, 'U' as type,  null as crdate, table_schema as entschema, table_schema, table_name,
                             null as schema_ver, 
                             NULL as ident_seed, 
                             NULL as ident_incr, Now() as db_now, null as table_sql  
@@ -394,5 +395,6 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 
 #def load_tables_defaults():
      #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
+
 
 
