@@ -10,11 +10,11 @@ def get_create_table_from_sys_tables(
     table_schema: str,
     table_name: str,
     schema_tables : DBSchema,
-    script_table_ops: ScriptTableOptions = None,
-    force_allow_null: bool,
+    script_table_ops: Optional[ScriptTableOptions] = None,
+    force_allow_null: bool = False,
     pre_add_constraints_data_checks: bool = False,    
     as_temp_table: bool = False
-) -> Tuple[bool, Optional[str], Optional[str]]:
+) -> str:
   
     out_script = None
     out_err = None
@@ -33,7 +33,7 @@ def get_create_table_from_sys_tables(
         ]
         
         if len(table_rows) == 0:
-            return False, None, f"could not find table in the result set: {table_schema}.{table_name}"
+            return "could not find table in the result set: {table_schema}.{table_name}"
         
         table_row = table_rows.iloc[0]
         create_table_lines = []
@@ -62,7 +62,7 @@ def get_create_table_from_sys_tables(
         for idx, col_row in col_rows.iterrows():
             col_sql = get_col_sql(
                 col_row, table_row['table_schema'], table_row['table_name'],
-                'InLine', db_type, script_table_ops.column_identity, force_allow_null
+                DBEntScriptState.InLine, db_type, script_table_ops.column_identity, force_allow_null
             ).strip()
             
             if idx < len(col_rows) - 1:
@@ -71,8 +71,8 @@ def get_create_table_from_sys_tables(
 
         create_table_lines.append(");")
 
-        # Add indexes if requested
-        """ reactivate all below once above is working (wnat to see basic table and columns... index\fk add later)
+        
+        
         if script_table_ops.indexes and schema_tables.indexes is not None:
             idx_rows = schema_tables.indexes[
                 schema_tables.indexes['object_id'] == table_row['object_id']
@@ -80,17 +80,17 @@ def get_create_table_from_sys_tables(
             
             for _, idx_row in idx_rows.iterrows():
                 if db_type == DBType.MSSQL:
-                    idx_cols = schema_tables.indexes_cols[
-                        (schema_tables.indexes_cols['object_id'] == table_row['object_id']) &
-                        (schema_tables.indexes_cols['index_id'] == idx_row['index_id'])
+                    idx_cols = schema_tables.index_cols[
+                        (schema_tables.index_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.index_cols['index_id'] == idx_row['index_id'])
                     ]
                 else:
-                    idx_cols = schema_tables.indexes_cols[
-                        (schema_tables.indexes_cols['object_id'] == table_row['object_id']) &
-                        (schema_tables.indexes_cols['index_name'] == idx_row['index_name'])
+                    idx_cols = schema_tables.index_cols[
+                        (schema_tables.index_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.index_cols['index_name'] == idx_row['index_name'])
                     ]
-                
-                create_table_lines.append(get_index_sql(idx_row, idx_cols, db_type) + ";")
+                index_sql = get_index_sql(idx_row, idx_cols, db_type)
+                create_table_lines.append( index_sql + ";")
 
         # Add foreign keys if requested
         if script_table_ops.foreign_keys and schema_tables.fks is not None:
@@ -107,18 +107,8 @@ def get_create_table_from_sys_tables(
                 ]
                 create_table_lines.append(get_fk_sql(fk_row, fk_cols, db_type) + ";")
 
-        # Add defaults if requested
-        if script_table_ops.defaults and schema_tables.defaults is not None:
-            default_rows = schema_tables.defaults[
-                (schema_tables.defaults['table_schema'] == table_schema) &
-                (schema_tables.defaults['table_name'] == table_name)
-            ]
-            
-            for _, default_row in default_rows.iterrows():
-                create_table_lines.append(get_default_sql(db_type, default_row))
-            create_table_lines.append("")
-
-        ""to be completed later, once we do MSSQL, if at all
+   
+        """to be completed later, once we do MSSQL, if at all
         # Add check constraints if requested
         if script_table_ops.check_constraints and db_check_constraints is not None:
             check_rows = db_check_constraints[
@@ -140,11 +130,11 @@ def get_create_table_from_sys_tables(
             for _, ext_prop_row in ext_prop_rows.iterrows():
                 create_table_lines.append(get_ext_prop_sql(ext_prop_row, "TABLE", False, False))
 """
-        return True, "\n".join(create_table_lines).strip(), None
+        return "\n".join(create_table_lines).strip()
 
     except Exception as e:
         error_msg = f"Error occurred: {str(e)}"
-        return False, None, error_msg
+        return error_msg
     
     
 
@@ -256,3 +246,337 @@ def get_col_sql(
 def add_size_precision_scale(row: pd.Series, actual_size: bool) -> str:
     # This is a placeholder - implement the actual logic based on your needs
     return ""
+
+from enum import Enum
+from typing import List, Dict, Any
+import textwrap
+
+#1 these below by claude. see if needed, move to utils
+
+def val_if_null(value: Any, default: Any) -> Any:
+    """Utility function to handle null values"""
+    return default if value is None else value
+
+def c_to_bool(value: Any, default: bool = False) -> bool:
+    """Utility function to convert value to boolean"""
+    if value is None:
+        return default
+    return bool(value)
+
+from enum import Enum
+from typing import List, Dict, Any
+from io import StringIO
+
+
+
+def val_if_null(value: Any, default: Any) -> Any:
+    return default if value is None else value
+
+def c_to_bool(value: Any, default: bool = False) -> bool:
+    return bool(value) if value is not None else default
+
+def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any]], db_type: DBType, in_line: bool = False) -> str:
+    buffer = StringIO()
+    
+    if val_if_null(index_row.get('is_primary_key'), False):
+        if db_type == DBType.MSSQL:
+            if not in_line:
+                buffer.write(f"ALTER TABLE [{index_row['table_schema']}].[{index_row['table_name']}] WITH NOCHECK ADD\n")
+            buffer.write(f"CONSTRAINT [{index_row['name']}] PRIMARY KEY {index_row['type_desc']}\n")
+            buffer.write("(\n")
+            
+            if not index_cols_rows:
+                raise Exception(f"Internal Error: Primary Key '{index_row['index_name']}' on table [{index_row['table_schema']}].[{index_row['table_name']}] has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(f"[{col['col_name']}]")
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)")
+            
+            if 'is_padded' in index_row:
+                buffer.write("\nWITH (")
+                buffer.write(f"PAD_INDEX = {'ON' if c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
+                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
+                buffer.write(f"IGNORE_DUP_KEY = {'ON' if c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
+                
+                if val_if_null(index_row.get('fill_factor'), 0) != 0:
+                    buffer.write(f", FILLFACTOR = {index_row['fill_factor']}")
+                buffer.write(")\n")
+                
+        elif db_type == DBType.MySQL:
+            if not in_line:
+                buffer.write(f"ALTER TABLE {index_row['table_name']} ADD\n")
+            buffer.write(f"PRIMARY KEY {'CLUSTERED ' if index_row['type'] == 1 else ''}\n")
+            buffer.write("(\n")
+            
+            if not index_cols_rows:
+                raise Exception(f"Internal Error: Primary Key '{index_row['index_name']}' on table {index_row['table_name']} has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(col['name'])
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)\n")
+            
+        elif db_type == DBType.PostgreSQL:
+            if not in_line:
+                buffer.write(f"ALTER TABLE {index_row['table_schema']}.{index_row['table_name']} ADD CONSTRAINT {index_row['index_name']} PRIMARY KEY")
+            buffer.write(f"{'CLUSTERED ' if index_row['type'] == 1 else ''}\n")
+            buffer.write("(\n")
+            
+            if index_cols_rows.empty:
+                raise Exception(f"Internal Error: Primary Key '{index_row['index_name']}' on table {index_row['table_schema']}.{index_row['table_name']} has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(col['name'])
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)\n")
+            
+    elif val_if_null(index_row.get('is_unique_constraint'), False):
+        if db_type == DBType.MSSQL:
+            if not in_line:
+                buffer.write(f"ALTER TABLE [{index_row['table_schema']}].[{index_row['table_name']}] WITH NOCHECK ADD\n")
+            buffer.write(f"CONSTRAINT [{index_row['name']}] UNIQUE {'CLUSTERED ' if index_row['type'] == 1 else ''}\n")
+            buffer.write("(\n")
+            
+            if not index_cols_rows:
+                raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table [{index_row['table_schema']}].[{index_row['table_name']}] has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Unique Constraint '{col['col_name']}' has an unknown field")
+                
+                buffer.write(f"[{col['col_name']}]")
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)")
+            
+        else:  # MySQL and PostgreSQL
+            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}" 
+                        if db_type == DBType.PostgreSQL else index_row['table_name'])
+            
+            if not in_line:
+                buffer.write(f"ALTER TABLE {table_ref} ADD\n")
+                buffer.write(f"CONSTRAINT {index_row['index_name']} UNIQUE {'CLUSTERED ' if c_to_bool(index_row.get('is_clustered'), False) else ''}\n")
+            else:
+                buffer.write(f"UNIQUE KEY {index_row['index_name']}\n")
+            
+            buffer.write("(\n")
+            
+            if index_cols_rows.empty:
+                raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table {table_ref} has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Unique Constraint '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(col['col_name'])
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)\n")
+            
+    else:  # Regular index
+        if db_type == DBType.MSSQL:
+            buffer.write("CREATE ")
+            if val_if_null(index_row.get('is_unique'), False):
+                buffer.write("UNIQUE ")
+            buffer.write("CLUSTERED " if index_row.get('type') == 1 else "NONCLUSTERED ")
+            buffer.write(f"INDEX [{index_row['name']}]\n")
+            buffer.write(f"ON [{index_row['table_schema']}].[{index_row['table_name']}]\n")
+            buffer.write("(\n")
+            
+            included_cols = []
+            if not index_cols_rows:
+                raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table [{index_row['table_schema']}].[{index_row['table_name']}] has no columns")
+            
+            for col in index_cols_rows.to_dict('records'): 
+                if val_if_null(col.get('is_included_column'), 0):
+                    included_cols.append(col['col_name'])
+                    continue
+                    
+                if col is None:
+                    raise Exception(f"Index '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(f"[{col['col_name']}]")
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)")
+            
+            if included_cols:
+                buffer.write(f"\nINCLUDE ({', '.join(included_cols)})")
+            
+            if 'has_filter' in index_row and c_to_bool(index_row.get('has_filter'), False):
+                buffer.write(f"\nWHERE {index_row['filter_definition']}")
+                
+            if 'is_padded' in index_row:
+                buffer.write("\nWITH (")
+                buffer.write(f"PAD_INDEX = {'ON' if c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
+                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
+                buffer.write(f"IGNORE_DUP_KEY = {'ON' if c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
+                
+                if val_if_null(index_row.get('fill_factor'), 0) != 0:
+                    buffer.write(f", FILLFACTOR = {index_row['fill_factor']}")
+                buffer.write(")\n")
+                
+        else:  # MySQL and PostgreSQL
+            buffer.write("CREATE ")
+            if c_to_bool(index_row.get('is_unique'), False):
+                buffer.write("UNIQUE ")
+            buffer.write(f"INDEX {index_row['index_name']}\n")
+            
+            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}" 
+                        if db_type == DBType.PostgreSQL else index_row['table_name'])
+            buffer.write(f"ON {table_ref}\n")
+            buffer.write("(\n")
+            
+            if index_cols_rows.empty:
+                raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table {table_ref} has no columns")
+            
+            for col in index_cols_rows.to_dict('records'):
+                if col is None:
+                    raise Exception(f"Index '{index_row['index_name']}' has an unknown field")
+                
+                buffer.write(col['col_name']) 
+                if c_to_bool(col.get('is_descending_key'), False):
+                    buffer.write(" DESC")
+                buffer.write(",\n")
+            
+            buffer.seek(buffer.tell() - 2)  # Remove last comma
+            buffer.write("\n)\n")
+    
+    result = buffer.getvalue()
+    buffer.close()
+    return result
+
+
+def get_fk_sql(fk_row: Dict[str, Any], fk_cols_rows: pd.DataFrame, db_type: DBType, from_rndph: bool = False) -> str:
+    buffer = StringIO()
+    
+    if db_type == DBType.MSSQL:
+        buffer.write(f"ALTER TABLE [{fk_row['fkey_table_schema']}].[{fk_row['fkey_table_name']}] ADD ")
+        buffer.write(f"CONSTRAINT [{fk_row['fk_name']}] FOREIGN KEY\n")
+        buffer.write("(\n")
+        
+        if fk_cols_rows.empty:
+            raise Exception(f"Internal Error: foreign key '{fk_row['fk_name']}' (on table [{fk_row['fkey_table_schema']}].[{fk_row['fkey_table_name']}]) has no fields defined for it for the table")
+        
+        # Write foreign key columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"[{col['fkey_col_name']}],\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+        
+        # Write referenced table and columns
+        buffer.write(f"\nREFERENCES [{fk_row['rkey_table_schema']}].[{fk_row['rkey_table_name']}]\n")
+        buffer.write("(\n")
+        
+        # Write referenced columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"[{col['rkey_col_name']}],\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+        
+        # Add ON UPDATE/DELETE actions
+        if fk_row.get('update_referential_action', 0) != 0:
+            buffer.write(f" ON UPDATE {c_fk_cascade_action_tsql(fk_row['update_referential_action'])}\n")
+        if fk_row.get('delete_referential_action', 0) != 0:
+            buffer.write(f" ON DELETE {c_fk_cascade_action_tsql(fk_row['delete_referential_action'])}\n")
+        
+        if val_if_null(fk_row.get('is_not_for_replication'), False):
+            buffer.write(" NOT FOR REPLICATION")
+            
+    elif db_type == DBType.MySQL:
+        buffer.write(f"ALTER TABLE {fk_row['fkey_table_name']} ADD ")
+        buffer.write(f"CONSTRAINT {fk_row['fk_name']} FOREIGN KEY\n")
+        buffer.write("(\n")
+        
+        if fk_cols_rows.empty:
+            raise Exception(f"Internal Error: foreign key '{fk_row['fk_name']}' (on table {fk_row['fkey_table_name']}) has no fields defined for it for the table")
+        
+        # Write foreign key columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"{col['fkey_col_name']},\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+        
+        # Write referenced table and columns
+        buffer.write(f"\nREFERENCES {fk_row['rkey_table_name']}\n")
+        buffer.write("(\n")
+        
+        # Write referenced columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"{col['rkey_col_name']},\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+        
+        # Add MySQL comments if present
+        if 'mysql_comments' in fk_row and fk_row['mysql_comments'] is not None:
+            buffer.write(f" {fk_row['mysql_comments']}")
+            
+    elif db_type == DBType.PostgreSQL:
+        buffer.write(f"ALTER TABLE {fk_row['fkey_table_schema']}.{fk_row['fkey_table_name']} ADD ")
+        buffer.write(f"CONSTRAINT {fk_row['fk_name']} FOREIGN KEY\n")
+        buffer.write("(\n")
+        
+        if fk_cols_rows.empty:
+            raise Exception(f"Internal Error: foreign key '{fk_row['fk_name']}' (on table {fk_row['fkey_table_schema']}.{fk_row['fkey_table_name']}) has no fields defined for it for the table")
+        
+        # Write foreign key columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"{col['fkey_col_name']},\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+        
+        # Write referenced table and columns
+        buffer.write(f"\nREFERENCES {fk_row['rkey_table_schema']}.{fk_row['rkey_table_name']}\n")
+        buffer.write("(\n")
+        
+        # Write referenced columns
+        for col in fk_cols_rows.to_dict('records'):
+            buffer.write(f"{col['rkey_col_name']},\n")
+            
+        buffer.seek(buffer.tell() - 2)  # Remove last comma
+        buffer.write("\n)")
+    
+    buffer.write("\n")
+    result = buffer.getvalue()
+    buffer.close()
+    return result

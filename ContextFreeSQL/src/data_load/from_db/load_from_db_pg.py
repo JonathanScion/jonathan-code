@@ -265,7 +265,7 @@ def _load_tables_foreign_keys() -> pd.DataFrame:
         conn = Database.connect_to_aurora()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        sql = """SELECT fk.conrelid as fkey_table_id, fk.confrelid as rkey_table_id, fk.oid AS fkey_constid,fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name, ns_f.nspname as rkey_table_schema,t_f.relname as rkey_table_name,
+        sql = """SELECT fk.conrelid as fkey_table_id, fk.confrelid as rkey_table_id, fk.oid AS fkey_constid,fk.conname as fk_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name, ns_f.nspname as rkey_table_schema,t_f.relname as rkey_table_name,
             CASE confdeltype
             WHEN 'c' THEN 1
             ELSE 0
@@ -303,14 +303,14 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 
     # Create empty output DataFrame with correct schema
     output = pd.DataFrame(columns=[
-        'fkey_table_id', 'fkey_constid', 'fkey_name', 'keyno',
+        'fkey_table_id', 'fkey_constid', 'fk_name', 'keyno',
         'fkey_table_schema', 'fkey_table_name',
         'rkey_table_schema', 'rkey_table_name',
         'fkey_col_name', 'rkey_col_name'
     ]).astype({
         'fkey_table_id': 'string',
         'fkey_constid': 'string',
-        'fkey_name': 'string',
+        'fk_name': 'string',
         'keyno': 'int32',
         'fkey_table_schema': 'string',
         'fkey_table_name': 'string',
@@ -376,7 +376,7 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
             new_row = {
                 'fkey_table_id': fkey_table_id,
                 'fkey_constid': fkey_constid,
-                'fkey_name': fk_row['fkey_name'],
+                'fk_name': fk_row['fk_name'],
                 'keyno': idx,
                 'fkey_table_schema': fk_row['fkey_table_schema'],
                 'fkey_table_name': fk_row['fkey_table_name'],

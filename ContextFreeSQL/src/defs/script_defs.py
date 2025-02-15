@@ -6,6 +6,7 @@ class DBType(Enum):
     MySQL = 2
     PostgreSQL = 3
 
+
 @dataclass
 class DBSyntax:
     set_operator: str

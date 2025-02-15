@@ -19,8 +19,8 @@ def main():
     #2025/01/30: test, just call the CREATE TABLE generator
     script = get_create_table_from_sys_tables(db_type=DBType.PostgreSQL,                                                          
                                                             table_schema='public',
-                                                            table_name='students',
-                                                            schema_tables = schema,
+                                                            table_name='studentgrades',
+                                                            schema_tables = schema,                                                            
                                                             #script_table_ops = script_ops, #its ScriptTableOptions
                                                             force_allow_null = False)
     print (script)
