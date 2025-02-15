@@ -1,7 +1,7 @@
 import os
 from infra.database import Database
 
-
+"""
 # need to implement load_schemas. see all the logic to excludes specific schemas in WHERE clause at CreateDBStateSchemas
 def load_tables():   
 "SELECT  o.object_id , o.name as entname,o.name as table_name, o.type, o.create_date as crdate, SCHEMA_NAME(o.schema_id) as entschema,SCHEMA_NAME(o.schema_id) as table_schema, 0 as schema_ver, IDENT_SEED('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_seed], IDENT_INCR('['+SCHEMA_NAME(o.schema_id)+'].['+o.name+']') as [ident_incr] FROM sys.objects o (nolock)  
@@ -39,3 +39,4 @@ def load_tables_defaults():
     "SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id" + sNotInRndphFilterWHERE
 
 
+"""
