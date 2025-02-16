@@ -4,6 +4,9 @@ from typing import Optional, List, Tuple
 import pandas as pd
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.data_load.from_db.load_from_db_pg import DBSchema
+from typing import List, Dict, Any
+from io import StringIO
+from src.utils import funcs as utils
 
 def get_create_table_from_sys_tables(
     db_type: DBType,
@@ -106,6 +109,33 @@ def get_create_table_from_sys_tables(
                     (schema_tables.fk_cols['fk_name'] == fk_row['fk_name'])
                 ]
                 create_table_lines.append(get_fk_sql(fk_row, fk_cols, db_type) + ";")
+        
+        #defaults
+        if script_table_ops.defaults and schema_tables.defaults is not None:
+            default_rows = schema_tables.defaults[
+                (schema_tables.defaults['table_schema'] == table_schema) &
+                (schema_tables.defaults['table_name'] == table_name)
+            ]
+    
+        for _, default_row in default_rows.iterrows():
+            create_table_lines.append(get_default_sql(db_type, default_row))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
 
    
         """to be completed later, once we do MSSQL, if at all
@@ -136,9 +166,6 @@ def get_create_table_from_sys_tables(
         error_msg = f"Error occurred: {str(e)}"
         return error_msg
     
-    
-
-
 def get_col_sql(
     sys_cols_row: pd.Series, 
     table_owner: str, 
@@ -247,38 +274,10 @@ def add_size_precision_scale(row: pd.Series, actual_size: bool) -> str:
     # This is a placeholder - implement the actual logic based on your needs
     return ""
 
-from enum import Enum
-from typing import List, Dict, Any
-import textwrap
-
-#1 these below by claude. see if needed, move to utils
-
-def val_if_null(value: Any, default: Any) -> Any:
-    """Utility function to handle null values"""
-    return default if value is None else value
-
-def c_to_bool(value: Any, default: bool = False) -> bool:
-    """Utility function to convert value to boolean"""
-    if value is None:
-        return default
-    return bool(value)
-
-from enum import Enum
-from typing import List, Dict, Any
-from io import StringIO
-
-
-
-def val_if_null(value: Any, default: Any) -> Any:
-    return default if value is None else value
-
-def c_to_bool(value: Any, default: bool = False) -> bool:
-    return bool(value) if value is not None else default
-
 def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any]], db_type: DBType, in_line: bool = False) -> str:
     buffer = StringIO()
     
-    if val_if_null(index_row.get('is_primary_key'), False):
+    if utils.val_if_null(index_row.get('is_primary_key'), False):
         if db_type == DBType.MSSQL:
             if not in_line:
                 buffer.write(f"ALTER TABLE [{index_row['table_schema']}].[{index_row['table_name']}] WITH NOCHECK ADD\n")
@@ -293,7 +292,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(f"[{col['col_name']}]")
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -302,13 +301,13 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
             
             if 'is_padded' in index_row:
                 buffer.write("\nWITH (")
-                buffer.write(f"PAD_INDEX = {'ON' if c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
-                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
-                buffer.write(f"IGNORE_DUP_KEY = {'ON' if c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
-                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
-                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
+                buffer.write(f"PAD_INDEX = {'ON' if utils.c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
+                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if utils.c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
+                buffer.write(f"IGNORE_DUP_KEY = {'ON' if utils.c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if utils.c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if utils.c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
                 
-                if val_if_null(index_row.get('fill_factor'), 0) != 0:
+                if utils.val_if_null(index_row.get('fill_factor'), 0) != 0:
                     buffer.write(f", FILLFACTOR = {index_row['fill_factor']}")
                 buffer.write(")\n")
                 
@@ -326,7 +325,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(col['name'])
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -347,14 +346,14 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(col['name'])
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
             buffer.seek(buffer.tell() - 2)  # Remove last comma
             buffer.write("\n)\n")
             
-    elif val_if_null(index_row.get('is_unique_constraint'), False):
+    elif utils.val_if_null(index_row.get('is_unique_constraint'), False):
         if db_type == DBType.MSSQL:
             if not in_line:
                 buffer.write(f"ALTER TABLE [{index_row['table_schema']}].[{index_row['table_name']}] WITH NOCHECK ADD\n")
@@ -369,7 +368,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Unique Constraint '{col['col_name']}' has an unknown field")
                 
                 buffer.write(f"[{col['col_name']}]")
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -382,7 +381,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
             
             if not in_line:
                 buffer.write(f"ALTER TABLE {table_ref} ADD\n")
-                buffer.write(f"CONSTRAINT {index_row['index_name']} UNIQUE {'CLUSTERED ' if c_to_bool(index_row.get('is_clustered'), False) else ''}\n")
+                buffer.write(f"CONSTRAINT {index_row['index_name']} UNIQUE {'CLUSTERED ' if utils.c_to_bool(index_row.get('is_clustered'), False) else ''}\n")
             else:
                 buffer.write(f"UNIQUE KEY {index_row['index_name']}\n")
             
@@ -396,7 +395,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Unique Constraint '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(col['col_name'])
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -406,7 +405,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
     else:  # Regular index
         if db_type == DBType.MSSQL:
             buffer.write("CREATE ")
-            if val_if_null(index_row.get('is_unique'), False):
+            if utils.val_if_null(index_row.get('is_unique'), False):
                 buffer.write("UNIQUE ")
             buffer.write("CLUSTERED " if index_row.get('type') == 1 else "NONCLUSTERED ")
             buffer.write(f"INDEX [{index_row['name']}]\n")
@@ -418,7 +417,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                 raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table [{index_row['table_schema']}].[{index_row['table_name']}] has no columns")
             
             for col in index_cols_rows.to_dict('records'): 
-                if val_if_null(col.get('is_included_column'), 0):
+                if utils.val_if_null(col.get('is_included_column'), 0):
                     included_cols.append(col['col_name'])
                     continue
                     
@@ -426,7 +425,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Index '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(f"[{col['col_name']}]")
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -436,24 +435,24 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
             if included_cols:
                 buffer.write(f"\nINCLUDE ({', '.join(included_cols)})")
             
-            if 'has_filter' in index_row and c_to_bool(index_row.get('has_filter'), False):
+            if 'has_filter' in index_row and utils.c_to_bool(index_row.get('has_filter'), False):
                 buffer.write(f"\nWHERE {index_row['filter_definition']}")
                 
             if 'is_padded' in index_row:
                 buffer.write("\nWITH (")
-                buffer.write(f"PAD_INDEX = {'ON' if c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
-                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
-                buffer.write(f"IGNORE_DUP_KEY = {'ON' if c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
-                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
-                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
+                buffer.write(f"PAD_INDEX = {'ON' if utils.c_to_bool(index_row.get('is_padded'), False) else 'OFF'},")
+                buffer.write(f"STATISTICS_NORECOMPUTE = {'ON' if utils.c_to_bool(index_row.get('no_recompute'), False) else 'OFF'},")
+                buffer.write(f"IGNORE_DUP_KEY = {'ON' if utils.c_to_bool(index_row.get('ignore_dup_key'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_ROW_LOCKS = {'ON' if utils.c_to_bool(index_row.get('allow_row_locks'), False) else 'OFF'},")
+                buffer.write(f"ALLOW_PAGE_LOCKS = {'ON' if utils.c_to_bool(index_row.get('allow_page_locks'), False) else 'OFF'}")
                 
-                if val_if_null(index_row.get('fill_factor'), 0) != 0:
+                if utils.val_if_null(index_row.get('fill_factor'), 0) != 0:
                     buffer.write(f", FILLFACTOR = {index_row['fill_factor']}")
                 buffer.write(")\n")
                 
         else:  # MySQL and PostgreSQL
             buffer.write("CREATE ")
-            if c_to_bool(index_row.get('is_unique'), False):
+            if utils.c_to_bool(index_row.get('is_unique'), False):
                 buffer.write("UNIQUE ")
             buffer.write(f"INDEX {index_row['index_name']}\n")
             
@@ -470,7 +469,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Index '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(col['col_name']) 
-                if c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
@@ -480,7 +479,6 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
     result = buffer.getvalue()
     buffer.close()
     return result
-
 
 def get_fk_sql(fk_row: Dict[str, Any], fk_cols_rows: pd.DataFrame, db_type: DBType, from_rndph: bool = False) -> str:
     buffer = StringIO()
@@ -512,12 +510,13 @@ def get_fk_sql(fk_row: Dict[str, Any], fk_cols_rows: pd.DataFrame, db_type: DBTy
         buffer.write("\n)")
         
         # Add ON UPDATE/DELETE actions
-        if fk_row.get('update_referential_action', 0) != 0:
-            buffer.write(f" ON UPDATE {c_fk_cascade_action_tsql(fk_row['update_referential_action'])}\n")
-        if fk_row.get('delete_referential_action', 0) != 0:
-            buffer.write(f" ON DELETE {c_fk_cascade_action_tsql(fk_row['delete_referential_action'])}\n")
+        #!cascade actions... for later. (is it on MSSQL only)
+        # if fk_row.get('update_referential_action', 0) != 0:
+        #     buffer.write(f" ON UPDATE {c_fk_cascade_action_tsql(fk_row['update_referential_action'])}\n")
+        # if fk_row.get('delete_referential_action', 0) != 0:
+        #     buffer.write(f" ON DELETE {c_fk_cascade_action_tsql(fk_row['delete_referential_action'])}\n")
         
-        if val_if_null(fk_row.get('is_not_for_replication'), False):
+        if utils.val_if_null(fk_row.get('is_not_for_replication'), False):
             buffer.write(" NOT FOR REPLICATION")
             
     elif db_type == DBType.MySQL:
@@ -577,6 +576,23 @@ def get_fk_sql(fk_row: Dict[str, Any], fk_cols_rows: pd.DataFrame, db_type: DBTy
         buffer.write("\n)")
     
     buffer.write("\n")
+    result = buffer.getvalue()
+    buffer.close()
+    return result
+
+def get_default_sql(db_type: DBType, default_row: Dict[str, Any]) -> str:
+    buffer = StringIO()
+    
+    if db_type == DBType.MSSQL:
+        buffer.write(f"ALTER TABLE [{default_row['table_schema']}].[{default_row['table_name']}] ")
+        buffer.write(f"ADD CONSTRAINT {default_row['default_name']} DEFAULT ")
+        buffer.write(f"{default_row['default_definition']} FOR [{default_row['col_name']}];")
+        
+    elif db_type == DBType.PostgreSQL:
+        buffer.write(f"ALTER TABLE {default_row['table_schema']}.{default_row['table_name']} ")
+        buffer.write(f"ALTER COLUMN {default_row['col_name']} ")
+        buffer.write(f"SET DEFAULT {default_row['default_definition']};")
+    
     result = buffer.getvalue()
     buffer.close()
     return result

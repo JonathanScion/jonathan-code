@@ -32,3 +32,5 @@ REFERENCES public.students
 studentid
 )
 ;
+ALTER TABLE public.studentgrades ALTER COLUMN grade SET DEFAULT 0;
+ALTER TABLE public.studentgrades ALTER COLUMN subject SET DEFAULT 'math'::character varying;
