@@ -11,6 +11,7 @@ class DBSchema(BaseModel):
     schemas: pd.DataFrame 
     tables: pd.DataFrame
     columns: pd.DataFrame
+    defaults: pd.DataFrame
     indexes: pd.DataFrame
     index_cols: pd.DataFrame
     fks: pd.DataFrame
@@ -26,10 +27,12 @@ def load_all_schema() -> DBSchema:
     schemas = _load_schemas()
     tables = _load_tables()
     columns = _load_tables_columns()
+    defaults = _load_tables_columns_defaults()
     indexes = _load_tables_indexes()
     index_cols = _process_index_cols_pg(columns, indexes)
     fks = _load_tables_foreign_keys()
     fk_cols = _process_fk_cols_pg(columns, fks)
+    
     #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format. 
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
 
@@ -37,6 +40,7 @@ def load_all_schema() -> DBSchema:
         schemas = schemas,
         tables = tables,
         columns = columns,
+        defaults = defaults,
         indexes = indexes,
         index_cols = index_cols,
         fks = fks,
@@ -122,6 +126,33 @@ def _load_tables_columns() -> pd.DataFrame:
             cur.close()
         if conn:
             conn.close()
+
+def _load_tables_columns_defaults() -> pd.DataFrame:
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql = """select table_schema, table_name, COLUMN_NAME as col_name, 
+                        'def_' || table_schema || '_' || table_name || '_' || COLUMN_NAME as default_name, 
+                        COLUMN_DEFAULT as default_definition
+                FROM information_schema.COLUMNS C
+                WHERE C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') 
+                AND column_default is NOT NULL"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        
+        return pd.DataFrame(results)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
 
 def _load_tables_indexes() -> pd.DataFrame:
     conn = None

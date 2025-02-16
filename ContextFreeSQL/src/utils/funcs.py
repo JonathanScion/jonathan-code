@@ -1,6 +1,7 @@
 import pandas as pd
 from src.defs.script_defs import DBType
 from io import StringIO
+from typing import Any
 
 
 def quote_str_or_null(value):
@@ -66,3 +67,10 @@ def parse_pg_array(array_str):
     if not clean_str:
         return []
     return [int(x.strip()) for x in clean_str.split(',')]
+
+
+def val_if_null(value: Any, default: Any) -> Any:
+    return default if value is None else value
+
+def c_to_bool(value: Any, default: bool = False) -> bool:
+    return bool(value) if value is not None else default
