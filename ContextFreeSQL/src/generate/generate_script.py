@@ -15,8 +15,8 @@ def generate_all_script(schema: DBSchema, db_type: DBType, scrpt_ops: ScriptingO
     # 1. Add header
     header = build_script_header(db_syntax, 'theSome.sql')
     buffer.write(header)
-    buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;")
-    buffer.write("BEGIN --overall code\n")
+    buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
+    buffer.write("\tBEGIN --the code\n")
     buffer.write("\tperform n.nspname, c.relname\n")
     buffer.write("\tFROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n")
     buffer.write("\tWHERE n.nspname LIKE 'pg_temp_%' AND c.relname='scriptoutput' AND pg_catalog.pg_table_is_visible(c.oid);\n")
