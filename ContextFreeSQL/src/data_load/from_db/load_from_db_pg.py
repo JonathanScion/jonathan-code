@@ -16,6 +16,7 @@ class DBSchema(BaseModel):
     index_cols: pd.DataFrame
     fks: pd.DataFrame
     fk_cols: pd.DataFrame
+    #check_constraints: Optional[pd.DataFrame] = None #!TBD
     
 
     class Config:
@@ -429,3 +430,50 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 
 
 
+def load_all_db_ents() -> pd.DataFrame:
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_aurora()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql =  """SELECT CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, table_schema || '.' || table_name AS EntKey,
+                    table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType , NULL as EntParamList
+                FROM information_schema.tables
+                where table_schema not in ('information_schema', 'pg_catalog') and TABLE_TYPE<>'VIEW'
+                UNION
+                select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
+                from information_schema.views
+                where table_schema not in ('information_schema', 'pg_catalog')
+                UNION 
+                select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
+                    p.proname as EntName,
+                    cast(p.prokind as character varying)  as EntBaseType,
+                    case p.prokind WHEN 'p' THEN 'Procedure' WHEN 'f' THEN 'Function' END as EntType,
+                    pg_get_function_arguments(p.oid) as EntParamList 
+                FROM pg_proc p
+                left join pg_namespace n on p.pronamespace = n.oid
+                left join pg_language l on p.prolang = l.oid
+                left join pg_type t on t.oid = p.prorettype 
+                where n.nspname not in ('pg_catalog', 'information_schema')
+                UNION 
+                Select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
+                                        trigger_name As EntName,
+                                        'Trigger' as EntBaseType, 
+                                        'TR' as EntBaseType,
+                                        NULL as EntParamList
+                FROM information_schema.triggers
+                Group By 1, 2, 3, 4,5, 6,7 """
+        cur.execute(sql)
+         
+        results = cur.fetchall()
+        
+        return pd.DataFrame(results)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
