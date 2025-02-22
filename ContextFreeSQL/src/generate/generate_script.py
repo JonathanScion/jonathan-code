@@ -2,9 +2,10 @@ from io import StringIO
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
+from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
+import pandas as pd
 
-
-def generate_all_script(schema: DBSchema, db_type: DBType, scrpt_ops: ScriptingOptions) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -33,8 +34,16 @@ def generate_all_script(schema: DBSchema, db_type: DBType, scrpt_ops: ScriptingO
     # TODO: Complete this section
     # bOnlyData = tblEnts.Select("ScriptSchema=False AND ScriptData=True").Length > 0
     # if oScriptOps.ScriptSchemas and (not bOnlyData):
-    schemas_buffer = create_db_state_schemas(db_type, schema.tables, schema.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+    schemas_buffer = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
     buffer.write(schemas_buffer.getvalue())
+    tables_buffer = create_db_state_temp_tables_for_tables(
+            dbtype = db_type,
+            tbl_ents = tbl_ents,
+            script_ops = scrpt_ops,
+            schema_tables = schema_tables
+        )
+    buffer.write(tables_buffer.getvalue())
+
     
     #end out buffer
     if db_type == DBType.PostgreSQL:

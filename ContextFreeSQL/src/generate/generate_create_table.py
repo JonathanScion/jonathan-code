@@ -15,7 +15,7 @@ def get_create_table_from_sys_tables(
     schema_tables : DBSchema,
     script_table_ops: Optional[ScriptTableOptions] = None,
     force_allow_null: bool = False,
-    pre_add_constraints_data_checks: bool = False,    
+    pre_add_constraints_data_checks: bool = False,    #!tbd
     as_temp_table: bool = False
 ) -> str:
   

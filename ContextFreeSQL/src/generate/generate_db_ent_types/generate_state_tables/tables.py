@@ -5,37 +5,25 @@ import pandas as pd
 from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
 from src.generate.generate_create_table import get_create_table_from_sys_tables
-
-@dataclass
-class DBInfo:
-    src_db_type: DBType
+from src.data_load.from_db.load_from_db_pg import DBSchema
 
 
 #CreateDBStateTempTables_ForTables
 def create_db_state_temp_tables_for_tables(
-    script_db_state_tables: StringIO,
+    dbtype: DBType,
     tbl_ents: pd.DataFrame,
-    conn_str: str,
-    db_info: DBInfo,
     script_ops: ScriptingOptions,
-    tbl_db_tables: pd.DataFrame,
-    tbl_db_tables_cols: pd.DataFrame,
-    tbl_db_tables_indexes: pd.DataFrame,
-    tbl_db_tables_indexes_cols: pd.DataFrame,
-    tbl_db_tables_fks: pd.DataFrame,
-    tbl_db_tables_fks_cols: pd.DataFrame,
-    tbl_db_defaults: pd.DataFrame,
-    tbl_db_check_cnstrnts: pd.DataFrame,
-    tbl_db_ext_props: pd.DataFrame,
+    schema_tables: DBSchema,
+    #tbl_db_check_cnstrnts: pd.DataFrame, #!tbd    
     script_table_ops: Optional[ScriptTableOptions] = None,
     pre_add_constraints_data_checks: bool = False
 ) -> tuple[StringIO, StringIO, StringIO]:
     
-    if script_db_state_tables is None:
-        script_db_state_tables = StringIO()
-    
-    
+    script_db_state_tables = StringIO()
+        
     # Select and sort tables to script
+    #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?
+    )
     mask = (tbl_ents['ScriptSchema'] == True) & (tbl_ents['EntType'] == 'Table')
     rows_tables_script = tbl_ents[mask].sort_values('ScriptSortOrder')
     
@@ -44,9 +32,9 @@ def create_db_state_temp_tables_for_tables(
     overall_table_schema_name_in_scripting = StringIO()
     
     for idx, row in rows_tables_script.iterrows():
-        if db_info.src_db_type == DBType.MSSQL:
+        if dbtype == DBType.MSSQL:
             schema_name = f"'{row['entschema']}{row['entname']}'"
-        elif db_info.src_db_type == DBType.PostgreSQL:
+        elif dbtype == DBType.PostgreSQL:
             schema_name = f"'{row['entschema'].lower()}{row['entname'].lower()}'"
             
         table_schema_name_in_scripting.write(schema_name)
@@ -66,13 +54,10 @@ def create_db_state_temp_tables_for_tables(
     
     # Create various DB state elements
     create_db_state_tables(
-        script_db_state_tables, all_tables, conn_str, db_info, script_ops,
-        tbl_db_tables, tbl_db_tables_cols, tbl_db_tables_indexes,
-        tbl_db_tables_indexes_cols, tbl_db_tables_fks, tbl_db_tables_fks_cols,
-        tbl_db_defaults, tbl_db_check_cnstrnts, tbl_db_ext_props, script_table_ops,
-        pre_add_constraints_data_checks,
-        script_ops.rndph_conn_str, 
-        script_ops.instance_id, script_ops.rndph_db_id
+        tables_script_rows = all_tables,
+        dbtype = dbtype,
+        script_ops = script_ops,
+        schema = schema_tables,
     )
     
     bad_data_pre_add_indx = StringIO()
@@ -129,30 +114,19 @@ def create_db_state_temp_tables_for_tables(
 
 
 def create_db_state_tables(
-    script_builder: List[str],
     tables_script_rows: pd.DataFrame,
-    conn_str: str,
-    db_info: DBInfo,
     dbtype: DBType, #that's the destination db type
-    script_ops: ScriptingOptions,
-    db_tables: pd.DataFrame,
-    db_tables_cols: pd.DataFrame,
-    db_tables_indexes: pd.DataFrame,
-    db_tables_indexes_cols: pd.DataFrame,
-    db_tables_fks: pd.DataFrame,
-    db_tables_fks_cols: pd.DataFrame,
-    db_defaults: pd.DataFrame,
-    db_check_constraints: pd.DataFrame,
-    db_ext_props: pd.DataFrame
+    schema_tables: DBSchema,        
 ) -> None:
     # Define DB-specific variables based on DB type
    
+    script_builder = StringIO()   
 
     # Start building script
-    script_builder.append("--tables")
+    script_builder.write("--tables")
     
     # Drop table if exists logic
-    if db_info.src_db_type == DBType.MSSQL:
+    if dbtype == DBType.MSSQL:
         script_builder.extend([
             "IF (OBJECT_ID('tempdb..#ScriptTables') IS NOT NULL) ",
             "BEGIN",
@@ -191,21 +165,12 @@ def create_db_state_tables(
     for _, row in tables_script_rows.iterrows():
         # Get table creation code
         got_create_table, create_table, create_table_err = get_create_table_from_sys_tables(
-            conn_str=conn_str,
-            dst_db_type=db_info.dst_db_type,
-            schema=row['entschema'],
-            table_name=row['entname'],
-            db_tables=db_tables,
-            db_tables_cols=db_tables_cols,
-            db_tables_indexes=db_tables_indexes,
-            db_tables_indexes_cols=db_tables_indexes_cols,
-            db_tables_fks=db_tables_fks,
-            db_tables_fks_cols=db_tables_fks_cols,
-            db_defaults=db_defaults,
-            db_check_constraints=db_check_constraints,
-            db_ext_props=db_ext_props,
-            script_table_options=script_table_options_no_fk,
-            pre_add_constraints_data_checks=script_ops.pre_add_constraints_data_checks       
+            dbtype = dbtype,
+            table_schema = row['entschema'],
+            table_name = row['entname'],
+            schema_tables = schema_tables,
+            script_table_options = script_table_options_no_fk,
+            pre_add_constraints_data_checks = False
         )
 
         # Get database-specific syntax
@@ -213,13 +178,13 @@ def create_db_state_tables(
         ident_level = 1
 
         # Format entity name based on DB type
-        if db_info.src_db_type == DBType.MSSQL:
+        if dbtype == DBType.MSSQL:
             ent_full_name = f"[{row['entschema']}].[{row['entname'].replace("'", "''")}]"
         else:
             ent_full_name = f"{row['entschema']}.{row['entname']}"
 
         if not got_create_table:
-            script_builder.append(
+            script_builder.write(
                 f"PRINT 'Table ''{ent_full_name}'' cannot be scripted: {create_table_err.replace("'", "''")}'''")
             continue
 
@@ -240,7 +205,7 @@ def create_db_state_tables(
     ])
 
     # Add DB-specific update logic
-    if db_info.src_db_type == DBType.MSSQL:
+    if dbtype == DBType.MSSQL:
         script_builder.extend([
             "from #ScriptTables J left join (select SCHEMA_NAME(o.schema_id) as table_schema, o.name as table_name FROM sys.tables O) DB ",
             "on J.table_schema=DB.table_schema AND J.table_name=DB.table_name ",
@@ -254,8 +219,8 @@ def create_db_state_tables(
         ])
 
     # Add tables that need to be dropped
-    script_builder.append("--table only on DB (need to drop)")
-    if db_info.src_db_type == DBType.MSSQL:
+    script_builder.write("--table only on DB (need to drop)")
+    if dbtype == DBType.MSSQL:
         script_builder.extend([
             "INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
             "SELECT  DB.table_schema ,DB.table_name,2 ",
@@ -280,7 +245,7 @@ def create_db_state_tables(
             "WHERE J.table_name Is NULL; "
         ])
     
-    script_builder.append("")
+    script_builder.write("")
 
 def quote_str_or_null(value: Optional[str]) -> str:
     """Helper function to quote strings or return 'NULL'"""
