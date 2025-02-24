@@ -22,10 +22,9 @@ def create_db_state_temp_tables_for_tables(
     script_db_state_tables = StringIO()
         
     # Select and sort tables to script
-    #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?
-    )
-    mask = (tbl_ents['ScriptSchema'] == True) & (tbl_ents['EntType'] == 'Table')
-    rows_tables_script = tbl_ents[mask].sort_values('ScriptSortOrder')
+    #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?    
+    mask = (tbl_ents['scriptschema'] == 1) & (tbl_ents['enttype'] == 'Table')
+    rows_tables_script = tbl_ents[mask].sort_values('scriptsortorder') #!ScriptSortOrder... must do the algorithm for it. describe to claude, lets see
     
     # Prepare lists of tables we're working with
     table_schema_name_in_scripting = StringIO()
@@ -49,15 +48,14 @@ def create_db_state_temp_tables_for_tables(
     script_db_state_tables.write("--DB State Temp Tables for Tables\n")
     
     # Get all tables including randolph tables
-    all_tables_mask = (tbl_ents['ScriptSchema'] == True) & (tbl_ents['EntType'] == 'Table')
-    all_tables = tbl_ents[all_tables_mask].sort_values('ScriptSortOrder')
+    all_tables_mask = (tbl_ents['scriptschema'] == True) & (tbl_ents['enttype'] == 'Table')
+    all_tables = tbl_ents[all_tables_mask].sort_values('scriptsortorder')
     
     # Create various DB state elements
     create_db_state_tables(
         tables_script_rows = all_tables,
-        dbtype = dbtype,
-        script_ops = script_ops,
-        schema = schema_tables,
+        dbtype = dbtype,        
+        schema_tables = schema_tables,
     )
     
     bad_data_pre_add_indx = StringIO()
@@ -127,14 +125,14 @@ def create_db_state_tables(
     
     # Drop table if exists logic
     if dbtype == DBType.MSSQL:
-        script_builder.extend([
+        script_builder.write([
             "IF (OBJECT_ID('tempdb..#ScriptTables') IS NOT NULL) ",
             "BEGIN",
             f"\tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;",
             "END;"
         ])
     else:  # PostgreSQL
-        script_builder.extend([
+        script_builder.write([
             "perform  n.nspname ,c.relname",
             "FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace",
             "WHERE n.nspname like 'pg_temp_%' AND c.relname='scripttables' AND pg_catalog.pg_table_is_visible(c.oid);",
@@ -144,7 +142,7 @@ def create_db_state_tables(
         ])
 
     # Create ScriptTables table
-    script_builder.extend([
+    script_builder.write([
         f"{db_syntax.temp_table_create}ScriptTables",
         "(",
         f"\ttable_schema {db_syntax.nvarchar_type} (128) not null,",
@@ -189,7 +187,7 @@ def create_db_state_tables(
             continue
 
         # Insert table info
-        script_builder.extend([
+        script_builder.write([
             f"INSERT INTO {db_syntax.temp_table_prefix}ScriptTables (table_schema,table_name, SQL_CREATE, SQL_DROP)",
             f"VALUES ({quote_str_or_null(row['entschema'])},",
             f"{quote_str_or_null(row['entname'])},",
@@ -198,7 +196,7 @@ def create_db_state_tables(
         ])
 
     # Update state against existing tables
-    script_builder.extend([
+    script_builder.write([
         "",
         "--tables only on Johannes database (need to add)",
         f"update {db_syntax.temp_table_prefix}ScriptTables set tableStat = 1"
@@ -206,13 +204,13 @@ def create_db_state_tables(
 
     # Add DB-specific update logic
     if dbtype == DBType.MSSQL:
-        script_builder.extend([
+        script_builder.write([
             "from #ScriptTables J left join (select SCHEMA_NAME(o.schema_id) as table_schema, o.name as table_name FROM sys.tables O) DB ",
             "on J.table_schema=DB.table_schema AND J.table_name=DB.table_name ",
             "where DB.table_name Is null "
         ])
     else:
-        script_builder.extend([
+        script_builder.write([
             f"FROM {db_syntax.temp_table_prefix}ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB ",
             "on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) ",
             "where DB.table_name Is null; "
@@ -221,7 +219,7 @@ def create_db_state_tables(
     # Add tables that need to be dropped
     script_builder.write("--table only on DB (need to drop)")
     if dbtype == DBType.MSSQL:
-        script_builder.extend([
+        script_builder.write([
             "INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
             "SELECT  DB.table_schema ,DB.table_name,2 ",
             "FROM    #ScriptTables J ",
@@ -233,7 +231,7 @@ def create_db_state_tables(
             "WHERE J.table_name Is NULL "
         ])
     else:
-        script_builder.extend([
+        script_builder.write([
             "INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)",
             "SELECT  DB.table_schema ,DB.table_name,2 ",
             "FROM    ScriptTables J ",

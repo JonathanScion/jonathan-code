@@ -4,6 +4,9 @@
  #activate
  venv\Scripts\activate
 
+ #to run
+ src/main.py
+
 #install whatever
 pip install -r requirements.txt
 #from work: pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
