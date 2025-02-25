@@ -51,7 +51,7 @@ def create_db_state_schemas(dbtype: DBType, tbl_ents: pd.DataFrame, tbl_schemas:
     schemas_buffer.write(f"{'\t' * ident_level});\n\n")
 
     # Inside create_db_state_schemas function:
-    schemas_buffer.write(f"{'\t' * ident_level}--INSErting all existing schemas \n")
+    schemas_buffer.write(f"{'\t' * ident_level}--INSERTing all existing schemas\n")
     for _, row in tbl_schemas.iterrows():
         schemas_buffer.write(f"{'\t' * ident_level}INSERT INTO {db_syntax.temp_table_prefix}ScriptSchemas (schema_name,principal_name, SQL_CREATE)\n")
         schemas_buffer.write(f"{'\t' * ident_level}VALUES (" + utils.quote_str_or_null(row['schema_name']) + ",")

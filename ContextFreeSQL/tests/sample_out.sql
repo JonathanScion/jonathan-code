@@ -42,7 +42,7 @@ BEGIN --overall code
 			schemaStat smallint null
 		);
 
-		--INSErting all existing schemas 
+		--INSERTing all existing schemas
 		INSERT INTO ScriptSchemas (schema_name,principal_name, SQL_CREATE)
 		VALUES ('public','pg_database_owner',		'CREATE SCHEMA public AUTHORIZATION pg_database_owner;');
 		INSERT INTO ScriptSchemas (schema_name,principal_name, SQL_CREATE)
@@ -117,6 +117,39 @@ BEGIN --overall code
 			END; --FOR 
 		END; --of adding new entities and ones that were modified
 	END; --schema code
+	--DB State Temp Tables for Tables
+	BEGIN --Tables code
+		perform  n.nspname ,c.relname
+        FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname like 'pg_temp_%' AND c.relname='scripttables' AND pg_catalog.pg_table_is_visible(c.oid);
+        IF FOUND THEN
+        	DROP TABLE ScriptTables;
+        END IF;
+		CREATE TEMP TABLE ScriptTables
+        (
+            table_schema character varying (128) not null,
+            table_name character varying (128) not null,
+            SQL_CREATE character varying  null,
+            SQL_DROP character varying  null,
+            col_diff boolean NULL,
+            index_diff boolean NULL,
+            fk_diff boolean NULL,
+            tableStat smallint null,
+        );
+
+        --tables only on Johannes database (need to add)"
+        update ScriptTables set tableStat = 1FROM ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB 
+            "on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) 
+            "where DB.table_name Is null; --table only on DB (need to drop)INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
+            SELECT  DB.table_schema ,DB.table_name,2 
+            FROM    ScriptTables J 
+            RIGHT JOIN ( SELECT t.table_schema , 
+            t.table_name 
+            FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' 
+            ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
+            AND LOWER(J.table_name) = LOWER(DB.table_name) 
+            WHERE J.table_name Is NULL; 
+	--End DB State Temp Tables for Tables
 END; --overall code
 $$
 ;select * from scriptoutput
