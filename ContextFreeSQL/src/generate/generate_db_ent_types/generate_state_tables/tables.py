@@ -17,7 +17,7 @@ def create_db_state_temp_tables_for_tables(
     #tbl_db_check_cnstrnts: pd.DataFrame, #!tbd    
     script_table_ops: Optional[ScriptTableOptions] = None,
     pre_add_constraints_data_checks: bool = False
-) -> tuple[StringIO, StringIO, StringIO]:
+) -> StringIO:
     
     script_db_state_tables = StringIO()
         
@@ -27,9 +27,9 @@ def create_db_state_temp_tables_for_tables(
     rows_tables_script = tbl_ents[mask].sort_values('scriptsortorder') #!ScriptSortOrder... must do the algorithm for it. describe to claude, lets see
     
     # Prepare lists of tables we're working with
+    #!note: this part is half baked. will have to get back to it later and see whats going on, maybe based on .net stuff
     table_schema_name_in_scripting = StringIO()
-    overall_table_schema_name_in_scripting = StringIO()
-    
+    overall_table_schema_name_in_scripting = StringIO()    
     for idx, row in rows_tables_script.iterrows():
         if dbtype == DBType.MSSQL:
             schema_name = f"'{row['entschema']}{row['entname']}'"
@@ -42,24 +42,27 @@ def create_db_state_temp_tables_for_tables(
         if idx < len(rows_tables_script) - 1:
             table_schema_name_in_scripting.write(",")
             overall_table_schema_name_in_scripting.write(",")
-    
+    #!end note. so what do we do with all this section and these 2 StringIOs? go back to .net code, see if needed here. i think its for filtering, when user on the GUI requests only some table. and so will be converted to command line params here
     
     # Generate the scripts
-    script_db_state_tables.write("--DB State Temp Tables for Tables\n")
+    script_db_state_tables.write("\t--DB State Temp Tables for Tables\n")
     
     # Get all tables including randolph tables
     all_tables_mask = (tbl_ents['scriptschema'] == True) & (tbl_ents['enttype'] == 'Table')
     all_tables = tbl_ents[all_tables_mask].sort_values('scriptsortorder')
     
     # Create various DB state elements
-    create_db_state_tables(
+    create_state_tables = create_db_state_tables(
+        num_tabs = 2,
         tables_script_rows = all_tables,
         dbtype = dbtype,        
         schema_tables = schema_tables,
     )
+    script_db_state_tables.write(create_state_tables.getvalue())
     
     bad_data_pre_add_indx = StringIO()
     bad_data_pre_add_fk = StringIO()
+    #! and what with these? go back to .net, see if needed
     
     '''
     create_db_state_columns(
@@ -102,60 +105,57 @@ def create_db_state_temp_tables_for_tables(
 
     '''
     
-    script_db_state_tables.write("--End DB State Temp Tables for Tables\n")
+    script_db_state_tables.write("\tEnd --DB State Temp Tables for Tables\n")
     
-    return (
-        overall_table_schema_name_in_scripting,
-        bad_data_pre_add_indx,
-        bad_data_pre_add_fk
-    )
+    return script_db_state_tables
 
 
 def create_db_state_tables(
     tables_script_rows: pd.DataFrame,
+    num_tabs: int,
     dbtype: DBType, #that's the destination db type
     schema_tables: DBSchema,        
-) -> None:
-    # Define DB-specific variables based on DB type
-   
+) -> StringIO:
+
+    db_syntax = DBSyntax.get_syntax(dbtype)
     script_builder = StringIO()   
 
     # Start building script
-    script_builder.write("--tables")
+    script_builder.write("\tBEGIN --Tables code\n")
+    align = "\t" * num_tabs
     
     # Drop table if exists logic
     if dbtype == DBType.MSSQL:
-        script_builder.write([
+        script_builder.write(
             "IF (OBJECT_ID('tempdb..#ScriptTables') IS NOT NULL) ",
             "BEGIN",
             f"\tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;",
             "END;"
-        ])
+        )
     else:  # PostgreSQL
-        script_builder.write([
-            "perform  n.nspname ,c.relname",
-            "FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace",
-            "WHERE n.nspname like 'pg_temp_%' AND c.relname='scripttables' AND pg_catalog.pg_table_is_visible(c.oid);",
-            "IF FOUND THEN",
-            f"\tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;",
-            "END IF;"
-        ])
+        script_builder.write(
+            f"""{align}perform  n.nspname ,c.relname
+        FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname like 'pg_temp_%' AND c.relname='scripttables' AND pg_catalog.pg_table_is_visible(c.oid);
+        IF FOUND THEN
+        \tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;
+        END IF;\n"""
+        )
 
     # Create ScriptTables table
-    script_builder.write([
-        f"{db_syntax.temp_table_create}ScriptTables",
-        "(",
-        f"\ttable_schema {db_syntax.nvarchar_type} (128) not null,",
-        f"\ttable_name {db_syntax.nvarchar_type} (128) not null,",
-        f"\tSQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,",
-        f"\tSQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,",
-        f"\tcol_diff {db_syntax.boolean_type} NULL,",
-        f"\tindex_diff {db_syntax.boolean_type} NULL,",
-        f"\tfk_diff {db_syntax.boolean_type} NULL,",
-        "\ttableStat smallint null",
-        ");",
-        ""
-    ])
+    script_builder.write(
+        f"""{align}{db_syntax.temp_table_create}ScriptTables
+        (
+            table_schema {db_syntax.nvarchar_type} (128) not null,
+            table_name {db_syntax.nvarchar_type} (128) not null,
+            SQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,
+            SQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,
+            col_diff {db_syntax.boolean_type} NULL,
+            index_diff {db_syntax.boolean_type} NULL,
+            fk_diff {db_syntax.boolean_type} NULL,
+            tableStat smallint null,
+        );"""
+    )
 
     # Process each table
     script_table_options_no_fk = ScriptTableOptions(foreign_keys=False)
@@ -196,25 +196,25 @@ def create_db_state_tables(
         ])
 
     # Update state against existing tables
-    script_builder.write([
-        "",
-        "--tables only on Johannes database (need to add)",
-        f"update {db_syntax.temp_table_prefix}ScriptTables set tableStat = 1"
-    ])
+    script_builder.write(
+        f"""\n
+        --tables only on Johannes database (need to add)"
+        update {db_syntax.temp_table_prefix}ScriptTables set tableStat = 1"""
+    )
 
     # Add DB-specific update logic
     if dbtype == DBType.MSSQL:
-        script_builder.write([
+        script_builder.write(
             "from #ScriptTables J left join (select SCHEMA_NAME(o.schema_id) as table_schema, o.name as table_name FROM sys.tables O) DB ",
             "on J.table_schema=DB.table_schema AND J.table_name=DB.table_name ",
             "where DB.table_name Is null "
-        ])
+        )
     else:
-        script_builder.write([
-            f"FROM {db_syntax.temp_table_prefix}ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB ",
-            "on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) ",
-            "where DB.table_name Is null; "
-        ])
+        script_builder.write(
+            f"""FROM {db_syntax.temp_table_prefix}ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB 
+            "on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) 
+            "where DB.table_name Is null; """
+        )
 
     # Add tables that need to be dropped
     script_builder.write("--table only on DB (need to drop)")
@@ -231,19 +231,21 @@ def create_db_state_tables(
             "WHERE J.table_name Is NULL "
         ])
     else:
-        script_builder.write([
-            "INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)",
-            "SELECT  DB.table_schema ,DB.table_name,2 ",
-            "FROM    ScriptTables J ",
-            "RIGHT JOIN ( SELECT t.table_schema , ",
-            "t.table_name ",
-            "FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' ",
-            ") DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) ",
-            "AND LOWER(J.table_name) = LOWER(DB.table_name) ",
-            "WHERE J.table_name Is NULL; "
-        ])
+        script_builder.write(
+            f"""INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
+            SELECT  DB.table_schema ,DB.table_name,2 
+            FROM    ScriptTables J 
+            RIGHT JOIN ( SELECT t.table_schema , 
+            t.table_name 
+            FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' 
+            ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
+            AND LOWER(J.table_name) = LOWER(DB.table_name) 
+            WHERE J.table_name Is NULL; """
+        )
     
-    script_builder.write("")
+    script_builder.write("\n")
+
+    return script_builder
 
 def quote_str_or_null(value: Optional[str]) -> str:
     """Helper function to quote strings or return 'NULL'"""
