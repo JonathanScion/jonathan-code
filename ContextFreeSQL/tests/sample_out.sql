@@ -134,22 +134,89 @@ BEGIN --overall code
             col_diff boolean NULL,
             index_diff boolean NULL,
             fk_diff boolean NULL,
-            tableStat smallint null,
+            tableStat smallint null
         );
 
-        --tables only on Johannes database (need to add)"
-        update ScriptTables set tableStat = 1FROM ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB 
-            "on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) 
-            "where DB.table_name Is null; --table only on DB (need to drop)INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
-            SELECT  DB.table_schema ,DB.table_name,2 
-            FROM    ScriptTables J 
-            RIGHT JOIN ( SELECT t.table_schema , 
-            t.table_name 
-            FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' 
-            ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
-            AND LOWER(J.table_name) = LOWER(DB.table_name) 
-            WHERE J.table_name Is NULL; 
-	--End DB State Temp Tables for Tables
+		INSERT INTO ScriptTables (table_schema,table_name, SQL_CREATE, SQL_DROP)
+            VALUES ('public',
+            'studentgrades',
+            'CREATE TABLE public.studentgrades
+(
+studentid  integer  NOT NULL
+subject  character varying  NOT NULL
+grade  smallint  NOT NULL
+studentgradeid  integer  NOT NULL
+);
+ALTER TABLE public.studentgrades ADD CONSTRAINT studentgrades_pkey PRIMARY KEY
+(
+studentgradeid
+)
+;
+CREATE INDEX idx_student_text
+ON public.studentgrades
+(
+subject
+)
+;
+ALTER TABLE public.studentgrades ADD
+CONSTRAINT unq_studentid_subj UNIQUE 
+(
+subject,
+grade
+)
+;
+ALTER TABLE public.studentgrades ALTER COLUMN grade SET DEFAULT 0;
+ALTER TABLE public.studentgrades ALTER COLUMN subject SET DEFAULT ''math''::character varying;',
+            'DROP TABLE public.studentgrades;');
+		INSERT INTO ScriptTables (table_schema,table_name, SQL_CREATE, SQL_DROP)
+            VALUES ('public',
+            'students',
+            'CREATE TABLE public.students
+(
+studentid  integer  NOT NULL,
+studentfirstname  character varying  NOT NULL
+studentlastname  character varying  NOT NULL
+studentdob  timestamp without time zone  NULL,
+sideoneonly  integer  NULL
+);
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+;
+CREATE UNIQUE INDEX students_idx
+ON public.students
+(
+studentfirstname,
+studentlastname
+)
+;
+ALTER TABLE public.students ADD
+CONSTRAINT unq_student_firstname_lastname UNIQUE 
+(
+studentfirstname,
+studentlastname
+)
+;
+ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
+            'DROP TABLE public.students;');
+		--tables only on Johannes database (need to add)
+        update ScriptTables set tableStat = 1
+		FROM ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB 
+            on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) 
+            where DB.table_name Is null;
+
+		--table only on DB (need to drop)
+		INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
+        SELECT  DB.table_schema ,DB.table_name,2 
+        FROM    ScriptTables J 
+        RIGHT JOIN ( SELECT t.table_schema , 
+        t.table_name 
+        FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' 
+        ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
+        AND LOWER(J.table_name) = LOWER(DB.table_name) 
+        WHERE J.table_name Is NULL; 
+	End; --DB State Temp Tables for Tables
 END; --overall code
 $$
 ;select * from scriptoutput

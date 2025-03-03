@@ -31,13 +31,12 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
    
     
     # 2. State tables
-    # TODO: Complete this section
     # bOnlyData = tblEnts.Select("ScriptSchema=False AND ScriptData=True").Length > 0
     # if oScriptOps.ScriptSchemas and (not bOnlyData):
     schemas_buffer = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
     buffer.write(schemas_buffer.getvalue())
     tables_buffer = create_db_state_temp_tables_for_tables(
-            dbtype = db_type,
+            db_type = db_type,
             tbl_ents = tbl_ents,
             script_ops = scrpt_ops,
             schema_tables = schema_tables
