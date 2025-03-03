@@ -17,16 +17,15 @@ def get_create_table_from_sys_tables(
     force_allow_null: bool = False,
     pre_add_constraints_data_checks: bool = False,    #!tbd
     as_temp_table: bool = False
-) -> str:
-  
-    out_script = None
-    out_err = None
-    
-    if script_table_ops is None:
-        script_table_ops = ScriptTableOptions()
+) -> tuple[str, str]:
     
     try:
-   
+        out_script = None
+        out_err = None
+        
+        if script_table_ops is None:
+            script_table_ops = ScriptTableOptions()
+        
         db_syntax = DBSyntax.get_syntax(db_type)
 
         # Get the table information
@@ -119,6 +118,11 @@ def get_create_table_from_sys_tables(
     
         for _, default_row in default_rows.iterrows():
             create_table_lines.append(get_default_sql(db_type, default_row))
+
+        return ["\n".join(create_table_lines),""]
+    
+    except Exception as e:
+        return ["", str(e)]
 
 
 
