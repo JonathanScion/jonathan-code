@@ -16,6 +16,7 @@ def create_db_state_temp_tables_for_tables(
     script_ops: ScriptingOptions,
     schema_tables: DBSchema,
     #tbl_db_check_cnstrnts: pd.DataFrame, #!tbd    
+    scripting_data: Optional[bool] = False,
     script_table_ops: Optional[ScriptTableOptions] = None,
     pre_add_constraints_data_checks: bool = False
 ) -> StringIO:
@@ -51,6 +52,7 @@ def create_db_state_temp_tables_for_tables(
     # Get all tables including randolph tables
     all_tables_mask = (tbl_ents['scriptschema'] == True) & (tbl_ents['enttype'] == 'Table')
     tables_to_script = tbl_ents[all_tables_mask].sort_values('scriptsortorder')
+    overall_table_schema_name_in_scripting = get_table_names_to_script(tbl_ents)
     
     # Create various DB state elements
     create_state_tables = create_db_state_tables(
@@ -65,7 +67,15 @@ def create_db_state_temp_tables_for_tables(
     bad_data_pre_add_fk = StringIO()
     #! and what with these? go back to .net, see if needed
 
-    create_db_state_columns()
+    create_state_tables_columns = create_db_state_columns(
+        schema_tables = schema_tables,
+        db_type = db_type,
+        tbl_ents_to_script = tbl_ents,
+        overall_table_schema_name_in_scripting = overall_table_schema_name_in_scripting,
+        scripting_data = scripting_data
+    )
+
+    script_db_state_tables.write(create_state_tables_columns.getvalue())
     
     '''
     create_db_state_columns(
@@ -250,3 +260,20 @@ def create_db_state_tables(
 
     return script_builder
 
+def get_table_names_to_script(tables_to_script: pd.DataFrame):
+    # Filter for rows where scriptschema equals 1 AND enttype is 'Table'
+    filtered_tables = tables_to_script[
+        (tables_to_script['scriptschema'].astype(int) == 1) & 
+        (tables_to_script['enttype'] == 'Table')
+    ]
+    
+    # Combine schema and table name for each filtered row
+    qualified_names = filtered_tables.apply(
+        lambda row: f"{row['entschema']}.{row['entname']}", 
+        axis=1
+    )
+    
+    # Join all qualified names with a comma and space
+    result = ", ".join(qualified_names)
+    
+    return result

@@ -172,7 +172,7 @@ def get_create_table_from_sys_tables(
     
 def get_col_sql(
     sys_cols_row: pd.Series, 
-    table_owner: str, 
+    table_schema: str, 
     table_name: str, 
     script_state: DBEntScriptState, 
     db_type: DBType, 
@@ -191,9 +191,9 @@ def get_col_sql(
     if script_state in [DBEntScriptState.Add, DBEntScriptState.Alter]:
         sql.append("ALTER TABLE ")
         if db_type == DBType.MSSQL:
-            sql.append(f"[{table_owner}].[{table_name}] ")
+            sql.append(f"[{table_schema}].[{table_name}] ")
         else:
-            sql.append(f"{table_owner}.{table_name} ")
+            sql.append(f"{table_schema}.{table_name} ")
 
         if script_state == DBEntScriptState.Add:
             sql.append("ADD ")
@@ -262,7 +262,7 @@ def get_col_sql(
         if db_type == DBType.MSSQL:
             if sys_cols_row.get('is_Identity', False):
                 if script_state == DBEntScriptState.Alter:
-                    print_warning = (f"PRINT 'Field {table_owner}.{table_name}.{sys_cols_row['col_name']} "
+                    print_warning = (f"PRINT 'Field {table_schema}.{table_name}.{sys_cols_row['col_name']} "
                                    "needs to have an Identity on it, but this cannot be done via script. "
                                    "Make sure to add Identity to that field via enterprise manager'\n")
                 else:

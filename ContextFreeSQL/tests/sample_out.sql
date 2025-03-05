@@ -216,6 +216,227 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
         ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
         AND LOWER(J.table_name) = LOWER(DB.table_name) 
         WHERE J.table_name Is NULL; 
+
+		--columns
+		perform  n.nspname ,c.relname
+		FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptcols' AND pg_catalog.pg_table_is_visible(c.oid);
+		IF FOUND THEN
+			DROP TABLE ScriptCols;
+		END IF;
+		CREATE TEMP TABLE ScriptCols
+		(
+			table_schema character varying (128) not null,
+			table_name character varying (128) not null,
+			col_name character varying (128) not null,
+			user_type_name character varying (128) null,
+			user_type_name_diff boolean null, 
+			user_type_name_db  character varying (128) null, 
+			max_length smallint null,
+			max_length_diff boolean null,
+			max_length_db smallint null,
+			precision smallint null,
+			precision_diff bit null,
+			precision_db smallint null,
+			scale smallint null,
+			scale_diff bit null,
+			scale_db smallint null,
+			is_nullable boolean null,
+			is_nullable_diff bit null,
+			is_nullable_db boolean null,
+			is_identity boolean null,
+			is_identity_diff bit null,
+			is_identity_db boolean null,
+			is_computed bit null,
+			is_computed_diff bit null,
+			collation_name character varying (128) null,
+			collation_name_diff bit null,
+			collation_name_db character varying (128) null,
+			computed_definition character varying  null,
+			computed_definition_diff bit null,
+			computed_definition_db character varying  null,
+			colStat smallint null,
+			diff_descr character varying  null,
+			SQL_CREATE character varying  null,
+			SQL_ALTER character varying  null,
+			SQL_DROP character varying  null
+				);
+
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentid',		'integer',		NULL,		32.0,		0.0,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'students',		'studentid',		'integer',		NULL,		32.0,		0.0,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.students ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
+	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.students DROP COLUMN studentdob'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades',		'grade',		'smallint',		NULL,		16.0,		0.0,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN grade  TYPE  smallint ,
+	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN grade'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades',		'studentid',		'integer',		NULL,		32.0,		0.0,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentgradeid  TYPE  integer ,
+	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentgradeid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'students',		'sideoneonly',		'integer',		NULL,		32.0,		0.0,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.students ADD sideoneonly  integer  NULL ',		'ALTER TABLE public.students ALTER COLUMN sideoneonly  TYPE  integer ,
+	ALTER COLUMN sideoneonly SET  NULL ','ALTER TABLE public.students DROP COLUMN sideoneonly'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students',		'studentid',		'integer',		NULL,		32.0,		0.0,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
+	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentdob'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
+	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentdob'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades',		'subject',		'character varying',		20.0,		NULL,		NULL,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD subject  character varying  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN subject  TYPE  character varying ,
+	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN subject'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying ,
+	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentlastname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentfirstname  TYPE  character varying ,
+	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentfirstname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying ,
+	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentlastname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.students ADD studentfirstname  character varying  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentfirstname  TYPE  character varying ,
+	ALTER COLUMN studentfirstname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentfirstname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		0,		0,		0,		NULL,		NULL,		'ALTER TABLE public.students ADD studentlastname  character varying  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentlastname  TYPE  character varying ,
+	ALTER COLUMN studentlastname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentlastname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		1,		0,		0,		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying ,
+	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentfirstname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'show_views',		'table_name',		'name',		NULL,		NULL,		NULL,		1,		0,		0,		'C',		NULL,		'ALTER TABLE public.show_views ADD table_name  name  COLLATE C NULL ',		'ALTER TABLE public.show_views ALTER COLUMN table_name  TYPE  name  COLLATE C,
+	ALTER COLUMN table_name SET  NULL ','ALTER TABLE public.show_views DROP COLUMN table_name'		);
+		
+		--columns only on Johannes database (need to add)
+update ScriptCols set colStat = 1
+FROM ScriptCols J left join (select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' ) DB 
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where DB.column_name Is null 
+		AND J.table_schema=ScriptCols.table_schema and J.table_name=ScriptCols.table_name and J.col_name=ScriptCols.col_name;
+		
+		--columns only on DB (need to drop)
+INSERT INTO ScriptCols (table_schema, table_name, col_name, colStat, SQL_DROP) 
+		SELECT  DB.table_schema, DB.table_name, DB.column_name, 2, 'ALTER TABLE ' || DB.table_schema || '.' || DB.table_name || ' DROP COLUMN ' || DB.column_name || ';' 
+		FROM    ScriptCols J 
+		RIGHT JOIN ( select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' 
+AND C.table_schema || C.table_name IN (public.studentgrades, public.students) 
+		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
+		And LOWER(J.table_name) = LOWER(DB.table_name) 
+		And LOWER(J.col_name) = LOWER(DB.column_name) 
+		WHERE ( J.col_name Is NULL );  
+		
+
+		---updates Of flags--------------------
+		
+		--system type name 
+update ScriptCols Set user_type_name_diff=true, colStat = 3, user_type_name_db=DB.user_type_name, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'user_type_name is ' 
+			 || CAST(DB.user_type_name AS character varying(10)) || ', should be ' 
+			 || CAST(J.user_type_name AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.data_type as user_type_name 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.user_type_name <> DB.user_type_name 
+		AND (ScriptCols.table_schema = j.table_schema AND ScriptCols.table_name = j.table_name AND ScriptCols.col_name = j.col_name);
+update ScriptCols Set max_length_diff = true, colStat = 3, max_length_db=DB.CHARACTER_MAXIMUM_LENGTH, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'max_length is ' 
+			 || CAST(DB.CHARACTER_MAXIMUM_LENGTH AS character varying(10)) || ', should be ' 
+			 || CAST(J.max_length AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.CHARACTER_MAXIMUM_LENGTH 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.max_length <> DB.CHARACTER_MAXIMUM_LENGTH 
+		AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );
+		
+		--precision 
+update ScriptCols Set max_length_diff = true, colStat = 3, precision_db=DB.precision, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'precision is ' 
+			 || CAST(DB.precision AS character varying(10)) || ', should be ' 
+			 || CAST(J.precision AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.numeric_precision AS precision 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.precision <> DB.precision 
+		AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );
+		
+		--scale 
+update ScriptCols Set max_length_diff = true, colStat = 3, scale_db=DB.scale, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'scale is ' 
+			 || CAST(DB.scale AS character varying(10)) || ', should be ' 
+			 || CAST(J.scale AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.numeric_scale AS scale 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.scale <> DB.scale 
+		AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name));
+		
+		--is_nullable 
+update ScriptCols Set max_length_diff = true, colStat = 3, is_nullable_db=DB.is_nullable, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'is_nullable is ' 
+			 || CAST(DB.is_nullable AS character varying(10)) || ', should be ' 
+			 || CAST(J.is_nullable AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, case WHEN c.IS_NULLABLE = 'YES' then CAST(1 AS BOOLEAN) WHEN c.IS_NULLABLE = 'NO' then CAST(0 AS BOOLEAN) END AS is_nullable 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.is_nullable <> DB.is_nullable 
+		AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );
+		
+		--is_identity 
+update ScriptCols Set max_length_diff = true, colStat = 3, is_identity_db=DB.is_identity, 
+			diff_descr = Case When j.diff_descr Is NULL Then '' 
+				ELSE j.diff_descr || ', ' 
+			END || 'is_identity is ' 
+			 || CAST(DB.is_identity AS character varying(10)) || ', should be ' 
+			 || CAST(J.is_identity AS character varying(10)) 
+from ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, case WHEN c.IS_IDENTITY = 'YES' then CAST(1 AS BOOLEAN)  WHEN c.IS_IDENTITY = 'NO' then CAST(0 AS BOOLEAN)  END AS is_identity 
+		from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name 
+		where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  
+		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
+		where J.is_identity <> DB.is_identity 
+		AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );
+		
+		--is_computed 
+		
+		--collation_name 
+		
+		--computed_definition 
+		
+
+		--update tables where columns are different
+update ScriptTables set tableStat=3 
+from ScriptTables T INNER JOIN ScriptCols C on LOWER(T.table_schema) = LOWER(C.table_schema) AND LOWER(T.table_name) = LOWER(C.table_name) 
+		where C.colStat IN (1,2,3) AND (T.tableStat NOT IN (1,2) OR t.tableStat IS NULL); --extra, missing, or different 
+		
+		--wherever got columns different, mark the tables as different
+UPDATE ScriptTables SET col_diff=true
+FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.table_schema) AND LOWER(T.table_name) = LOWER(C.table_name)
+		WHERE C.ColStat Is Not NULL AND (T.tableStat NOT IN (1,2) OR t.tableStat IS NULL);
+		
 	End; --DB State Temp Tables for Tables
 END; --overall code
 $$
