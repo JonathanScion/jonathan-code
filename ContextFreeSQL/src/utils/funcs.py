@@ -2,12 +2,15 @@ import pandas as pd
 from src.defs.script_defs import DBType
 from io import StringIO
 from typing import Any
-from typing import Optional 
+from typing import Optional , Union, Any 
+import math
 
-def quote_str_or_null(value: Optional[str]) -> str:
-    if value is None:
+def quote_str_or_null(value: Any) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
         return "NULL"
-    return f"'{value.replace("'", "''")}'"
+    if isinstance(value, str):
+        return f"'{value.replace('\'', '\'\'')}'"
+    return str(value)
 
 def add_print(db_type: DBType, num_tabs: int, script: StringIO, print_line: str) -> None:
    # Build tab alignment
