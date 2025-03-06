@@ -269,7 +269,7 @@ def get_table_names_to_script(tables_to_script: pd.DataFrame):
     
     # Combine schema and table name for each filtered row
     qualified_names = filtered_tables.apply(
-        lambda row: f"{row['entschema']}.{row['entname']}", 
+        lambda row: f"'{row['entschema']}.{row['entname']}'", 
         axis=1
     )
     
