@@ -10,6 +10,16 @@ def quote_str_or_null(value: Any) -> str:
         return "NULL"
     if isinstance(value, str):
         return f"'{value.replace('\'', '\'\'')}'"
+    return str(f"'{value}'")
+
+def quote_str_or_null_bool(value: bool) -> str:
+    if value is None:
+        return "NULL"    
+    return 'True' if value else 'False'
+
+def numeric_or_null(value: float) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "NULL"
     return str(value)
 
 def add_print(db_type: DBType, num_tabs: int, script: StringIO, print_line: str) -> None:

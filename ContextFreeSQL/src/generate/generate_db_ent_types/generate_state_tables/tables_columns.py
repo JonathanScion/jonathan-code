@@ -6,7 +6,7 @@ from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.generate.generate_create_table import get_create_table_from_sys_tables, get_col_sql
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.utils.funcs import quote_str_or_null
+from src.utils.funcs import quote_str_or_null, quote_str_or_null_bool, numeric_or_null
 
 
 def create_db_state_columns(
@@ -93,11 +93,11 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['table_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['col_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['user_type_name'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(row['max_length'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(row['precision'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(row['scale'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(row['is_nullable'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(row['is_identity'])},")
+        script_db_state_tables.write(f"{align}{numeric_or_null(row['max_length'])},")
+        script_db_state_tables.write(f"{align}{numeric_or_null(row['precision'])},")
+        script_db_state_tables.write(f"{align}{numeric_or_null(row['scale'])},")
+        script_db_state_tables.write(f"{align}{quote_str_or_null_bool(row['is_nullable'])},")
+        script_db_state_tables.write(f"{align}{quote_str_or_null_bool(row['is_identity'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['is_computed'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['collation_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['computed_definition'])},")
@@ -321,8 +321,8 @@ def create_db_state_columns(
     
     # Is_computed
     script_db_state_tables.write(f"{align}\n")
-    script_db_state_tables.write(f"{align}--is_computed \n")
     if db_type == DBType.MSSQL:
+        script_db_state_tables.write(f"{align}--is_computed \n")
         script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols SET is_computed_diff=1, colStat=3, \n")
         script_db_state_tables.write(f"{align}\tdiff_descr = CASE WHEN diff_descr IS NULL THEN '' \n")
         script_db_state_tables.write(f"{align}\t\tELSE diff_descr + ', ' \n")
@@ -334,8 +334,8 @@ def create_db_state_columns(
     
     # Collation_name
     script_db_state_tables.write(f"{align}\n")
-    script_db_state_tables.write(f"{align}--collation_name \n")
     if db_type == DBType.MSSQL:
+        script_db_state_tables.write(f"{align}--collation_name \n")
         script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols SET collation_name_diff=1, colStat=3, collation_name_db=DB.collation_name, \n")
         script_db_state_tables.write(f"{align}\tdiff_descr = CASE WHEN diff_descr IS NULL THEN '' \n")
         script_db_state_tables.write(f"{align}\t\tELSE diff_descr + ', ' \n")
@@ -347,9 +347,9 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}where J.collation_name <> DB.collation_name; \n")
     
     # Computed_definition
-    script_db_state_tables.write(f"{align}\n")
-    script_db_state_tables.write(f"{align}--computed_definition \n")
+    script_db_state_tables.write(f"{align}\n")    
     if db_type == DBType.MSSQL:
+        script_db_state_tables.write(f"{align}--computed_definition \n")
         script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols SET computed_definition_diff=1, colStat=3, computed_definition_db=DB.computed_definition, \n")
         script_db_state_tables.write(f"{align}\tdiff_descr = CASE WHEN diff_descr IS NULL THEN '' \n")
         script_db_state_tables.write(f"{align}\t\tELSE diff_descr + ', ' \n")
