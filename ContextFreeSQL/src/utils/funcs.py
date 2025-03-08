@@ -22,6 +22,17 @@ def numeric_or_null(value: float) -> str:
         return "NULL"
     return str(value)
 
+def bool_to_sql_bit_boolean_val(val, full_boolean):    
+    if val is None:
+        return "NULL"
+    
+    bool_val = bool(val)
+    
+    if full_boolean:
+        return "True" if bool_val else "False"  # typically PostgreSQL, maybe MySQL
+    else:
+        return "1" if bool_val else "0"  # typically MS SQL
+
 def add_print(db_type: DBType, num_tabs: int, script: StringIO, print_line: str) -> None:
    # Build tab alignment
    align = "\t" * num_tabs
