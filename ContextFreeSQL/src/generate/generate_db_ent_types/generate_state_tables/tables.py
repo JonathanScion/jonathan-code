@@ -8,6 +8,7 @@ from src.generate.generate_create_table import get_create_table_from_sys_tables
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.utils.funcs import quote_str_or_null
 from src.generate.generate_db_ent_types.generate_state_tables.tables_columns import create_db_state_columns
+from src.generate.generate_db_ent_types.generate_state_tables.tables_indexes import create_db_state_indexes
 
 #CreateDBStateTempTables_ForTables. the overall generation of temp tables for tables (and in it it calls for the ones for tables, for columns, for indexes...)
 def create_db_state_temp_tables_for_tables(
@@ -77,20 +78,18 @@ def create_db_state_temp_tables_for_tables(
 
     script_db_state_tables.write(create_state_tables_columns.getvalue())
     
+
+    create_state_tables_indexes = create_db_state_indexes(
+        schema_tables = schema_tables,
+        db_type = db_type,
+        tbl_ents_to_script = tbl_ents,
+        overall_table_schema_name_in_scripting = overall_table_schema_name_in_scripting,
+        scripting_data = scripting_data
+    )
+
+    script_db_state_tables.write(create_state_tables_indexes.getvalue())
+
     '''
-    create_db_state_columns(
-        script_db_state_tables, table_schema_name_in_scripting.getvalue(),
-        rndph_table_key_in.getvalue(), overall_table_schema_name_in_scripting.getvalue(),
-        conn_str, db_info, script_ops.rndph_conn_str, script_ops.instance_id,
-        script_ops.rndph_db_id
-    )
-    
-    create_db_state_defaults(
-        script_db_state_tables, table_schema_name_in_scripting.getvalue(),
-        rndph_table_key_in.getvalue(), overall_table_schema_name_in_scripting.getvalue(),
-        conn_str, db_info, script_ops.rndph_conn_str, script_ops.instance_id,
-        script_ops.rndph_db_id
-    )
     
     if db_info.src_db_type == DBType.MSSQL:
         create_db_state_check_constraints(
