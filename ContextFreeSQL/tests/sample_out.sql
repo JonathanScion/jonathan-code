@@ -434,6 +434,357 @@ UPDATE ScriptTables SET col_diff=true
 FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.table_schema) AND LOWER(T.table_name) = LOWER(C.table_name)
 		WHERE C.ColStat Is Not NULL AND (T.tableStat NOT IN (1,2) OR t.tableStat IS NULL);
 		
+
+
+		--Indexes
+		perform  n.nspname ,c.relname
+		FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptindexes' AND pg_catalog.pg_table_is_visible(c.oid);
+		IF FOUND THEN
+			DROP TABLE ScriptIndexes;
+		END IF;
+		CREATE TEMP TABLE ScriptIndexes
+		(
+			table_schema character varying(128) not null,
+			table_name character varying(128) not null,
+			index_name character varying(128) not null,
+			is_unique boolean null,
+			is_unique_diff boolean null,
+			is_clustered boolean null,
+			is_clustered_diff boolean null,
+			ignore_dup_key boolean null,
+			ignore_dup_key_diff boolean null,
+			is_primary_key boolean null,
+			is_primary_key_diff boolean null,
+			is_unique_constraint boolean null,
+			is_unique_constraint_diff boolean null,
+			allow_row_locks boolean null,
+			allow_row_locks_diff boolean null,
+			allow_page_locks boolean null,
+			allow_page_locks_diff boolean null,
+			has_filter boolean null,
+			has_filter_diff boolean null,
+			filter_definition character varying null,
+			filter_definition_diff boolean null,
+			SQL_CREATE character varying null,
+			index_columns character varying (100) NULL,
+			indexStat smallint null,
+			col_diff boolean null,
+			db_col_diff boolean null
+		);
+		
+		perform  n.nspname ,c.relname
+		FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptindexescols' AND pg_catalog.pg_table_is_visible(c.oid);
+		IF FOUND THEN
+			DROP TABLE ScriptIndexesCols;
+		END IF;
+		CREATE TEMP TABLE ScriptIndexesCols
+		(
+			table_schema character varying(128) not null,
+			table_name character varying(128) not null,
+			index_name character varying(128) not null,
+			col_name character varying(128) not null,
+			index_column_id int null,
+			key_ordinal int null,
+			key_ordinal_diff boolean null,
+			is_descending_key boolean null,
+			is_descending_key_diff boolean null,
+			is_included_column boolean null,
+			is_included_column_diff boolean null,
+			indexColStat smallint null
+		);
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_idx',True,
+		False,
+		NULL,
+		False,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentfirstname, studentlastname',
+		'CREATE UNIQUE INDEX students_idx
+ON public.students
+(
+studentfirstname,
+studentlastname
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_idx','studentfirstname',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_idx','studentlastname',
+		'2',
+		'2',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','studentgrades','studentgrades_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentgradeid',
+		'ALTER TABLE public.studentgrades ADD CONSTRAINT studentgrades_pkey PRIMARY KEY
+(
+studentgradeid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','studentgrades','studentgrades_pkey','studentgradeid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','studentgrades','idx_student_text',False,
+		False,
+		NULL,
+		False,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'subject',
+		'CREATE INDEX idx_student_text
+ON public.studentgrades
+(
+subject
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','studentgrades','idx_student_text','subject',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','studentgrades','unq_studentid_subj',True,
+		False,
+		NULL,
+		False,
+		True,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'subject, grade',
+		'ALTER TABLE public.studentgrades ADD
+CONSTRAINT unq_studentid_subj UNIQUE 
+(
+subject,
+grade
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','studentgrades','unq_studentid_subj','subject',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','studentgrades','unq_studentid_subj','grade',
+		'2',
+		'2',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','unq_student_firstname_lastname',True,
+		False,
+		NULL,
+		False,
+		True,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentfirstname, studentlastname',
+		'ALTER TABLE public.students ADD
+CONSTRAINT unq_student_firstname_lastname UNIQUE 
+(
+studentfirstname,
+studentlastname
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','unq_student_firstname_lastname','studentfirstname',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','unq_student_firstname_lastname','studentlastname',
+		'2',
+		'2',
+		False,
+		'False');
+		
+		--Indexes only on Johannes database (need to add)
+		UPDATE  ScriptIndexes SET indexStat = 1
+		From ScriptIndexes J
+		Left Join (SELECT
+		scm.nspname  || '.' || t.relname as object_id, i.oid as index_oid,
+		scm.nspname As table_schema,
+		t.relname As table_name,
+		i.relname as index_name
+		from
+		pg_index ix
+		inner Join pg_class i  ON i.oid = ix.indexrelid
+		inner Join pg_class t on t.oid = ix.indrelid
+		inner Join pg_namespace scm on t.relnamespace = scm.oid
+		WHERE scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
+		And LOWER(J.table_name) = LOWER(DB.table_name)
+		And LOWER(J.index_name) = LOWER(DB.index_name)
+		WHERE DB.table_name Is NULL AND ScriptIndexes.index_name = J.index_name;
+		
+		--Indexes only on DB (need to drop)
+		INSERT INTO ScriptIndexes (table_schema, table_name, index_name, is_unique_constraint, is_primary_key, indexStat)
+		SELECT DB.table_schema, DB.table_name, DB.index_name, DB.is_unique_constraint, DB.is_primary_key, 2
+		FROM ScriptIndexes J
+		RIGHT JOIN ( SELECT
+		scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,
+		scm.nspname AS table_schema,
+		t.relname AS table_name,
+		i.relname as index_name,
+		CASE cnst.contype WHEN 'u' THEN True ELSE False END as is_unique_constraint,
+		indisprimary as is_primary_key
+		FROM pg_index ix
+		INNER JOIN pg_class i ON i.oid = ix.indexrelid
+		INNER JOIN pg_class t ON t.oid = ix.indrelid
+		INNER JOIN pg_namespace scm ON t.relnamespace = scm.oid
+		INNER JOIN pg_class cls ON cls.oid = ix.indexrelid
+		INNER JOIN pg_am am ON am.oid = cls.relam
+		INNER JOIN pg_indexes idx ON idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname
+		LEFT JOIN pg_constraint cnst ON t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype = 'u'
+		WHERE scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
+		AND LOWER(J.table_name) = LOWER(DB.table_name)
+		AND LOWER(J.index_name) = LOWER(DB.index_name)
+		WHERE J.table_name IS NULL;
+		
+		update ScriptIndexes Set is_unique_diff=True, indexStat = 3
+		From ScriptIndexes J INNER Join (
+		Select
+		scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,
+		scm.nspname AS table_schema,
+		t.relname AS table_name,
+		i.relname as index_name,
+		substring(idx.indexdef,'\((.*?)\)') as index_columns
+		from
+		pg_index ix
+		inner Join pg_class i ON i.oid = ix.indexrelid
+		inner Join pg_class t on t.oid = ix.indrelid
+		inner Join pg_namespace scm on t.relnamespace = scm.oid
+		inner Join pg_class cls ON cls.oid = ix.indexrelid
+		inner JOIN pg_am am ON am.oid = cls.relam
+		inner Join pg_indexes idx on idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname
+		Left Join pg_constraint cnst on t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype='u'
+		where scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		) DB
+		On LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) AND LOWER(J.index_name) = LOWER(DB.index_name)
+		where J.index_columns <> DB.index_columns AND ScriptIndexes.index_name = J.index_name;
+		
+		---updates Of index And index columns flags--------------------
+		---updates Of index flags--------------------
+		--is_unique
+		update ScriptIndexes Set is_unique_diff=True, indexStat = 3
+		From ScriptIndexes J INNER Join
+		(
+		Select
+		scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,
+		scm.nspname AS table_schema,
+		t.relname AS table_name,
+		i.relname as index_name, i.relname AS name,
+		ix.indisunique as is_unique,
+		indisclustered as is_clustered
+		from
+		pg_index ix
+		inner Join pg_class i ON i.oid = ix.indexrelid
+		inner Join pg_class t on t.oid = ix.indrelid
+		inner Join pg_namespace scm on t.relnamespace = scm.oid
+		where scm.nspname Not in ('pg_catalog','information_schema', 'pg_toast')
+		) DB
+		On J.table_schema= DB.table_schema And J.table_name = DB.table_name And J.index_name = DB.index_name
+		where J.is_unique <> DB.is_unique
+		And (ScriptIndexes.index_name = J.index_name);
+		
+		--is_clustered
+		update ScriptIndexes Set is_clustered_diff=True, indexStat = 3
+		From ScriptIndexes J INNER Join
+		(
+		Select
+		scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,
+		scm.nspname AS table_schema,
+		t.relname AS table_name,
+		i.relname as index_name, i.relname AS name,
+		ix.indisunique as is_unique,
+		indisclustered as is_clustered
+		from
+		pg_index ix
+		inner Join pg_class i ON i.oid = ix.indexrelid
+		inner Join pg_class t on t.oid = ix.indrelid
+		inner Join pg_namespace scm on t.relnamespace = scm.oid
+		where scm.nspname Not in ('pg_catalog','information_schema', 'pg_toast')
+		) DB
+		On J.table_schema= DB.table_schema And J.table_name = DB.table_name And J.index_name = DB.index_name
+		where J.is_clustered <> DB.is_clustered
+		And (ScriptIndexes.index_name = J.index_name);
+		---End Of index And index columns flags update--------------------
 	End; --DB State Temp Tables for Tables
 END; --overall code
 $$

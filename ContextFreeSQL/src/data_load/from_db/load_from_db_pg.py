@@ -189,6 +189,7 @@ def _load_tables_indexes() -> pd.DataFrame:
                 null as secondary_type_desc,
                 null as fill_factor,
                 null as type_desc, --for MSSQL comparisons
+                substring(indexdef,'\((.*?)\)') /* ix.indkey*/ as index_columns,
                 idx.indexdef as index_sql --PG provides full CREATE INDEX actually. could even compare only on this field (and schma)name and table_name)
             from
                 pg_index ix 
