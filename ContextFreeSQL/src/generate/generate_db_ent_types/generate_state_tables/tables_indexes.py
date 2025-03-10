@@ -134,7 +134,7 @@ def create_db_state_indexes(
             full_table_name = f"{index_row['table_schema']}.{index_row['table_name']}"
         
         # These would need to be implemented based on your code
-        create_index_sql = get_index_sql(schema_tables.indexes, index_cols, db_type)
+        create_index_sql = get_index_sql(index_row, index_cols, db_type)
         sql_check_unq_data = ""
         if scripting_data:
             sql_check_unq_data = get_code_check_unq_data(db_type, full_table_name, index_cols)
@@ -350,7 +350,7 @@ def create_db_state_indexes(
             script_db_state_tables.write(f"{align}WHERE J.table_name IS NULL\n")
         
         elif db_type == DBType.PostgreSQL:
-            # For PostgreSQL, different approach - just mark the index as different if columns are different
+            # For PostgreSQL, different approach - just mark the index as different if columns are different (could later implement in MSSQL as well)
             script_db_state_tables.write(f"{align}update ScriptIndexes Set is_unique_diff=True, indexStat = 3\n")
             script_db_state_tables.write(f"{align}From ScriptIndexes J INNER Join (\n")
             script_db_state_tables.write(f"{align}Select\n")
