@@ -531,3 +531,5 @@ def create_db_state_fks(
         script_db_state_tables.write(f"{align}WHERE I.indexStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND ScriptFKs.fk_name = FK.fk_name;\n")
     
     script_db_state_tables.write(f"{align}\n\n")
+
+    return script_db_state_tables
