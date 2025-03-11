@@ -91,7 +91,7 @@ def create_db_state_temp_tables_for_tables(
     script_db_state_tables.write(create_state_tables_indexes.getvalue())
 
 
-    create_state_tables_indexes = create_db_state_fks(
+    create_state_tables_fks = create_db_state_fks(
         schema_tables = schema_tables,
         db_type = db_type,
         tbl_ents_to_script = tbl_ents,
@@ -99,7 +99,7 @@ def create_db_state_temp_tables_for_tables(
         scripting_data = scripting_data
     )
 
-    script_db_state_tables.write(create_state_tables_indexes.getvalue())
+    script_db_state_tables.write(create_state_tables_fks.getvalue())
 
     '''
     
