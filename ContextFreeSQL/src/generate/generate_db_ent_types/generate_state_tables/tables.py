@@ -9,6 +9,7 @@ from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.utils.funcs import quote_str_or_null
 from src.generate.generate_db_ent_types.generate_state_tables.tables_columns import create_db_state_columns
 from src.generate.generate_db_ent_types.generate_state_tables.tables_indexes import create_db_state_indexes
+from src.generate.generate_db_ent_types.generate_state_tables.tables_fks import create_db_state_fks
 
 #CreateDBStateTempTables_ForTables. the overall generation of temp tables for tables (and in it it calls for the ones for tables, for columns, for indexes...)
 def create_db_state_temp_tables_for_tables(
@@ -80,6 +81,17 @@ def create_db_state_temp_tables_for_tables(
     
 
     create_state_tables_indexes = create_db_state_indexes(
+        schema_tables = schema_tables,
+        db_type = db_type,
+        tbl_ents_to_script = tbl_ents,
+        overall_table_schema_name_in_scripting = overall_table_schema_name_in_scripting,
+        scripting_data = scripting_data
+    )
+
+    script_db_state_tables.write(create_state_tables_indexes.getvalue())
+
+
+    create_state_tables_indexes = create_db_state_fks(
         schema_tables = schema_tables,
         db_type = db_type,
         tbl_ents_to_script = tbl_ents,
@@ -259,16 +271,16 @@ def create_db_state_tables(
 
     return script_builder
 
-def get_table_names_to_script(tables_to_script: pd.DataFrame):
+def get_table_names_to_script(tables_to_script: pd.DataFrame, with_dot: Optional[bool]=False):
     # Filter for rows where scriptschema equals 1 AND enttype is 'Table'
     filtered_tables = tables_to_script[
         (tables_to_script['scriptschema'].astype(int) == 1) & 
         (tables_to_script['enttype'] == 'Table')
     ]
     
-    # Combine schema and table name for each filtered row
+    # Combine schema and table name for each filtered row based on with_dot parameter
     qualified_names = filtered_tables.apply(
-        lambda row: f"'{row['entschema']}.{row['entname']}'", 
+        lambda row: f"'{row['entschema']}.{row['entname']}'" if with_dot else f"'{row['entschema']}{row['entname']}'", 
         axis=1
     )
     

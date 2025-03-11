@@ -198,6 +198,13 @@ studentfirstname,
 studentlastname
 )
 ;
+ALTER TABLE public.students ADD
+CONSTRAINT unq_student_firstname_lastname1 UNIQUE 
+(
+studentfirstname,
+studentlastname
+)
+;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
             'DROP TABLE public.students;');
 		--tables only on Johannes database (need to add)
@@ -329,7 +336,7 @@ INSERT INTO ScriptCols (table_schema, table_name, col_name, colStat, SQL_DROP)
 		SELECT  DB.table_schema, DB.table_name, DB.column_name, 2, 'ALTER TABLE ' || DB.table_schema || '.' || DB.table_name || ' DROP COLUMN ' || DB.column_name || ';' 
 		FROM    ScriptCols J 
 		RIGHT JOIN ( select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' 
-AND C.table_schema || C.table_name IN ('public.studentgrades', 'public.students') 
+AND C.table_schema || C.table_name IN ('publicstudentgrades', 'publicstudents') 
 		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
 		And LOWER(J.table_name) = LOWER(DB.table_name) 
 		And LOWER(J.col_name) = LOWER(DB.column_name) 
@@ -673,6 +680,40 @@ studentlastname
 		False,
 		'False');
 		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','unq_student_firstname_lastname1',True,
+		False,
+		NULL,
+		False,
+		True,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentfirstname, studentlastname',
+		'ALTER TABLE public.students ADD
+CONSTRAINT unq_student_firstname_lastname1 UNIQUE 
+(
+studentfirstname,
+studentlastname
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','unq_student_firstname_lastname1','studentfirstname',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','unq_student_firstname_lastname1','studentlastname',
+		'2',
+		'2',
+		False,
+		'False');
+		
 		--Indexes only on Johannes database (need to add)
 		UPDATE  ScriptIndexes SET indexStat = 1
 		From ScriptIndexes J
@@ -686,7 +727,7 @@ studentlastname
 		inner Join pg_class i  ON i.oid = ix.indexrelid
 		inner Join pg_class t on t.oid = ix.indrelid
 		inner Join pg_namespace scm on t.relnamespace = scm.oid
-		WHERE scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		WHERE scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudents')
 		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
 		And LOWER(J.table_name) = LOWER(DB.table_name)
 		And LOWER(J.index_name) = LOWER(DB.index_name)
@@ -711,7 +752,7 @@ studentlastname
 		INNER JOIN pg_am am ON am.oid = cls.relam
 		INNER JOIN pg_indexes idx ON idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname
 		LEFT JOIN pg_constraint cnst ON t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype = 'u'
-		WHERE scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		WHERE scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudents')
 		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
 		AND LOWER(J.table_name) = LOWER(DB.table_name)
 		AND LOWER(J.index_name) = LOWER(DB.index_name)
@@ -734,7 +775,7 @@ studentlastname
 		inner JOIN pg_am am ON am.oid = cls.relam
 		inner Join pg_indexes idx on idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname
 		Left Join pg_constraint cnst on t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype='u'
-		where scm.nspname || t.relname IN ('public.studentgrades', 'public.students')
+		where scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudents')
 		) DB
 		On LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) AND LOWER(J.index_name) = LOWER(DB.index_name)
 		where J.index_columns <> DB.index_columns AND ScriptIndexes.index_name = J.index_name;
