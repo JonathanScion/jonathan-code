@@ -103,16 +103,16 @@ def create_db_state_fks(
     script_db_state_tables.write(f"{align}\n")
     
     # Process foreign keys from schema_tables
-    for _, fk_row in schema_tables.foreign_keys.iterrows():
+    for _, fk_row in schema_tables.fks.iterrows():
         # Get FK columns for the current FK
-        fk_cols = schema_tables.fk_columns[
-            (schema_tables.fk_columns['fkey_table_schema'] == fk_row['fkey_table_schema']) &
-            (schema_tables.fk_columns['fkey_table_name'] == fk_row['fkey_table_name']) &
-            (schema_tables.fk_columns['fk_name'] == fk_row['fk_name'])
+        fk_cols = schema_tables.fk_cols[
+            (schema_tables.fk_cols['fkey_table_schema'] == fk_row['fkey_table_schema']) &
+            (schema_tables.fk_cols['fkey_table_name'] == fk_row['fkey_table_name']) &
+            (schema_tables.fk_cols['fk_name'] == fk_row['fk_name'])
         ]
         
         # Prepare the full table name
-        full_table_name = f"[{fk_row['fkey_table_schema']}].[{fk_row['fkey_table_name'].replace('''', ''''')}]"
+        full_table_name = f"[{fk_row['fkey_table_schema']}].[{fk_row['fkey_table_name']}]"
         
         # Get SQL for creating FK and checking FK data
         create_fk_sql = get_fk_sql(fk_row, fk_cols, db_type)
@@ -135,6 +135,12 @@ def create_db_state_fks(
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['fk_name'])},")
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['rkey_table_schema'])},")
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['rkey_table_name'])},")
+            #!those ms-specific fields... we will need to do something about them, if and when we got an MS version again
+            script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_not_for_replication'])},")
+            script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_not_trusted'])},")
+            script_db_state_tables.write(f"{quote_str_or_null(fk_row['delete_referential_action'])},")
+            script_db_state_tables.write(f"{quote_str_or_null(fk_row['update_referential_action'])},")
+            script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_system_named'])},")
         elif db_type == DBType.PostgreSQL:
             script_db_state_tables.write(f"{align}VALUES ({quote_str_or_null(fk_row['fkey_table_schema'].lower())},")
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['fkey_table_name'].lower())},")
@@ -142,11 +148,7 @@ def create_db_state_fks(
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['rkey_table_schema'].lower())},")
             script_db_state_tables.write(f"{quote_str_or_null(fk_row['rkey_table_name'].lower())},")
         
-        script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_not_for_replication'])},")
-        script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_not_trusted'])},")
-        script_db_state_tables.write(f"{quote_str_or_null(fk_row['delete_referential_action'])},")
-        script_db_state_tables.write(f"{quote_str_or_null(fk_row['update_referential_action'])},")
-        script_db_state_tables.write(f"{quote_str_or_null(fk_row['is_system_named'])},")
+      
         script_db_state_tables.write(f"{quote_str_or_null(create_fk_sql)}")
         
         if scripting_data:
