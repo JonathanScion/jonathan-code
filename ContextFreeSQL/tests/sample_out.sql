@@ -751,9 +751,9 @@ grade
 		FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptfks' AND pg_catalog.pg_table_is_visible(c.oid);
 		IF FOUND THEN
-			DROP TABLE ScriptFKs;
+			DROP TABLE scriptfks;
 		END IF;
-		CREATE TEMP TABLE ScriptFKs
+		CREATE TEMP TABLE scriptfks
 		(
 			fkey_table_schema character varying(128) not null,
 			fkey_table_name character varying(128) not null,
@@ -783,9 +783,9 @@ grade
 		FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptfkcols' AND pg_catalog.pg_table_is_visible(c.oid);
 		IF FOUND THEN
-			DROP TABLE ScriptFKCols;
+			DROP TABLE scriptfkcols;
 		END IF;
-		CREATE TEMP TABLE ScriptFKCols
+		CREATE TEMP TABLE scriptfkcols
 		(
 			fkey_table_schema character varying(128) not null,
 			fkey_table_name character varying(128) not null,
@@ -797,8 +797,8 @@ grade
 			fkColStat smallint null
 		);
 		
-		INSERT INTO ScriptFKs (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,is_not_for_replication,is_not_trusted,delete_referential_action,update_referential_action,is_system_named,SQL_CREATE)
-		VALUES ('public','studentgrades','fk_studentgrades_students','public','students','ALTER TABLE public.studentgrades ADD CONSTRAINT fk_studentgrades_students FOREIGN KEY
+		INSERT INTO scriptfks (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,is_not_for_replication,is_not_trusted,delete_referential_action,update_referential_action,is_system_named,SQL_CREATE)
+		VALUES ('public','studentgrades','fk_studentgrades_students','public','students',NULL,NULL,NULL,NULL,NULL,'ALTER TABLE public.studentgrades ADD CONSTRAINT fk_studentgrades_students FOREIGN KEY
 (
 studentid
 )
@@ -809,7 +809,7 @@ studentid
 ');
 		
 		--FK's Columns
-		INSERT INTO ScriptFKCols (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,fkey_col_name,rkey_col_name)
+		INSERT INTO scriptfkcols (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,fkey_col_name,rkey_col_name)
 		VALUES ('public','studentgrades','fk_studentgrades_students','public',
 		'students',
 		'studentid',
@@ -817,8 +817,8 @@ studentid
 		
 		
 		--FKs only on Johannes database (need to add)
-		UPDATE ScriptFKs SET fkStat = 1
-		FROM ScriptFKs J
+		UPDATE scriptfks SET fkStat = 1
+		FROM scriptfks J
 		LEFT JOIN ( SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name
 			FROM pg_catalog.pg_constraint fk
 			inner join pg_class t on fk.conrelid = t.oid
@@ -830,12 +830,12 @@ studentid
 		) DB ON LOWER(J.fkey_table_schema) = LOWER(DB.fkey_table_schema)
 		AND LOWER(J.fkey_table_name) = LOWER(DB.fkey_table_name)
 		AND LOWER(J.fk_name) = LOWER(DB.fkey_name)
-		WHERE DB.fkey_table_name Is NULL AND ScriptFKs.fk_name = J.fk_name;
+		WHERE DB.fkey_table_name Is NULL AND scriptfks.fk_name = J.fk_name;
 		
 		--FKs only on DB (need to drop)
-		INSERT INTO ScriptFks (fkey_table_schema, fkey_table_name, fk_name, fkStat)
+		INSERT INTO scriptfks (fkey_table_schema, fkey_table_name, fk_name, fkStat)
 		SELECT DB.fkey_table_schema, DB.fkey_table_name, DB.fkey_name, 2
-		FROM ScriptFks J
+		FROM scriptfks J
 		RIGHT JOIN ( SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name
 			FROM pg_catalog.pg_constraint fk
 			inner join pg_class t on fk.conrelid = t.oid
@@ -857,8 +857,8 @@ studentid
 		
 		
 		--delete_referential_action
-		UPDATE ScriptFKs SET delete_referential_action_diff=true,fkStat=3
-		from ScriptFKs J INNER join (
+		UPDATE scriptfks SET delete_referential_action_diff=true,fkStat=3
+		from scriptfks J INNER join (
 			SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name,
 			CASE fk.confdeltype
 			WHEN 'c' THEN 1
@@ -874,11 +874,11 @@ studentid
 			where fk.contype = 'f'
 		) DB
 		on LOWER(J.fkey_table_schema) = LOWER(DB.fkey_table_schema) and LOWER(J.fkey_table_name) = LOWER(DB.fkey_table_name) and LOWER(J.fk_name) = LOWER(DB.fkey_name)
-		where J.delete_referential_action <> DB.delete_referential_action AND ScriptFKs.fk_name = J.fk_name;
+		where J.delete_referential_action <> DB.delete_referential_action AND scriptfks.fk_name = J.fk_name;
 		
 		--update_referential_action
-		UPDATE ScriptFKs SET update_referential_action_diff=true,fkStat=3
-		from ScriptFKs J INNER join (
+		UPDATE scriptfks SET update_referential_action_diff=true,fkStat=3
+		from scriptfks J INNER join (
 			SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name,
 			CASE fk.confdeltype
 			WHEN 'c' THEN 1
@@ -894,57 +894,57 @@ studentid
 			where fk.contype = 'f'
 		) DB
 		on LOWER(J.fkey_table_schema) = LOWER(DB.fkey_table_schema) and LOWER(J.fkey_table_name) = LOWER(DB.fkey_table_name) and LOWER(J.fk_name) = LOWER(DB.fkey_name)
-		where J.update_referential_action <> DB.update_referential_action AND ScriptFKs.fk_name = J.fk_name;
+		where J.update_referential_action <> DB.update_referential_action AND scriptfks.fk_name = J.fk_name;
 		
 		---done with FK flags--------------------
 		
 		--A special FK case: FKs are a match but index 'under' it is not: it needs to be dropped and then re-added before the index:
-		UPDATE ScriptFKs
+		UPDATE scriptfks
 		Set underlying_index_diff = True,
 		fkStat = 3
-		FROM ScriptFKs FK
-		INNER Join ScriptFKCols FKC ON FK.fk_name = FKC.fk_name
+		FROM scriptfks FK
+		INNER Join scriptfkcols FKC ON FK.fk_name = FKC.fk_name
 		INNER Join ScriptIndexesCols IC ON LOWER(FKC.rkey_table_schema) = LOWER(IC.table_schema)
 		And LOWER(FKC.rkey_table_name) = LOWER(IC.table_name)
 		And FKC.rkey_col_name = IC.col_name
 		INNER Join ScriptIndexes I ON LOWER(I.index_name) = LOWER(IC.index_name)
 		WHERE I.indexStat Is Not NULL
-		And FK.fkStat Is NULL AND ScriptFKs.fk_name = FK.fk_name;
+		And FK.fkStat Is NULL AND scriptfks.fk_name = FK.fk_name;
 		---done special case of FK equal but index on same columns is not----------------------
 		
 
 		--wherever got FK columns that are different, mark the FK As different
-		UPDATE ScriptFKs Set col_diff = True
-		FROM ScriptFKs FK INNER JOIN ScriptFKCols FKC On LOWER(FK.fkey_table_schema) = LOWER(FKC.fkey_table_schema) And LOWER(FK.fkey_table_name) = LOWER(FKC.fkey_table_name) And LOWER(FK.fk_name) = LOWER(FKC.fk_name)
+		UPDATE scriptfks Set col_diff = True
+		FROM scriptfks FK INNER JOIN scriptfkcols FKC On LOWER(FK.fkey_table_schema) = LOWER(FKC.fkey_table_schema) And LOWER(FK.fkey_table_name) = LOWER(FKC.fkey_table_name) And LOWER(FK.fk_name) = LOWER(FKC.fk_name)
 		WHERE FKC.fkColStat Is Not NULL And FK.fkStat Not In (1, 2);
 		
 		--wherever got cols that are different that the FK uses, mark the FK so can be dropped And re-created after the column Is altered
-		UPDATE ScriptFKs Set db_col_diff = True
-		FROM ScriptFKs FK INNER JOIN ScriptFKCols FKC On FK.fkey_table_schema=FKC.fkey_table_schema And FK.fkey_table_name=FKC.fkey_table_name And FK.fk_name=FKC.fk_name
+		UPDATE scriptfks Set db_col_diff = True
+		FROM scriptfks FK INNER JOIN scriptfkcols FKC On FK.fkey_table_schema=FKC.fkey_table_schema And FK.fkey_table_name=FKC.fkey_table_name And FK.fk_name=FKC.fk_name
 		INNER JOIN ScriptCols C On LOWER(FK.fkey_table_schema) = LOWER(C.table_schema) And LOWER(FK.fkey_table_name) = LOWER(C.table_name) And LOWER(FKC.fkey_col_name) = LOWER(C.col_name)
-		WHERE c.colStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND ScriptFKs.fk_name = FK.fk_name;
+		WHERE c.colStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND scriptfks.fk_name = FK.fk_name;
 		
 		--...And other side:
-		UPDATE ScriptFKs SET db_col_diff = True
-		FROM ScriptFKs FK
-		INNER JOIN ScriptFKCols FKC ON FK.fkey_table_schema=FKC.fkey_table_schema AND FK.fkey_table_name=FKC.fkey_table_name AND FK.fk_name=FKC.fk_name
+		UPDATE scriptfks SET db_col_diff = True
+		FROM scriptfks FK
+		INNER JOIN scriptfkcols FKC ON FK.fkey_table_schema=FKC.fkey_table_schema AND FK.fkey_table_name=FKC.fkey_table_name AND FK.fk_name=FKC.fk_name
 		INNER JOIN ScriptCols C ON LOWER(FK.rkey_table_schema) = LOWER(C.table_schema) AND LOWER(FK.rkey_table_name) = LOWER(C.table_name) AND LOWER(FKC.rkey_col_name) = LOWER(C.col_name)
-		WHERE c.colStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND ScriptFKs.fk_name = FK.fk_name;
+		WHERE c.colStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND scriptfks.fk_name = FK.fk_name;
 		
-		--see if there are index changes that are on any columns that this FK is using. this would also mean we need to dropecreate this FK
-		update ScriptFKs set indx_col_diff = True
-		FROM ScriptFKs FK
-		INNER JOIN ScriptFKCols FKC ON FK.fkey_table_schema=FKC.fkey_table_schema AND FK.fkey_table_name=FKC.fkey_table_name AND FK.fk_name=FKC.fk_name
+		--see if there are index changes that are on any columns that this FK is using. this would also mean we need to drop-recreate this FK
+		update scriptfks set indx_col_diff = True
+		FROM scriptfks FK
+		INNER JOIN scriptfkcols FKC ON FK.fkey_table_schema=FKC.fkey_table_schema AND FK.fkey_table_name=FKC.fkey_table_name AND FK.fk_name=FKC.fk_name
 		inner join ScriptIndexesCols IC on FKC.fkey_table_schema = IC.table_schema AND FKC.fkey_table_name = IC.table_name AND FKC.fkey_col_name=IC.col_name
 		inner join ScriptIndexes I on IC.table_schema = I.table_schema AND IC.table_name = I.table_name AND IC.index_name=I.index_name
 		WHERE I.indexStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3;
 		--...and other side:
-		update ScriptFKs set indx_col_diff= True
-		FROM ScriptFKs FK
-		INNER JOIN ScriptFKCols FKC ON FK.rkey_table_schema=FKC.rkey_table_schema AND FK.rkey_table_name=FKC.rkey_table_name AND FK.fk_name=FKC.fk_name
+		update scriptfks set indx_col_diff= True
+		FROM scriptfks FK
+		INNER JOIN scriptfkcols FKC ON FK.rkey_table_schema=FKC.rkey_table_schema AND FK.rkey_table_name=FKC.rkey_table_name AND FK.fk_name=FKC.fk_name
 		inner join ScriptIndexesCols IC on FKC.rkey_table_schema = IC.table_schema AND FKC.rkey_table_name = IC.table_name AND FKC.rkey_col_name=IC.col_name
 		inner join ScriptIndexes I on LOWER(IC.table_schema) = LOWER(I.table_schema) AND LOWER(IC.table_name) = LOWER(I.table_name) AND LOWER(IC.index_name) = LOWER(I.index_name)
-		WHERE I.indexStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND ScriptFKs.fk_name = FK.fk_name;
+		WHERE I.indexStat = 3 And FK.fkStat Is NULL Or FK.fkStat = 3 AND scriptfks.fk_name = FK.fk_name;
 		
 
 	End; --DB State Temp Tables for Tables
