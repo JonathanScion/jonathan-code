@@ -101,34 +101,6 @@ def create_db_state_temp_tables_for_tables(
 
     script_db_state_tables.write(create_state_tables_fks.getvalue())
 
-    '''
-    
-    if db_info.src_db_type == DBType.MSSQL:
-        create_db_state_check_constraints(
-            script_db_state_tables, table_schema_name_in_scripting.getvalue(),
-            rndph_table_key_in.getvalue(), overall_table_schema_name_in_scripting.getvalue(),
-            conn_str, db_info, script_ops.rndph_conn_str, script_ops.instance_id,
-            script_ops.rndph_db_id
-        )
-    
-    create_db_state_indexes(
-        script_db_state_tables, table_schema_name_in_scripting.getvalue(),
-        rndph_table_key_in.getvalue(), overall_table_schema_name_in_scripting.getvalue(),
-        conn_str, db_info, script_ops.pre_add_constraints_data_checks,
-        bad_data_pre_add_indx, script_ops.rndph_conn_str, script_ops.instance_id,
-        script_ops.rndph_db_id
-    )
-    
-    create_db_state_fks(
-        script_db_state_tables, table_schema_name_in_scripting.getvalue(),
-        rndph_table_key_in.getvalue(), overall_table_schema_name_in_scripting.getvalue(),
-        conn_str, db_info, script_ops.pre_add_constraints_data_checks,
-        script_ops.remove_all_extra_ents, bad_data_pre_add_fk,
-        script_ops.rndph_conn_str, script_ops.instance_id, script_ops.rndph_db_id
-    )
-
-    '''
-    
     script_db_state_tables.write("\tEnd; --DB State Temp Tables for Tables\n")
     
     return script_db_state_tables
