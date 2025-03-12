@@ -179,16 +179,16 @@ studentlastname  character varying  NOT NULL
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
+)
+;
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -489,31 +489,6 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -629,6 +604,31 @@ grade
 		VALUES ('public','studentgrades','unq_studentid_subj','grade',
 		'2',
 		'2',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
 		False,
 		'False');
 		
@@ -796,24 +796,6 @@ grade
 			rkey_col_name character varying(128) not null,
 			fkColStat smallint null
 		);
-		
-		INSERT INTO scriptfks (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,is_not_for_replication,is_not_trusted,delete_referential_action,update_referential_action,is_system_named,SQL_CREATE)
-		VALUES ('public','studentgrades','fk_studentgrades_students','public','students',NULL,NULL,NULL,NULL,NULL,'ALTER TABLE public.studentgrades ADD CONSTRAINT fk_studentgrades_students FOREIGN KEY
-(
-studentid
-)
-REFERENCES public.students
-(
-studentid
-)
-');
-		
-		--FK's Columns
-		INSERT INTO scriptfkcols (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,fkey_col_name,rkey_col_name)
-		VALUES ('public','studentgrades','fk_studentgrades_students','public',
-		'students',
-		'studentid',
-		'studentid');
 		
 		
 		--FKs only on Johannes database (need to add)
