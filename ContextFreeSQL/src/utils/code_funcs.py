@@ -1,4 +1,5 @@
 from src.defs.script_defs import DBType
+from io import StringIO
 
 def get_code_check_unq_data(db_type: DBType, full_table_name, index_cols_rows):
     sql_check = []
@@ -77,3 +78,44 @@ def get_code_check_fk_data(db_type: DBType, row_fk, rows_fk_cols):
     
     # Return the combined SQL statement
     return ''.join(sql_check)
+
+
+def append_commit_changes(sw: StringIO):    
+    # Commit transaction block
+    sw.write("COMMIT TRANSACTION;\n")
+    sw.write("END TRY\n")
+    sw.write("BEGIN CATCH\n")
+    sw.write("SELECT \n")
+    sw.write("ERROR_NUMBER() AS ErrorNumber,\n")
+    sw.write("ERROR_SEVERITY() AS ErrorSeverity,\n")
+    sw.write("ERROR_STATE() as ErrorState,\n")
+    sw.write("--ERROR_PROCEDURE() as ErrorProcedure,\n")
+    sw.write("ERROR_LINE() as ErrorLine,\n")
+    sw.write("ERROR_MESSAGE() as ErrorMessage;\n")
+    sw.write("\n")
+    
+    # Transaction state checking
+    sw.write("-- Test XACT_STATE for 1 or -1.\n")
+    sw.write("-- XACT_STATE = 0 means there is no transaction and\n")
+    sw.write("-- a commit or rollback operation would generate an error.\n")
+    sw.write("\n")
+    
+    # Check uncommittable state
+    sw.write("-- Test whether the transaction is uncommittable.\n")
+    sw.write("If (XACT_STATE()) = -1\n")
+    sw.write("BEGIN\n")
+    sw.write("\tPrint N'The transaction is in an uncommittable state. '\n")
+    sw.write("\t+ 'Rolling back transaction. No Changes were made to the database'\n")
+    sw.write("\tROLLBACK TRANSACTION;\n")
+    sw.write("END;\n")
+    
+    # Check committable state
+    sw.write("-- Test whether the transaction is active and valid.\n")
+    sw.write("If (XACT_STATE()) = 1\n")
+    sw.write("BEGIN\n")
+    sw.write("\tPrint N'The transaction is committable. '\n")
+    sw.write("\t+ 'Committing transaction. Only changes mentioned above were committed'\n")
+    sw.write("\tCOMMIT TRANSACTION;   \n")
+    sw.write("END;\n")
+    sw.write("END CATCH\n")
+    sw.write("\n")
