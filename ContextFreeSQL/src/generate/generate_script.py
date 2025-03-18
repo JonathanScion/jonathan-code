@@ -4,6 +4,7 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 import pandas as pd
+from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
 
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
@@ -48,14 +49,17 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     
 
     # Create StringBuilders for schema objects
+    #!reactivate this when doing security
+    """
     create_principals = StringIO()
     drop_principals = StringIO()
     create_role_members = StringIO()
     drop_role_members = StringIO()
     create_permissions = StringIO()
     drop_permissions = StringIO()
+    """
 
-    s_j2_index_pre_drop = StringIO()
+    j2_index_pre_drop = StringIO()
     j2_index_post_add = StringIO()
     j2_fk_pre_drop = StringIO()
     j2_fk_post_add = StringIO()
@@ -68,25 +72,19 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     drop_tables = StringIO()
     add_tables = StringIO()
 
+    generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
+                                          j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
+                                          pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
+
     
-    # Generate DB state tables
-    script_db_state_tables: StringIO = create_db_state_temp_tables_for_tables(
-        db_type,
-        tbl_ents,
-        script_ops,
-        schema_tables,
-        False,  # scripting_data
-        None,   # script_table_ops
-        script_ops.pre_add_constraints_data_checks
-    )
-    
+  
     # Bad data check StringBuilders
     bad_data_pre_add_indx = StringIO()
     bad_data_pre_add_fk = StringIO()
     
     # Write script header to buffer
-    buffer.write(script_header.getvalue())
-    
+    #reactivate below when got security (of coure, security will now be built from the ground up around pg)
+    """
     # Write principals if needed
     if create_principals.getvalue():
         buffer.write("--Creating Principals (users)-----------------------------------------------------\n")
@@ -104,12 +102,14 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("--Creating Permissions-----------------------------------------------------\n")
         buffer.write(create_permissions.getvalue())
         buffer.write("\n")
+    """
     
     # Write schemas if needed
     if create_schemas.getvalue():
         buffer.write("--Creating Schemas----------------------------------------------------------------\n")
         buffer.write(create_schemas.getvalue())
         buffer.write("\n")
+
     
     # Write DB state tables
     buffer.write(script_db_state_tables.getvalue())
