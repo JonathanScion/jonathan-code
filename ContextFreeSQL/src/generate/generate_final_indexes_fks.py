@@ -1,6 +1,7 @@
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
+# GeneratePreDropPostAddIndexesFKs
 def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j2_index_post_add, 
                                           j2_fk_pre_drop, j2_fk_post_add, 
                                           pre_add_constraints_data_checks):
@@ -101,7 +102,7 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
             j2_index_post_add.write("\t\t\tEND\n")
             j2_index_post_add.write("\t\t\tELSE\n")
             j2_index_post_add.write("\t\t\tBEGIN\n")
-            utils.add_print(db_type, 4, j2_index_post_add, "'No problematic data. Unique index\constraint will be added'")
+            utils.add_print(db_type, 4, j2_index_post_add, "'No problematic data. Unique index\\constraint will be added'")
             j2_index_post_add.write("\t\t\t\tSET @sqlCode = @SQL_CREATE \n")
             utils.add_exec_sql(db_type, 4, j2_index_post_add)
             j2_index_post_add.write("\t\t\tEND\n")
@@ -149,7 +150,7 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
             utils.add_print(db_type, 4, j2_index_post_add, "'Error: ''' || temprow.index_name || ''' cannot be added since there are duplicates in the data'")
             utils.add_print(db_type, 4, j2_index_post_add, "'To find those records, run: ' || REPLACE(temprow.SQL_CheckUnqData, 'PERFORM','SELECT')")
             j2_index_post_add.write("\t\t\tELSE\n")
-            utils.add_print(db_type, 4, j2_index_post_add, "'No problematic data. Unique index\constraint will be added'")
+            utils.add_print(db_type, 4, j2_index_post_add, "'No problematic data. Unique index\\constraint will be added'")
             utils.add_exec_sql(db_type, 4, j2_index_post_add, "temprow.SQL_CREATE")
             j2_index_post_add.write("\t\t\tEND IF;\n")
             j2_index_post_add.write("\t\tELSE\n")

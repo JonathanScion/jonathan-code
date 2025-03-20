@@ -80,6 +80,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
+    RN: all the other generate_ here. tables, column etc. import them. see that all above StringIOs are set
 
     
   
