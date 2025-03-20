@@ -11,6 +11,25 @@ BEGIN --overall code
 		execCode boolean 	:= 1;
 -------------------------------------------------------------------------------------
 
+DECLARE table_schema character varying (128);
+DECLARE table_name character varying (128);
+DECLARE index_name character varying (128);
+DECLARE fk_name character varying (128);
+DECLARE col_name character varying (128);
+DECLARE user_type_name character varying (128);
+DECLARE max_length smallint;
+DECLARE precision smallint;
+DECLARE scale smallint;
+DECLARE is_nullable bit;
+DECLARE is_identity bit;
+DECLARE is_computed bit;
+DECLARE collation_name character varying (128);
+DECLARE computed_definition character varying ;
+DECLARE SQL_CREATE character varying ;
+DECLARE SQL_ALTER character varying ;
+DECLARE SQL_DROP character varying ;
+DECLARE diff_descr character varying ;
+DECLARE ent_type character varying (25);
 	DECLARE sqlCode character varying  ; schemaChanged boolean := False;
 	BEGIN --the code
 	perform n.nspname, c.relname
@@ -23,6 +42,7 @@ BEGIN --overall code
 	(
 		SQLText character varying
 	);
+--Creating Schemas----------------------------------------------------------------
 	--Schemas
 	DECLARE schema_name character varying (128);
 	BEGIN --schema code
@@ -70,28 +90,6 @@ BEGIN --overall code
 		AND LOWER(J.schema_name) Not IN (select LOWER(J1.schema_name) from scriptschemas J1);
 		
 		--Dropping Schemas that need to be dropped:
-		DECLARE temprow record;
-		BEGIN
-			FOR temprow IN
-				SELECT  s.schema_name ,  
-				s.SQL_DROP 
-				FROM    ScriptSchemas s
-					WHERE SchemaStat = 2
-				LOOP
-				IF (print=True) THEN
-					INSERT INTO scriptoutput (SQLText)
-					VALUES ('--Dropping Schema ' || temprow.schema_name || ':');
-				END IF;
-				IF (printExec = True) THEN 
-					INSERT INTO scriptoutput (SQLText)
-					VALUES ('DROP SCHEMA ' || temprow.schema_name || ';');
-				END IF;
-				IF (execCode = True) THEN
-					EXECUTE 'DROP SCHEMA ' || temprow.schema_name || ';';
-				END IF;
-				schemaChanged := True;
-				END LOOP;
-			END; --FOR
 		--Adding new entities and ones that were modified
 		declare temprow record;
 		BEGIN
@@ -117,6 +115,8 @@ BEGIN --overall code
 			END; --FOR 
 		END; --of adding new entities and ones that were modified
 	END; --schema code
+
+
 	--DB State Temp Tables for Tables
 	BEGIN --Tables code
 		perform  n.nspname ,c.relname
@@ -930,6 +930,161 @@ studentid
 		
 
 	End; --DB State Temp Tables for Tables
+
+
+--Dropping Extra Schemas----------------------------------------------------------------
+		DECLARE temprow record;
+		BEGIN
+			FOR temprow IN
+				SELECT  s.schema_name ,  
+				s.SQL_DROP 
+				FROM    ScriptSchemas s
+					WHERE SchemaStat = 2
+				LOOP
+				IF (print=True) THEN
+					INSERT INTO scriptoutput (SQLText)
+					VALUES ('--Dropping Schema ' || temprow.schema_name || ':');
+				END IF;
+				IF (printExec = True) THEN 
+					INSERT INTO scriptoutput (SQLText)
+					VALUES ('DROP SCHEMA ' || temprow.schema_name || ';');
+				END IF;
+				IF (execCode = True) THEN
+					EXECUTE 'DROP SCHEMA ' || temprow.schema_name || ';';
+				END IF;
+				schemaChanged := True;
+				END LOOP;
+			END; --FOR
+
+
+--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------
+--Dropping foreign keys that are different or their columns are different
+	declare temprow record;
+	BEGIN
+		FOR temprow IN
+	SELECT  FK.fkey_table_schema , 
+		FK.fkey_table_name, 
+		FK.fk_name 
+	FROM    ScriptFKs  FK INNER JOIN ScriptTables T on LOWER(FK.fkey_table_schema) = LOWER(T.table_schema) AND LOWER(FK.fkey_table_name) = LOWER(T.table_name) 
+	WHERE (fkStat in (2,3) or FK.col_diff=true or db_col_diff=true OR indx_col_diff=true) AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL)--extra, different, or diferent in index columns or in DB columns (meaning they require index, so cannot have index on them) also changes on indexes that are on columns tha tthis FK uses (requires re-creating the FK)
+		LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.fkey_table_schema ||'.' || temprow.fkey_table_name || ': dropping foreign key ' || temprow.fk_name );
+	END IF;
+		sqlCode = 'ALTER TABLE ' || temprow.fkey_table_schema || '.' || temprow.fkey_table_name || ' DROP CONSTRAINT ' || temprow.fk_name || ';';
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (sqlCode);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE sqlCode;
+	END IF;
+	schemaChanged := True;
+		END LOOP;
+	END; --off 
+
+
+
+--Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------
+--Dropping indexes that are different or their columns are different
+	declare temprow record;
+	BEGIN
+		FOR temprow IN
+	SELECT  I.table_schema , 
+		I.table_name, 
+		I.index_name, I.is_unique_constraint,I.is_primary_key 
+	FROM    ScriptIndexes I INNER JOIN ScriptTables T ON LOWER(I.table_schema) = LOWER(T.table_schema) AND LOWER(I.table_name) = LOWER(T.table_name)
+	WHERE (indexStat in (2,3) or I.col_diff=true or db_col_diff=true) AND (T.tableStat NOT IN (1,2) OR T.tableStat IS NULL) --extra, different, or diferent in index columns or in DB columns (meaning they require index, so cannot have index on them) 
+		LOOP
+		IF (temprow.is_unique_constraint = true OR temprow.is_primary_key = true) THEN 
+			IF (print=True) THEN
+				INSERT INTO scriptoutput (SQLText)
+				VALUES ('--Table ' || temprow.table_schema || '.' || temprow.table_name || ': dropping constraint ' || temprow.index_name );
+			END IF;
+			sqlCode = 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' DROP CONSTRAINT ' || temprow.index_name || ';'; 
+		ELSE
+			IF (print=True) THEN
+				INSERT INTO scriptoutput (SQLText)
+				VALUES ('--Table ' || temprow.table_schema || '.' || temprow.table_name || ': dropping index ' || temprow.index_name);
+			END IF;
+			sqlCode = 'DROP INDEX ' || temprow.index_name || ';'; 
+		END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (sqlCode);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE sqlCode;
+	END IF;
+	schemaChanged := True;
+		END LOOP;
+	END; --off 
+
+
+
+--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
+--Add indexes: new, or ones dropped before because they were different or underlying columns where different
+	declare temprow record;
+	BEGIN
+		FOR temprow IN
+	SELECT  I.table_schema , 
+		I.table_name, 
+		I.index_name, 
+		I.sql_create 
+	FROM    ScriptIndexes I INNER JOIN ScriptTables T ON LOWER(I.table_schema) = LOWER(T.table_schema) AND LOWER(I.table_name) = LOWER(T.table_name)
+	WHERE (indexStat in (1,3) OR I.col_diff=true OR db_col_diff=true) AND (T.tableStat NOT IN (1,2) OR T.tableStat IS NULL) --extra, different, or diferent in index columns or in DB columns (meaning they require index, so cannot have index on them) 
+	LOOP
+			IF (print=True) THEN
+				INSERT INTO scriptoutput (SQLText)
+				VALUES ('--Table ' || table_schema || '.' || table_name || ': adding index ' || index_name);
+			END IF;
+		sqlCode = temprow.SQL_CREATE; 
+		IF (printExec = True) THEN 
+			INSERT INTO scriptoutput (SQLText)
+			VALUES (sqlCode);
+		END IF;
+		IF (execCode = True) THEN
+			EXECUTE sqlCode;
+		END IF;
+		schemaChanged := True;
+		END LOOP;
+	END; --off 
+
+
+
+--Post-Adding Foreign Keys (some might be added later)---------------------------------------------------------------
+--Add foreign keys: new, or ones dropped before because they were different or underlying columns where different
+	declare temprow record;
+	BEGIN
+		FOR temprow IN
+	SELECT  FK.fkey_table_schema , 
+		FK.fkey_table_name, 
+		FK.fk_name, 
+		FK.SQL_CREATE 
+	FROM    ScriptFKs FK INNER JOIN ScriptTables T on LOWER(FK.fkey_table_schema) = LOWER(T.table_schema) AND LOWER(FK.fkey_table_name) = LOWER(T.table_name) 
+	WHERE (fkStat in (1,3) or FK.col_diff=True OR db_col_diff=True OR indx_col_diff=True)  AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL)--extra, different, or diferent in index columns or in DB columns (meaning they require index, so cannot have index on them) also changes on indexes that are on columns tha tthis FK uses (requires re-creating the FK) AND: i do add FKs on tables just added (tableStat=1) because i dont add them in the CREATE table (maybe they ref a table that doesn't exist at that point or that needs an index added on these columns that's not there yet. FKs should be added only when all tabels and indexes are in)
+		LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.fkey_table_schema || '.' || temprow.fkey_table_name || ': adding foreign key ' || temprow.fk_name);
+	END IF;
+		IF (printExec = True) THEN 
+			INSERT INTO scriptoutput (SQLText)
+			VALUES (temprow.SQL_CREATE);
+		END IF;
+		IF (execCode = True) THEN
+			EXECUTE temprow.SQL_CREATE;
+		END IF;
+		schemaChanged := True;
+		END LOOP;
+	END; --off 
+
+
+
+END; --overall code
+$$
+;SELECT * FROM scriptoutput
 END; --overall code
 $$
 ;select * from scriptoutput
