@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pandas as pd
 from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
-from src.generate.generate_create_table import get_create_table_from_sys_tables
+from generate.generate_final_create_table import get_create_table_from_sys_tables
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.utils.funcs import quote_str_or_null
 from src.generate.generate_db_ent_types.generate_state_tables.tables_columns import create_db_state_columns
