@@ -5,6 +5,7 @@ from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 import pandas as pd
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
+from src.utils import code_funcs 
 
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
@@ -12,13 +13,16 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
 
     if db_type == DBType.PostgreSQL:
         buffer.write("DO $$\n")
-        buffer.write("BEGIN --overall code\n") #!see old_sample_out.sql: the BEGIN is after all declarations (after <buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode> below)
-
+        
     # 1. Add header
     header = build_script_header(db_syntax = db_syntax, scrpt_ops = scrpt_ops, filename = 'theSome.sql')
     buffer.write(header)
+
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
-    buffer.write("\tBEGIN --the code\n")
+    if db_type == DBType.PostgreSQL:
+        buffer.write("BEGIN --overall code\n") 
+
+    buffer.write("\tBEGIN --the code\n") #! title not clear. why "the code" is different from "overall code"? do full alignment of everything, wheres the END of this one? what does this block achieves?
     buffer.write("\tperform n.nspname, c.relname\n")
     buffer.write("\tFROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n")
     buffer.write("\tWHERE n.nspname LIKE 'pg_temp_%' AND c.relname='scriptoutput' AND pg_catalog.pg_table_is_visible(c.oid);\n")
@@ -34,19 +38,20 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # 2. State tables
     # bOnlyData = tblEnts.Select("ScriptSchema=False AND ScriptData=True").Length > 0
     # if oScriptOps.ScriptSchemas and (not bOnlyData):
-    schemas_buffer = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
-    buffer.write(schemas_buffer.getvalue())
-    tables_buffer: StringIO = create_db_state_temp_tables_for_tables(
+    create_schemas, drop_schemas = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+    
+
+    script_db_state_tables: StringIO = create_db_state_temp_tables_for_tables(
             db_type = db_type,
             tbl_ents = tbl_ents,
             script_ops = scrpt_ops,
             schema_tables = schema_tables
         )
-    buffer.write(tables_buffer.getvalue())
 
     #!here will 
     #create_db_state_temp_tables_for_coded (CreateDBStateTempTables_ForCoded)
     
+    buffer.write("\t--Iterate tables, generate all code----------------\n")
 
     # Create StringBuilders for schema objects
     #!reactivate this when doing security
@@ -106,62 +111,63 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     
     # Write schemas if needed
     if create_schemas.getvalue():
-        buffer.write("--Creating Schemas----------------------------------------------------------------\n")
+        buffer.write("\t--Creating Schemas----------------------------------------------------------------\n")
         buffer.write(create_schemas.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
 
     
     # Write DB state tables
     buffer.write(script_db_state_tables.getvalue())
-    buffer.write("\n")
+    buffer.write("\n\n")
     
     # Write add tables if needed
     if add_tables.getvalue():
-        buffer.write("--Adding Tables--------------------------------------------------------------------\n")
+        buffer.write("\t--Adding Tables--------------------------------------------------------------------\n")
         buffer.write(add_tables.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write post-data column alters if needed
+    col_alters_post_data: StringIO = StringIO() #! there was a comment in .net: "some of the ALTER i do only after i got the data in. like changing to NULL... anything else?". but i dont see it used anywhere. remove.
     if col_alters_post_data.getvalue():
-        buffer.write("--Column Changes Once We Got Data--------------------------------------------------------------------\n")
+        buffer.write("\t--Column Changes Once We Got Data--------------------------------------------------------------------\n")
         buffer.write(col_alters_post_data.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write drop schemas if needed
     if drop_schemas.getvalue():
-        buffer.write("--Dropping Extra Schemas----------------------------------------------------------------\n")
+        buffer.write("\t--Dropping Extra Schemas----------------------------------------------------------------\n")
         buffer.write(drop_schemas.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write FK pre-drop if needed
     if j2_fk_pre_drop.getvalue():
-        buffer.write("--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------\n")
+        buffer.write("\t--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_fk_pre_drop.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write index pre-drop if needed
     if j2_index_pre_drop.getvalue():
-        buffer.write("--Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------\n")
+        buffer.write("\t--Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_index_pre_drop.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write defaults drop if needed
     if j2_defaults_drop.getvalue():
-        buffer.write("--Dropping Defaults (some might be added later)---------------------------------------------------------------\n")
+        buffer.write("\t--Dropping Defaults (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_defaults_drop.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write check constraints drop if needed
     if j2_ccs_drop.getvalue():
-        buffer.write("--Dropping Check Constraints (some might be added later)---------------------------------------------------------------\n")
+        buffer.write("\t--Dropping Check Constraints (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_ccs_drop.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write add/alter/drop columns if needed
     if j2_cols_ad_alter_drop.getvalue():
-        buffer.write("--Adding, Altering and dropping columns---------------------------------------------------------------\n")
+        buffer.write("\t--Adding, Altering and dropping columns---------------------------------------------------------------\n")
         buffer.write(j2_cols_ad_alter_drop.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     #! Script data
     #go over .net code at this point, see whats going on, convert yada yada
@@ -178,67 +184,70 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Write not null alter columns if needed (after getting data)
     got_data = True  # This should be set based on the script_data function result
     if got_data and j2_alter_cols_not_null.getvalue():
-        buffer.write("--Once got data, some columns may be changed to NOT NULL-----------------------------------------------\n")
+        buffer.write("\t--Once got data, some columns may be changed to NOT NULL-----------------------------------------------\n")
         buffer.write(j2_alter_cols_not_null.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write defaults add if needed
     if j2_defaults_add.getvalue():
-        buffer.write("--Adding Defaults---------------------------------------------------------------\n")
+        buffer.write("\t--Adding Defaults---------------------------------------------------------------\n")
         buffer.write(j2_defaults_add.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write data checks (pre-adding constraints) if needed
     if bad_data_pre_add_indx.getvalue() or bad_data_pre_add_fk.getvalue():
-        buffer.write("--Pre-adding constraints data checks: now got final data (whether data was scripted or not) time to do the checks-----------------------\n")
+        buffer.write("\t--Pre-adding constraints data checks: now got final data (whether data was scripted or not) time to do the checks-----------------------\n")
         if bad_data_pre_add_indx.getvalue():
             buffer.write(bad_data_pre_add_indx.getvalue())
-            buffer.write("\n")
+            buffer.write("\n\n")
         if bad_data_pre_add_fk.getvalue():
             buffer.write(bad_data_pre_add_fk.getvalue())
-            buffer.write("\n")
+            buffer.write("\n\n")
     
     # Write check constraints add if needed
     if j2_ccs_add.getvalue():
-        buffer.write("--Adding Check Constraints---------------------------------------------------------------\n")
+        buffer.write("\t--Adding Check Constraints---------------------------------------------------------------\n")
         buffer.write(j2_ccs_add.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write index post-add if needed
     if j2_index_post_add.getvalue():
-        buffer.write("--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------\n")
+        buffer.write("\t--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------\n")
         buffer.write(j2_index_post_add.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write FK post-add if needed
     if j2_fk_post_add.getvalue():
-        buffer.write("--Post-Adding Foreign Keys (some might be added later)---------------------------------------------------------------\n")
+        buffer.write("\t--Post-Adding Foreign Keys (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_fk_post_add.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Skip to label
     # Label: SkipTillGotFullTablesData in VB.NET
     
     # Write coded entities if needed
-    if j2_coded_ents.getvalue():
+    #!reactivate
+    """if j2_coded_ents.getvalue():
         buffer.write("--Coded Entities---------------------------------------------------------------\n")
         buffer.write(j2_coded_ents.getvalue())
-        buffer.write("\n")
+        buffer.write("\n")"""
     
     # Write enable/disable entities if needed
-    if enable_disable_ents.getvalue():
+    #!reactivate
+    """if enable_disable_ents.getvalue():
         buffer.write("--Enabling and Disabling Entities----------------------------------------------------------------\n")
         buffer.write(enable_disable_ents.getvalue())
-        buffer.write("\n")
+        buffer.write("\n")"""
     
     # Write drop tables if needed
     if drop_tables.getvalue():
-        buffer.write("--Dropping Tables-------------------------------------------------------------------------\n")
+        buffer.write("\t--Dropping Tables-------------------------------------------------------------------------\n")
         buffer.write(drop_tables.getvalue())
-        buffer.write("\n")
+        buffer.write("\n\n")
     
     # Write drop role members if needed
-    if drop_role_members.getvalue():
+    #!reactivate
+    """if drop_role_members.getvalue():
         buffer.write("--Dropping Role Memberships-----------------------------------------------------\n")
         buffer.write(drop_role_members.getvalue())
         buffer.write("\n")
@@ -253,11 +262,11 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if drop_principals.getvalue():
         buffer.write("--Dropping Principals (users, roles)---------------------------------------------------\n")
         buffer.write(drop_principals.getvalue())
-        buffer.write("\n")
+        buffer.write("\n")"""
     
     # Add transaction commit if needed
-    if script_ops.as_transaction:
-        append_commit_changes(buffer)
+    if scrpt_ops.as_transaction:
+        code_funcs.append_commit_changes(buffer)
     
     # Label: EndOfScript in VB.NET
     
