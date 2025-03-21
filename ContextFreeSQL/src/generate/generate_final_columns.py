@@ -1,6 +1,7 @@
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
+#!got_data needs to be implemented
 def generate_add_alter_drop_cols(db_type: DBType, sql_buffer, j2_alter_cols_not_null, got_data: bool = False):
     """Generate SQL statements for adding, altering, and dropping columns."""
     

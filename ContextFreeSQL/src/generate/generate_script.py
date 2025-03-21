@@ -1,11 +1,16 @@
 from io import StringIO
+import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
-import pandas as pd
-from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
 from src.utils import code_funcs 
+
+from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
+from src.generate.generate_final_tables import generate_add_tables, generate_drop_tables
+from src.generate.generate_final_columns import generate_add_alter_drop_cols
+
+
 
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
@@ -68,7 +73,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     j2_index_post_add = StringIO()
     j2_fk_pre_drop = StringIO()
     j2_fk_post_add = StringIO()
-    j2_cols_ad_alter_drop = StringIO()
+    j2_cols_add_alter_drop = StringIO()
     j2_alter_cols_not_null = StringIO()
     j2_defaults_drop = StringIO()
     j2_defaults_add = StringIO()
@@ -80,9 +85,10 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
-    RN: all the other generate_ here. tables, column etc. import them. see that all above StringIOs are set
-
-    
+    generate_drop_tables(db_type=db_type, sql_buffer=add_tables)
+    if scrpt_ops.remove_all_extra_ents:
+        generate_add_tables(db_type=db_type, sql_buffer=drop_tables)
+    generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
   
     # Bad data check StringBuilders
     bad_data_pre_add_indx = StringIO()
@@ -165,9 +171,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\n\n")
     
     # Write add/alter/drop columns if needed
-    if j2_cols_ad_alter_drop.getvalue():
+    if j2_cols_add_alter_drop.getvalue():
         buffer.write("\t--Adding, Altering and dropping columns---------------------------------------------------------------\n")
-        buffer.write(j2_cols_ad_alter_drop.getvalue())
+        buffer.write(j2_cols_add_alter_drop.getvalue())
         buffer.write("\n\n")
     
     #! Script data
@@ -190,6 +196,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\n\n")
     
     # Write defaults add if needed
+    #!still need to implement defaults... is it part of columns?
     if j2_defaults_add.getvalue():
         buffer.write("\t--Adding Defaults---------------------------------------------------------------\n")
         buffer.write(j2_defaults_add.getvalue())
@@ -269,15 +276,6 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if scrpt_ops.as_transaction:
         code_funcs.append_commit_changes(buffer)
     
-    # Label: EndOfScript in VB.NET
-    
-    # Database-specific cleanup
-    if db_type == DBType.PostgreSQL:
-        buffer.write("END; --overall code\n")
-        buffer.write("$$\n")
-        buffer.write(";SELECT * FROM scriptoutput\n")
-    elif db_type == DBType.MSSQL:
-        buffer.write("SET NOCOUNT OFF\n")
     
     #end out buffer
     if db_type == DBType.PostgreSQL:
