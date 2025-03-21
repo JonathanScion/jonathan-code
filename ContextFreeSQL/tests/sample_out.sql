@@ -1,5 +1,4 @@
 DO $$
-BEGIN --overall code
 ------------------------Context Free Script------------------------------------------
 --Parameters: @print: PRINT english description of what the script is doing
 --            @printExec: PRINT the SQL statements the script generates
@@ -31,6 +30,7 @@ DECLARE SQL_DROP character varying ;
 DECLARE diff_descr character varying ;
 DECLARE ent_type character varying (25);
 	DECLARE sqlCode character varying  ; schemaChanged boolean := False;
+BEGIN --overall code
 	BEGIN --the code
 	perform n.nspname, c.relname
 	FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -42,7 +42,8 @@ DECLARE ent_type character varying (25);
 	(
 		SQLText character varying
 	);
---Creating Schemas----------------------------------------------------------------
+	--Iterate tables, generate all code----------------
+	--Creating Schemas----------------------------------------------------------------
 	--Schemas
 	DECLARE schema_name character varying (128);
 	BEGIN --schema code
@@ -932,7 +933,33 @@ studentid
 	End; --DB State Temp Tables for Tables
 
 
---Dropping Extra Schemas----------------------------------------------------------------
+	--Adding Tables--------------------------------------------------------------------
+
+--Dropping Tables that need to be dropped:
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+		Select s.table_schema , s.table_name 
+		FROM ScriptTables s
+		WHERE tableStat = 2
+LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.table_schema || '.' || temprow.table_name || ' is different. Drop and then add:');
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE 'DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+
+	--Dropping Extra Schemas----------------------------------------------------------------
 		DECLARE temprow record;
 		BEGIN
 			FOR temprow IN
@@ -957,7 +984,7 @@ studentid
 			END; --FOR
 
 
---Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------
+	--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------
 --Dropping foreign keys that are different or their columns are different
 	declare temprow record;
 	BEGIN
@@ -986,7 +1013,7 @@ studentid
 
 
 
---Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------
+	--Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------
 --Dropping indexes that are different or their columns are different
 	declare temprow record;
 	BEGIN
@@ -1023,7 +1050,90 @@ studentid
 
 
 
---Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
+	--Adding, Altering and dropping columns---------------------------------------------------------------
+
+--Adding Columns
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+		SELECT  C.table_schema , 
+		C.table_name, 
+		C.col_name, 
+		C.SQL_CREATE 
+		FROM    ScriptCols C INNER JOIN ScriptTables T on LOWER(C.table_schema) = LOWER(T.table_schema) AND LOWER(C.table_name) = LOWER(T.table_name) 
+		WHERE colStat = 1 AND T.tableStat=3 
+	LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.table_schema ||  '.' || temprow.table_name ||': adding column ' || temprow.col_name);
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (temprow.SQL_CREATE);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE temprow.SQL_CREATE;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+--Altering Columns
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+		SELECT  C.table_schema , 
+		C.table_name, 
+		C.col_name, 
+		C.SQL_ALTER, 
+		C.diff_descr 
+		FROM  ScriptCols C
+		WHERE colStat = 3
+	LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.table_schema ||  '.' || temprow.table_name ||': column ' || temprow.col_name || ' needs to be changed: ' || temprow.diff_descr);
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (temprow.SQL_ALTER);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE temprow.SQL_ALTER;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+--Dropping Columns
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+	SELECT  C.table_schema , 
+		C.table_name, 
+		C.col_name, 
+		C.SQL_DROP 
+	FROM    ScriptCols C 
+	WHERE colStat = 2 
+	LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Table ' || temprow.table_schema ||  '.' || temprow.table_name ||': dropping column ' || temprow.col_name);
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (temprow.SQL_DROP);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE temprow.SQL_DROP;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+
+
+	--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
 --Add indexes: new, or ones dropped before because they were different or underlying columns where different
 	declare temprow record;
 	BEGIN
@@ -1053,7 +1163,7 @@ studentid
 
 
 
---Post-Adding Foreign Keys (some might be added later)---------------------------------------------------------------
+	--Post-Adding Foreign Keys (some might be added later)---------------------------------------------------------------
 --Add foreign keys: new, or ones dropped before because they were different or underlying columns where different
 	declare temprow record;
 	BEGIN
@@ -1082,9 +1192,30 @@ studentid
 
 
 
-END; --overall code
-$$
-;SELECT * FROM scriptoutput
+	--Dropping Tables-------------------------------------------------------------------------
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+		Select s.table_schema , s.table_name, s.SQL_CREATE 
+		FROM ScriptTables s
+		WHERE tableStat = 1
+LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Adding table ' || temprow.table_schema || '.' || temprow.table_name);
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (temprow.SQL_CREATE);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE temprow.SQL_CREATE;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+
 END; --overall code
 $$
 ;select * from scriptoutput
