@@ -798,6 +798,24 @@ studentid
 			fkColStat smallint null
 		);
 		
+		INSERT INTO scriptfks (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,is_not_for_replication,is_not_trusted,delete_referential_action,update_referential_action,is_system_named,SQL_CREATE)
+		VALUES ('public','studentgrades','fk_students','public','students',NULL,NULL,NULL,NULL,NULL,'ALTER TABLE public.studentgrades ADD CONSTRAINT fk_students FOREIGN KEY
+(
+studentid
+)
+REFERENCES public.students
+(
+studentid
+)
+');
+		
+		--FK's Columns
+		INSERT INTO scriptfkcols (fkey_table_schema,fkey_table_name,fk_name,rkey_table_schema,rkey_table_name,fkey_col_name,rkey_col_name)
+		VALUES ('public','studentgrades','fk_students','public',
+		'students',
+		'studentid',
+		'studentid');
+		
 		
 		--FKs only on Johannes database (need to add)
 		UPDATE scriptfks SET fkStat = 1

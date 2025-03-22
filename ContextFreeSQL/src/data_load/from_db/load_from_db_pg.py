@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from src.utils import funcs as utils
 from typing import Optional
+import networkx as nx
 
 class DBSchema(BaseModel):
     schemas: pd.DataFrame 
@@ -436,17 +437,19 @@ def load_all_db_ents() -> pd.DataFrame:
     cur = None
     try:
         conn = Database.connect_to_aurora()
+        
+        # First, fetch the database entities
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql =  """SELECT CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, CAST(0 as bit)  as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,
+        entities_sql = """SELECT CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,
                     table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType , NULL as EntParamList
                 FROM information_schema.tables
                 where table_schema not in ('information_schema', 'pg_catalog') and TABLE_TYPE<>'VIEW'
                 UNION
-                select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, CAST(0 as bit)  as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
+                select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
                 from information_schema.views
                 where table_schema not in ('information_schema', 'pg_catalog')
                 UNION 
-                select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, CAST(0 as bit)  as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
+                select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
                     p.proname as EntName,
                     cast(p.prokind as character varying)  as EntBaseType,
                     case p.prokind WHEN 'p' THEN 'Procedure' WHEN 'f' THEN 'Function' END as EntType,
@@ -457,21 +460,80 @@ def load_all_db_ents() -> pd.DataFrame:
                 left join pg_type t on t.oid = p.prorettype 
                 where n.nspname not in ('pg_catalog', 'information_schema')
                 UNION 
-                Select CAST(1 as bit)  AS ScriptSchema, CAST(0 as bit)  as ScriptData, CAST(0 as bit)  as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
+                Select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
                                         trigger_name As EntName,
-                                        'Trigger' as EntBaseType, 
                                         'TR' as EntBaseType,
+                                        'Trigger' as EntType,                                         
                                         NULL as EntParamList
                 FROM information_schema.triggers
-                Group By 1, 2, 3, 4,5, 6,7 """
-        cur.execute(sql)
-         
-        results = cur.fetchall()
+                Group By 1, 2, 3, 4,5, 6,7"""
+        cur.execute(entities_sql)
+        entities_results = cur.fetchall()
+        tbl_ents = pd.DataFrame(entities_results)
         
-        return pd.DataFrame(results)
+        # Now, fetch the foreign key dependencies
+        fk_sql = """SELECT ns.nspname as child_schema, t.relname as child_table, ns_f.nspname as parent_schema,t_f.relname as parent_table 
+        FROM pg_catalog.pg_constraint fk 
+            inner join pg_class t on fk.conrelid = t.oid
+            inner join pg_namespace ns on ns.oid = t.relnamespace
+            inner join pg_class t_f on fk.confrelid=t_f.oid
+            inner join pg_namespace ns_f on ns_f.oid = t_f.relnamespace
+        where fk.contype = 'f';
+        """
+        cur.execute(fk_sql)
+        fk_results = cur.fetchall()
+        
+        # Create a directed graph for dependencies
+        G = nx.DiGraph()
+        
+        # Add all tables as nodes
+        tables_df = tbl_ents[tbl_ents['enttype'] == 'Table']
+        for _, row in tables_df.iterrows():
+            schema = row['entschema']
+            table = row['entname']
+            G.add_node(f"{schema}.{table}")  # Add qualified name as node
+        
+        # Add edges for dependencies (from child to parent)
+        for fk in fk_results:
+            child_node = f"{fk['child_schema']}.{fk['child_table']}"
+            parent_node = f"{fk['parent_schema']}.{fk['parent_table']}"
+            
+            if child_node in G.nodes() and parent_node in G.nodes():
+                G.add_edge(child_node, parent_node)  # Child depends on parent
+        
+        # If there are nodes in the graph, perform topological sort
+        if G.nodes():
+            try:
+                # Get sorted list and create mapping
+                sorted_tables = list(nx.topological_sort(G))
+                sort_order = {table: i+1 for i, table in enumerate(reversed(sorted_tables))}
+                
+                # Create a mapping from EntKey to sort order
+                tbl_ents['scriptsortorder'] = tbl_ents['entkey'].map(sort_order)
+                
+                # For entities without a sort order, use a higher number
+                max_order = len(sort_order) + 1 if sort_order else 1
+                tbl_ents['scriptsortorder'] = tbl_ents['scriptsortorder'].fillna(max_order)
+            except nx.NetworkXUnfeasible:
+                # If there's a cycle, just use a default order
+                print("Warning: Cycle detected in foreign key dependencies.")
+                tbl_ents['scriptsortorder'] = tbl_ents.apply(
+                    lambda row: 1 if row["enttype"] == "Table" else 2, 
+                    axis=1
+                )
+        else:
+            # If no dependencies were found, assign a default order
+            tbl_ents['scriptsortorder'] = tbl_ents.apply(
+                lambda row: 1 if row["enttype"] == "Table" else 2, 
+                axis=1
+            )
+        
+        return tbl_ents
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error in load_all_db_ents: {e}")
+        # Return empty DataFrame or partial result
+        return pd.DataFrame() if 'tbl_ents' not in locals() else tbl_ents
         
     finally:
         if cur:
