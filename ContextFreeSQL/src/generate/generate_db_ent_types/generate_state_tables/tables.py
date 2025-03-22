@@ -27,8 +27,8 @@ def create_db_state_temp_tables_for_tables(
         
     # Select and sort tables to script
     #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?    
-    mask = (tbl_ents['scriptschema'] == 1) & (tbl_ents['enttype'] == 'Table')
-    rows_tables_script = tbl_ents[mask].sort_values('scriptsortorder') #!ScriptSortOrder... must do the algorithm for it. describe to claude, lets see
+    mask = (tbl_ents['scriptschema'] == '1') & (tbl_ents['enttype'] == 'Table')
+    rows_tables_script = tbl_ents[mask].sort_values('scriptsortorder') 
     
     # Prepare lists of tables we're working with
     #!note: this part is half baked. will have to get back to it later and see whats going on, maybe based on .net stuff
