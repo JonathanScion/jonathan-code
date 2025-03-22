@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 
 
-from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents
+from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions
 
@@ -17,6 +17,10 @@ def main():
     schema = load_all_schema()
 
     tbl_ents = load_all_db_ents()
+
+    tables_to_load = ["public.students", "public.studentgrades"] #!remove of course. load from command line
+
+    load_all_tables_data(db_all = schema, table_names = tables_to_load)
   
     script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= script_ops )
 

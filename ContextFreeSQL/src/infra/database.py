@@ -5,7 +5,7 @@ from psycopg2.extras import RealDictCursor
 
 class Database:        
     @staticmethod
-    def connect_to_aurora():
+    def connect_to_database():
         conn = psycopg2.connect(
             host=os.getenv('DB_HOST'),
             database=os.getenv('DB_NAME'),

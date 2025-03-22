@@ -5,7 +5,8 @@ from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
 from src.utils import funcs as utils
-from typing import Optional
+from typing import Optional, Dict, List
+from pydantic import Field
 import networkx as nx
 
 class DBSchema(BaseModel):
@@ -18,6 +19,7 @@ class DBSchema(BaseModel):
     fks: pd.DataFrame
     fk_cols: pd.DataFrame
     #check_constraints: Optional[pd.DataFrame] = None #!TBD
+    tables_data: Dict[str, pd.DataFrame] = Field(default_factory=dict)
     
 
     class Config:
@@ -53,7 +55,7 @@ def _load_schemas() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql =  """select schema_name, schema_owner as principal_name from information_schema.schemata 
                     WHERE schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and schema_name NOT LIKE 'pg_temp%' and schema_name NOT LIKE 'pg_toast%'"""
@@ -77,7 +79,7 @@ def _load_tables() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql =  """SELECT  table_schema || '.' || table_name as object_id, table_name as entname, 'U' as type,  null as crdate, table_schema as entschema, table_schema, table_name,
                             null as schema_ver, 
@@ -104,7 +106,7 @@ def _load_tables_columns() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, 
                             CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
@@ -133,7 +135,7 @@ def _load_tables_columns_defaults() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql = """select table_schema, table_name, COLUMN_NAME as col_name, 
                         'def_' || table_schema || '_' || table_name || '_' || COLUMN_NAME as default_name, 
@@ -160,7 +162,7 @@ def _load_tables_indexes() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
   
         sql= """SELECT
@@ -296,7 +298,7 @@ def _load_tables_foreign_keys() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         sql = """SELECT fk.conrelid as fkey_table_id, fk.confrelid as rkey_table_id, fk.oid AS fkey_constid,fk.conname as fk_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name, ns_f.nspname as rkey_table_schema,t_f.relname as rkey_table_name,
@@ -436,7 +438,7 @@ def load_all_db_ents() -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_aurora()
+        conn = Database.connect_to_database()
         
         # First, fetch the database entities
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -535,6 +537,49 @@ def load_all_db_ents() -> pd.DataFrame:
         # Return empty DataFrame or partial result
         return pd.DataFrame() if 'tbl_ents' not in locals() else tbl_ents
         
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def load_all_tables_data(db_all: DBSchema, table_names: List[str]) -> None:    
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        for table_name in table_names:
+            # Handle table names with or without schema
+            if '.' in table_name:
+                schema_name, table_only = table_name.split('.')
+                query = f'SELECT * FROM {schema_name}.{table_only}'
+            else:
+                # Default to public schema if not specified
+                query = f'SELECT * FROM {table_name}'
+            
+            try:
+                print(f"Loading data for table: {table_name}")
+                cur.execute(query)
+                results = cur.fetchall()
+                
+                # Create DataFrame from results
+                df = pd.DataFrame(results)
+                
+                # Store in the DBSchema object
+                db_all.tables_data[table_name] = df
+                
+                print(f"Loaded {len(df)} rows for table: {table_name}")
+            except Exception as table_error:
+                print(f"Error loading table {table_name}: {table_error}")
+                # Continue with other tables even if one fails
+                continue
+    
+    except Exception as e:
+        print(f"Database connection error: {e}")
+    
     finally:
         if cur:
             cur.close()

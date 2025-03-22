@@ -9,6 +9,7 @@ from src.utils import code_funcs
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
 from src.generate.generate_final_tables import generate_add_tables, generate_drop_tables
 from src.generate.generate_final_columns import generate_add_alter_drop_cols
+from src.generate.generate_final_data import script_data
 
 
 
@@ -178,15 +179,15 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     
     #! Script data
     #go over .net code at this point, see whats going on, convert yada yada
-    """
+    
     script_data(
         db_info.conn_str,
         db_type,
         tbl_ents,
         buffer,
         schema_tables,
-        script_ops
-    )"""
+        scrpt_ops
+    )
     
     # Write not null alter columns if needed (after getting data)
     got_data = True  # This should be set based on the script_data function result
