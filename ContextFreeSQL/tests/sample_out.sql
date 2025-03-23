@@ -1151,6 +1151,26 @@ END; --of cursor
 
 
 
+--Data-----------------------------------------------------------------------------
+DECLARE NumNonEqualRecs INT;
+public_studentsFlagCreated boolean true false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+public_studentgradesFlagCreated boolean true false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+BEGIN --Data Code
+IF (schemaChanged=True and execCode=False) THEN
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Note: Changes were found in the schema but not executed (because execution flag is turned off) - Data migration may therefore not work');
+	END IF;
+END IF;
+public_studentsFlagCreated := 0;
+
+perform n.nspname, c.relname
+FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname like 'pg_temp_%' AND c.relname='public_students' AND pg_catalog.pg_table_is_visible(c.oid);
+IF FOUND THEN
+	DROP TABLE public_students;
+END IF;
+END; --end of data section
 	--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
 --Add indexes: new, or ones dropped before because they were different or underlying columns where different
 	declare temprow record;
