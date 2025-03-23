@@ -72,13 +72,7 @@ class ScriptingOptions:
    data_window_only: bool = False  # 3/31/15
    data_window_got_specific_cells: bool = False  # in case the user wants specific cells not to be included
 
-   # Randolph options
-   rndph_conn_str: str = None  # in case we got Rndph Overrides
-
-   # Instance related options 
-   instance_id: int = 0
-   instance_id_at: str = ""  # for presentation purposes
-   rndph_db_id: int = 0
+   
 
 
 @dataclass

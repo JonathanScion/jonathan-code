@@ -165,6 +165,7 @@ def _load_tables_indexes() -> pd.DataFrame:
         conn = Database.connect_to_database()
         cur = conn.cursor(cursor_factory=RealDictCursor)
   
+        #small note: i had below '0 as index_id' but it made no sense when its time to select the index
         sql= """SELECT
                 scm.nspname  || '.' || t.relname as object_id, /*t.oid as object_id,*/ i.oid as index_oid,
                 scm.nspname As table_schema,
@@ -172,7 +173,7 @@ def _load_tables_indexes() -> pd.DataFrame:
                 i.relname as index_name, i.relname as name,
                 ix.indisunique as is_unique,
                 indisclustered as is_clustered,
-                0 as index_id, 0 as type,--not implementing for PG right now, as MSSQL indexes are so different
+                i.oid as index_id, 0 as type,--not implementing for PG right now, as MSSQL indexes are so different
                 0 as is_hypothetical,
                 NULL as data_space_name,
                 null as ignore_dup_key,

@@ -18,7 +18,10 @@ def main():
 
     tbl_ents = load_all_db_ents()
 
-    tables_to_load = ["public.students", "public.studentgrades"] #!remove of course. load from command line
+    #!remove of course. load from command line
+    tables_to_load = ["public.students", "public.studentgrades"] 
+    mask = (tbl_ents['entkey'] == 'public.students') | (tbl_ents['entkey'] == 'public.studentgrades')
+    tbl_ents.loc[mask, 'scriptdata'] = True
 
     load_all_tables_data(db_all = schema, table_names = tables_to_load)
   
