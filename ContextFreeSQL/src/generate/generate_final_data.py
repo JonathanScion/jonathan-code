@@ -3,11 +3,13 @@ from io import StringIO
 import re
 from enum import Enum
 from typing import Optional, Dict, List
+import datetime
 
 
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
 from src.utils import funcs as utils
+from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
 
 
 class RowState(Enum):
@@ -186,7 +188,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             #tbl_settings = ds_data.tables.get("TableNameSettings")
             #b_got_settings_override = True
         tbl_settings = None
-            
+        drows_unq_cols = [], drow_unq_index=[]  # Default to an empty list    ``    
         if (not b_got_settings_override) or (tbl_settings is None):
             if db_type == DBType.MSSQL:
                 drow_unq_index = schema_tables.indexes[
@@ -204,7 +206,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     utils.add_print(db_type, 0, out_buffer, f"'Data table ''{s_ent_full_name}'' has no uniqueness. Data cannot be scripted'")
                     ar_warned_no_script_data_tables.append(s_ent_full_name)
                 continue
-                
+
+            
             if db_type == DBType.MSSQL:
                 drows_unq_cols = schema_tables.index_cols[
                     (schema_tables.index_cols["object_id"] == drow_ent["entkey"]) & 
@@ -271,7 +274,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("END IF;\n")
 
         # Handle DML statement generation
-        if scrpt_ops.data_scripting_generate_dml_statements:
+        if script_ops.data_scripting_generate_dml_statements:
             if db_type == DBType.MSSQL:
                 out_buffer.write(f"IF (@printExec=1 AND @execCode=0 AND @{s_flag_ent_created}=1) --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there\n")
                 out_buffer.write("BEGIN\n")
@@ -381,12 +384,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Create temp table
         s_create_table = None
         s_create_table_err = None
+        script_table_options_no_fk = ScriptTableOptions(foreign_keys=False)
         create_table_result = get_create_table_from_sys_tables(
-            db_type, drow_ent["entschema"], drow_ent["entname"], 
-            schema_tables.tables, schema_tables.columns, schema_tables.indexes, 
-            schema_tables.index_cols, schema_tables.fks, schema_tables.fk_cols, 
-            schema_tables.defaults, None, None, s_create_table, s_create_table_err, 
-            ops_script_temp_table, force_allow_null=True)
+            db_type = db_type,
+            table_schema = drow_ent['entschema'],
+            table_name = drow_ent['entname'],
+            schema_tables = schema_tables,
+            script_table_ops = script_table_options_no_fk,
+            pre_add_constraints_data_checks = False,
+            force_allow_null=True)
 
         if not create_table_result:
             utils.add_print(db_type, 0, out_buffer, f"'Table ''{s_ent_full_name}'' cannot be scripted: {s_create_table_err.replace("'", "''")}'")
@@ -395,22 +401,22 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write(s_create_table + "\n")
 
         # Handle special case: data window with specific cells
-        if scrpt_ops.data_window_only and scrpt_ops.data_window_got_specific_cells:
+        if script_ops.data_window_only and script_ops.data_window_got_specific_cells:
             out_buffer.write("--we are updating a 'Data Window' with specific cells selected. UPDATE needs to have special flags\n")
             for s_col_name in ar_cols:
-                out_buffer.write(f"ALTER TABLE {m_var_lang_temp_table_prefix}{s_temp_table_name} ADD [{NO_UPDATE_FLD}{s_col_name}] BIT NULL;\n")
+                out_buffer.write(f"ALTER TABLE {db_syntax.temp_table_prefix}{s_temp_table_name} ADD [{NO_UPDATE_FLD}{s_col_name}] BIT NULL;\n")
             out_buffer.write("\n")
 
         i_col_count = len(ar_cols)
 
         # Handle specific data cells scenario
         b_got_specific_data_cells = False
-        if scrpt_ops.data_window_only and scrpt_ops.data_window_got_specific_cells:
+        if script_ops.data_window_only and script_ops.data_window_got_specific_cells:
             b_got_specific_data_cells = FLD_COLS_CELLS_EXCLUDE_FOR_ROW in tbl_data.columns
 
         # Insert data into temp table
         for index, row in tbl_data.iterrows():
-            out_buffer.write(f"INSERT INTO {m_var_lang_temp_table_prefix}{s_temp_table_name} (\n")
+            out_buffer.write(f"INSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
             i_count = 1
             for s_col_name in ar_cols:
                 if db_type == DBType.MSSQL:
@@ -460,7 +466,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         out_buffer.write("\n")
         out_buffer.write("--add status field, and update it:\n")
-        out_buffer.write(f"ALTER TABLE {m_var_lang_temp_table_prefix}{s_temp_table_name} ADD {FLD_COMPARE_STATE} smallint NULL;\n")
+        out_buffer.write(f"ALTER TABLE {db_syntax.temp_table_prefix}{s_temp_table_name} ADD {FLD_COMPARE_STATE} smallint NULL;\n")
 
         # Find records to add
         out_buffer.write("--Records to be added:\n")
@@ -477,7 +483,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         # Generate SQL for data comparisons based on database type
         if db_type == DBType.MSSQL:
-            out_buffer.write(f"UPDATE {m_var_lang_temp_table_prefix}{s_temp_table_name} SET {FLD_COMPARE_STATE}={RS_EXTRA1} FROM {m_var_lang_temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
+            out_buffer.write(f"UPDATE {db_syntax.temp_table_prefix}{s_temp_table_name} SET {FLD_COMPARE_STATE}={RowState.EXTRA1} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
             
             # Key field comparisons
             i_count = 1
@@ -499,7 +505,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             out_buffer.write(";\n")
             out_buffer.write("--add all missing records:\n")
-            out_buffer.write(f"IF ({m_var_lang_variable_prefix}execCode=1)\n")
+            out_buffer.write(f"IF ({db_syntax.var_prefix}execCode=1)\n")
             out_buffer.write("BEGIN\n")
             
             # Handle identity insert
@@ -526,7 +532,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write(", ")
                 i_count += 1
             
-            out_buffer.write(f" FROM {m_var_lang_temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RS_EXTRA1}'\n")
+            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1}'\n")
             out_buffer.write("\tEXEC(@sqlCode)\n")
             
             # Turn off identity insert if needed
@@ -537,7 +543,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         elif db_type == DBType.PostgreSQL:
             # PostgreSQL version
-            out_buffer.write(f"UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RS_EXTRA1} FROM {m_var_lang_temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
+            out_buffer.write(f"UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.EXTRA1} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
             
             # Key field comparisons
             i_count = 1
@@ -568,7 +574,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             out_buffer.write(";\n")
             out_buffer.write("--add all missing records:\n")
-            out_buffer.write(f"IF ({m_var_lang_variable_prefix}execCode=True) THEN\n")
+            out_buffer.write(f"IF ({db_syntax.var_prefix}execCode=True) THEN\n")
             
             # Generate insert statement
             out_buffer.write(f"\tsqlCode := 'INSERT INTO {s_ent_full_name_sql}(")
@@ -590,7 +596,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write(", ")
                 i_count += 1
             
-            out_buffer.write(f" FROM {m_var_lang_temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RS_EXTRA1}';\n")
+            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1}';\n")
             out_buffer.write("\tEXECUTE sqlCode;\n")
             out_buffer.write(f"END IF; --of INSERTing into {s_ent_full_name}\n")
      
