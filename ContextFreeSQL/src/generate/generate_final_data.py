@@ -26,6 +26,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
     NO_UPDATE_FLD = "_NoUpdate_"
     DATA_WINDOW_COL_USED = "_DataWindowColUsed_"
     FLAG_CREATED = "FlagCreated"
+    FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
     
         
     # Get entities that need data scripting
@@ -59,7 +60,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         
         # Declare flag variable
         declare_stmt = "DECLARE " if db_type == DBType.MSSQL else ""
-        out_buffer.write(f"{declare_stmt}{db_syntax.var_prefix}{s_flag_ent_created} {db_syntax.boolean_type} {db_syntax.boolean_true_value} false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for '{s_ent_full_name_sql}'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data\n")
+        out_buffer.write(f"{declare_stmt}{db_syntax.var_prefix}{s_flag_ent_created} {db_syntax.boolean_type} {db_syntax.var_set_value} false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for '{s_ent_full_name_sql}'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data\n")
     
     # Need two rounds: one for insertions and one for deletes/updates
     ar_tables_empty = []
@@ -188,7 +189,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             #tbl_settings = ds_data.tables.get("TableNameSettings")
             #b_got_settings_override = True
         tbl_settings = None
-        drows_unq_cols = [], drow_unq_index=[]  # Default to an empty list    ``    
+        drows_unq_cols, drow_unq_index=[], []  # Default to an empty list    ``    
         if (not b_got_settings_override) or (tbl_settings is None):
             if db_type == DBType.MSSQL:
                 drow_unq_index = schema_tables.indexes[
@@ -382,10 +383,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         ops_script_temp_table.extended_props = False
 
         # Create temp table
-        s_create_table = None
-        s_create_table_err = None
+        create_table = ""
+        create_table_err = ""
         script_table_options_no_fk = ScriptTableOptions(foreign_keys=False)
-        create_table_result = get_create_table_from_sys_tables(
+        create_table, create_table_err  = get_create_table_from_sys_tables(
             db_type = db_type,
             table_schema = drow_ent['entschema'],
             table_name = drow_ent['entname'],
@@ -394,11 +395,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             pre_add_constraints_data_checks = False,
             force_allow_null=True)
 
-        if not create_table_result:
-            utils.add_print(db_type, 0, out_buffer, f"'Table ''{s_ent_full_name}'' cannot be scripted: {s_create_table_err.replace("'", "''")}'")
+        if create_table_err:
+            utils.add_print(db_type, 0, out_buffer, f"'Table ''{s_ent_full_name}'' cannot be scripted: {create_table_err.replace("'", "''")}'")
             continue
 
-        out_buffer.write(s_create_table + "\n")
+        out_buffer.write(create_table + "\n")
 
         # Handle special case: data window with specific cells
         if script_ops.data_window_only and script_ops.data_window_got_specific_cells:
@@ -471,10 +472,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Find records to add
         out_buffer.write("--Records to be added:\n")
         s_source_table_name = None
-        if drow_ent["TableToScript"] is not None:
-            s_where = utils.get_where_from_settings_dset(drow_ent["TableToScript"])
-        else:
-            s_where = None
+        #! see comments above. this feature not enable yet
+        #if drow_ent["TableToScript"] is not None:
+            #s_where = utils.get_where_from_settings_dset(drow_ent["TableToScript"])
+        #else:
+            #s_where = None
 
         if s_where:
             s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where})"
