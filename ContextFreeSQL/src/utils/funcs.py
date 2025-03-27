@@ -100,3 +100,22 @@ def val_if_null(value: Any, default: Any) -> Any:
 
 def c_to_bool(value: Any, default: bool = False) -> bool:
     return bool(value) if value is not None else default
+
+def is_type_string(type_name, out_datetime=False):
+    # Convert argument to lowercase for case-insensitive comparison
+    type_lower = type_name.lower()
+    
+    # Check for string types
+    if type_lower in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "character varying"]:
+        return True
+    
+    # Check for datetime types
+    if type_lower in ["datetime", "smalldatetime", "time"]:
+        # In Python we can't modify a boolean directly by reference,
+        # but if the caller passes a list with one boolean element, we can modify that
+        if isinstance(out_datetime, list) and len(out_datetime) > 0:
+            out_datetime[0] = True
+        return False
+    
+    # Not a string or datetime type
+    return False
