@@ -61,13 +61,15 @@ def get_create_table_from_sys_tables(
             schema_tables.columns['object_id'] == table_row['object_id']
         ].sort_values('column_id')
 
+        col_num = 0
         for idx, col_row in col_rows.iterrows():
+            col_num += 1
             col_sql = get_col_sql(
                 col_row, table_row['table_schema'], table_row['table_name'],
                 DBEntScriptState.InLine, db_type, script_table_ops.column_identity, force_allow_null
             ).strip()
             
-            if idx < len(col_rows) - 1:
+            if col_num < len(col_rows):
                 col_sql += ","
             create_table_lines.append(col_sql)
 
@@ -116,8 +118,8 @@ def get_create_table_from_sys_tables(
                 (schema_tables.defaults['table_name'] == table_name)
             ]
     
-        for _, default_row in default_rows.iterrows():
-            create_table_lines.append(get_default_sql(db_type, default_row))
+            for _, default_row in default_rows.iterrows():
+                create_table_lines.append(get_default_sql(db_type, default_row))
 
         return ["\n".join(create_table_lines),""]
     

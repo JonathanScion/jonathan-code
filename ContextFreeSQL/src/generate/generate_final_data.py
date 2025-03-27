@@ -9,6 +9,7 @@ import datetime
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
 from src.utils import funcs as utils
+from src.utils import code_funcs 
 from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
 
 
@@ -385,21 +386,21 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Create temp table
         create_table = ""
         create_table_err = ""
-        script_table_options_no_fk = ScriptTableOptions(foreign_keys=False)
         create_table, create_table_err  = get_create_table_from_sys_tables(
             db_type = db_type,
             table_schema = drow_ent['entschema'],
             table_name = drow_ent['entname'],
             schema_tables = schema_tables,
-            script_table_ops = script_table_options_no_fk,
+            script_table_ops = ops_script_temp_table,
             pre_add_constraints_data_checks = False,
-            force_allow_null=True)
+            force_allow_null = True,
+            as_temp_table = True)
 
         if create_table_err:
             utils.add_print(db_type, 0, out_buffer, f"'Table ''{s_ent_full_name}'' cannot be scripted: {create_table_err.replace("'", "''")}'")
             continue
 
-        out_buffer.write(create_table + "\n")
+        out_buffer.write(create_table + "\n\n")
 
         # Handle special case: data window with specific cells
         if script_ops.data_window_only and script_ops.data_window_got_specific_cells:
@@ -485,7 +486,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         # Generate SQL for data comparisons based on database type
         if db_type == DBType.MSSQL:
-            out_buffer.write(f"UPDATE {db_syntax.temp_table_prefix}{s_temp_table_name} SET {FLD_COMPARE_STATE}={RowState.EXTRA1} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
+            out_buffer.write(f"UPDATE {db_syntax.temp_table_prefix}{s_temp_table_name} SET {FLD_COMPARE_STATE}={RowState.EXTRA1.value} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
             
             # Key field comparisons
             i_count = 1
@@ -534,7 +535,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write(", ")
                 i_count += 1
             
-            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1}'\n")
+            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1.value}'\n")
             out_buffer.write("\tEXEC(@sqlCode)\n")
             
             # Turn off identity insert if needed
@@ -545,7 +546,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         elif db_type == DBType.PostgreSQL:
             # PostgreSQL version
-            out_buffer.write(f"UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.EXTRA1} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
+            out_buffer.write(f"UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.EXTRA1.value} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
             
             # Key field comparisons
             i_count = 1
@@ -598,11 +599,180 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write(", ")
                 i_count += 1
             
-            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1}';\n")
+            out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1.value}';\n")
             out_buffer.write("\tEXECUTE sqlCode;\n")
             out_buffer.write(f"END IF; --of INSERTing into {s_ent_full_name}\n")
      
+        
+        if script_ops.data_scripting_generate_dml_statements:
+            out_buffer.write("\n")
+        
+            if db_type == DBType.MSSQL:
+                out_buffer.write("--generating individual DML statements: INSERTS\n")
+                out_buffer.write("IF (@printExec=1 ) --only if asked to print, since that's the only reason they are here\n")
+                out_buffer.write("BEGIN\n")
+                out_buffer.write(f"\tIF EXISTS(Select 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}=1)\n")
+                out_buffer.write("\tBEGIN\n")
+                
+                if s_ent_full_name_sql in tables_identity:
+                    out_buffer.write(f"\t\tSET @sqlCode='SET IDENTITY_INSERT {s_ent_full_name_sql} ON'\n")
+                    utils.add_exec_sql(db_type, 2, out_buffer)
+                
+                # For MSSQL, remove the # in the temp table name
+                cursor_temp_table_var_name = temp_table_name[1:] if db_type == DBType.MSSQL else temp_table_name
+                
+                out_buffer.write(f"\t\tDECLARE {cursor_temp_table_var_name} CURSOR FAST_FORWARD FOR\n")
+                out_buffer.write("\t\tSelect ")
+                
+                for col_name_select in cols:
+                    out_buffer.write(f"[{col_name_select}],")
+                
+                out_buffer.write(FLD_COMPARE_STATE)
+                out_buffer.write(f"\t\t FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1.value}\n")
+                
+                # Initialize string builders
+                fields_var_names = []
+                fields_var_names_declare = []
+                field_list = []
+                fields_var_names_value_list = []
+                cols_var_names = []
+                
+                count = 1
+                col_count = len(drows_cols)
+                
+                for row_col in drows_cols:
+                    col_var_name = f"{ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
+                    cols_var_names.append(col_var_name)
+                    
+                    fields_var_names_declare.append(f"@{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)},@{DIFF_BIT_FLD}{col_var_name} bit")
+                    
+                    if script_ops.DataScripting_LeaveReportFieldsUpdated_SaveOldValue:
+                        fields_var_names_declare.append(f", @{existing_fld_val_prefix}{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)}")
+                    
+                    fields_var_names.append(f"@{col_var_name}")
+                    field_list.append(f"[{row_col['col_name']}]")
+                    
+                    # Add value to SQL string based on type
+                    code_funcs.add_value_to_sql_str(db_type, row_col["col_name"], col_var_name, row_col["user_type_name"], "\t\t", fields_var_names_value_list)
+                    
+                    fields_var_names.append(", ")
+                    
+                    if count < col_count:
+                        fields_var_names_value_list.append("SET @sqlCode+=',' \n")
+                        field_list.append(", ")
+                        fields_var_names_declare.append(", ")
+                    
+                    count += 1
+                
+                # Finish building and write to output
+                fields_var_names.append(f"@{FLD_COMPARE_STATE}")
+                
+                out_buffer.write(f"\t\tdeclare {', '.join(fields_var_names_declare)}\n")
+                out_buffer.write(f"\t\tOPEN {cursor_temp_table_var_name}\n")
+                out_buffer.write(f"\t\tFETCH NEXT FROM {cursor_temp_table_var_name} INTO {', '.join(fields_var_names)}\n")
+                out_buffer.write("\t\tWHILE @@FETCH_STATUS = 0\n")
+                out_buffer.write("\t\tBEGIN\n")
+                out_buffer.write("\t\t\t--Does the row needs to be added, updated, removed?\n")
+                out_buffer.write("\t\t\tSET @sqlCode = NULL --reset\n")
+                out_buffer.write(f"\t\t\tIF (@{FLD_COMPARE_STATE}={RowState.EXTRA1.value}) --to be added\n")
+                out_buffer.write("\t\t\tBEGIN\n")
+                out_buffer.write(f"\t\t\t\tSET @sqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}) '\n")
+                out_buffer.write("\t\t\t\tVALUES (''\n")
+                
+                for line in fields_var_names_value_list:
+                    out_buffer.write(line)
+                
+                out_buffer.write("\t\t\t\tSET @sqlCode += ');'\n")
+                out_buffer.write("\t\t\tEND\n")
+                out_buffer.write("\t\t\tIF (@printExec=1) PRINT @sqlCode\n")
+                out_buffer.write("\n")
+                out_buffer.write(f"\t\t\tFETCH NEXT FROM {cursor_temp_table_var_name} INTO {', '.join(fields_var_names)}\n")
+                out_buffer.write("\t\tEnd\n")
+                out_buffer.write("\n")
+                out_buffer.write(f"\t\tCLOSE {cursor_temp_table_var_name}\n")
+                out_buffer.write(f"\t\tDEALLOCATE {cursor_temp_table_var_name}\n")
+                
+            elif db_type == DBType.PostgreSQL:
+                out_buffer.write("--generating individual DML statements: INSERTS\n")
+                out_buffer.write("IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here\n")
+                out_buffer.write(f"\tPERFORM 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}=1;\n")
+                out_buffer.write("\tIF FOUND THEN\n")
+                
+                # Initialize string builders for PostgreSQL
+                fields_var_names = []
+                field_list = []
+                fields_var_names_value_list = []
+                cols_var_names = []
+                
+                count = 1
+                col_count = len(drows_cols)
+                
+                for row_col in drows_cols:
+                    col_var_name = f"{ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
+                    cols_var_names.append(col_var_name)
+                    
+                    field_list.append(row_col["col_name"])
+                    
+                    # Add value to SQL string
+                    code_funcs.add_value_to_sql_str(db_type, row_col["col_name"], col_var_name, row_col["user_type_name"], "\t\t\t", fields_var_names_value_list)
+                    
+                    fields_var_names.append(", ")
+                    
+                    if count < col_count:
+                        fields_var_names_value_list.append("\t\t\tsqlCode = sqlCode || ','; \n")
+                        field_list.append(", ")
+                    
+                    count += 1
+                
+                # Write PostgreSQL specific code
+                out_buffer.write("\t\tdeclare temprow record;\n")
+                out_buffer.write("\t\tBEGIN\n")
+                out_buffer.write("\t\t\tFOR temprow IN\n")
+                out_buffer.write("\t\t\t\tSELECT ")
+                
+                count = 1
+                for row_col in drows_cols:
+                    out_buffer.write(row_col["col_name"])
+                    if count < col_count:
+                        out_buffer.write(",")
+                    count += 1
+                
+                out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}={RowState.EXTRA1.value}\n")
+                out_buffer.write("\t\tLOOP\n")
+                out_buffer.write(f"\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}) VALUES (';\n")
+                
+                for line in fields_var_names_value_list:
+                    out_buffer.write(line)
+                
+                out_buffer.write("\t\t\tsqlCode = sqlCode ||  ')';\n")
+                out_buffer.write("\t\t\tIF (printExec=True) THEN\n")
+                out_buffer.write("\t\t\t\tINSERT INTO scriptoutput (SQLText)\n")
+                out_buffer.write("\t\t\t\tVALUES (sqlCode);\n")
+                out_buffer.write("\t\t\tEND IF;\n")
+                out_buffer.write("\t\tEND LOOP;\n")
+                out_buffer.write("\tEND; --of loop block \n")
             
+            # Handle identity tables
+            if s_ent_full_name_sql in tables_identity:
+                out_buffer.write(f"\t\tSET @sqlCode='SET IDENTITY_INSERT {s_ent_full_name_sql} OFF'\n")
+                utils.add_exec_sql(db_type, 2, out_buffer)
+            
+            # Close the statements based on database type
+            if db_type == DBType.MSSQL:
+                out_buffer.write("END --of iterating cursor of data to insert\n")
+                out_buffer.write(f"END --of generating DML statements: INSERT for {s_ent_full_name}\n")
+            elif db_type == DBType.PostgreSQL:
+                out_buffer.write("END IF; --of IF FOUND record iteration (temprow) \n")
+                out_buffer.write(f"END IF; --of generating DML statements: INSERT for {s_ent_full_name}\n")
+        
+        # Additional closing statements if needed
+        if script_ops.data_scripting_generate_dml_statements:
+            if db_type == DBType.MSSQL:
+                out_buffer.write("END --of INSERT as against potentially existing data\n")
+            elif db_type == DBType.PostgreSQL:
+                out_buffer.write("END IF;--of INSERT as against potentially existing data\n")
+        
+        out_buffer.write("\n")
      
     
     # The second round (deletes/updates) would follow similar patterns

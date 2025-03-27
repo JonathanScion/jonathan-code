@@ -1,5 +1,6 @@
 from src.defs.script_defs import DBType
 from io import StringIO
+from src.utils import funcs as utils
 
 def get_code_check_unq_data(db_type: DBType, full_table_name, index_cols_rows):
     sql_check = []
@@ -80,42 +81,111 @@ def get_code_check_fk_data(db_type: DBType, row_fk, rows_fk_cols):
     return ''.join(sql_check)
 
 
-def append_commit_changes(sw: StringIO):    
+def append_commit_changes(buffer: StringIO):    
     # Commit transaction block
-    sw.write("COMMIT TRANSACTION;\n")
-    sw.write("END TRY\n")
-    sw.write("BEGIN CATCH\n")
-    sw.write("SELECT \n")
-    sw.write("ERROR_NUMBER() AS ErrorNumber,\n")
-    sw.write("ERROR_SEVERITY() AS ErrorSeverity,\n")
-    sw.write("ERROR_STATE() as ErrorState,\n")
-    sw.write("--ERROR_PROCEDURE() as ErrorProcedure,\n")
-    sw.write("ERROR_LINE() as ErrorLine,\n")
-    sw.write("ERROR_MESSAGE() as ErrorMessage;\n")
-    sw.write("\n")
+    buffer.write("COMMIT TRANSACTION;\n")
+    buffer.write("END TRY\n")
+    buffer.write("BEGIN CATCH\n")
+    buffer.write("SELECT \n")
+    buffer.write("ERROR_NUMBER() AS ErrorNumber,\n")
+    buffer.write("ERROR_SEVERITY() AS ErrorSeverity,\n")
+    buffer.write("ERROR_STATE() as ErrorState,\n")
+    buffer.write("--ERROR_PROCEDURE() as ErrorProcedure,\n")
+    buffer.write("ERROR_LINE() as ErrorLine,\n")
+    buffer.write("ERROR_MESSAGE() as ErrorMessage;\n")
+    buffer.write("\n")
     
     # Transaction state checking
-    sw.write("-- Test XACT_STATE for 1 or -1.\n")
-    sw.write("-- XACT_STATE = 0 means there is no transaction and\n")
-    sw.write("-- a commit or rollback operation would generate an error.\n")
-    sw.write("\n")
+    buffer.write("-- Test XACT_STATE for 1 or -1.\n")
+    buffer.write("-- XACT_STATE = 0 means there is no transaction and\n")
+    buffer.write("-- a commit or rollback operation would generate an error.\n")
+    buffer.write("\n")
     
     # Check uncommittable state
-    sw.write("-- Test whether the transaction is uncommittable.\n")
-    sw.write("If (XACT_STATE()) = -1\n")
-    sw.write("BEGIN\n")
-    sw.write("\tPrint N'The transaction is in an uncommittable state. '\n")
-    sw.write("\t+ 'Rolling back transaction. No Changes were made to the database'\n")
-    sw.write("\tROLLBACK TRANSACTION;\n")
-    sw.write("END;\n")
+    buffer.write("-- Test whether the transaction is uncommittable.\n")
+    buffer.write("If (XACT_STATE()) = -1\n")
+    buffer.write("BEGIN\n")
+    buffer.write("\tPrint N'The transaction is in an uncommittable state. '\n")
+    buffer.write("\t+ 'Rolling back transaction. No Changes were made to the database'\n")
+    buffer.write("\tROLLBACK TRANSACTION;\n")
+    buffer.write("END;\n")
     
     # Check committable state
-    sw.write("-- Test whether the transaction is active and valid.\n")
-    sw.write("If (XACT_STATE()) = 1\n")
-    sw.write("BEGIN\n")
-    sw.write("\tPrint N'The transaction is committable. '\n")
-    sw.write("\t+ 'Committing transaction. Only changes mentioned above were committed'\n")
-    sw.write("\tCOMMIT TRANSACTION;   \n")
-    sw.write("END;\n")
-    sw.write("END CATCH\n")
-    sw.write("\n")
+    buffer.write("-- Test whether the transaction is active and valid.\n")
+    buffer.write("If (XACT_STATE()) = 1\n")
+    buffer.write("BEGIN\n")
+    buffer.write("\tPrint N'The transaction is committable. '\n")
+    buffer.write("\t+ 'Committing transaction. Only changes mentioned above were committed'\n")
+    buffer.write("\tCOMMIT TRANSACTION;   \n")
+    buffer.write("END;\n")
+    buffer.write("END CATCH\n")
+    buffer.write("\n")
+
+def add_size_precision_scale(row_col):
+        type_name_field = "typename"
+        length_field = "max_length"
+        precision_field = "precision"
+        scale_field = "scale"
+        
+        type_name = str(row_col[type_name_field])
+        
+        if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext"]:
+            if row_col[length_field] == 0:
+                return " (max) "  # In SQL 2005+ this means max size
+            else:
+                if type_name.lower() in ["nchar", "nvarchar"]:
+                    # Unicode: trim to half-size
+                    if row_col[length_field] == -1:
+                        return " (max) "
+                    else:
+                        return f" ({int(row_col[length_field] / 2)}) "
+                elif type_name.lower() in ["text", "ntext"]:
+                    return ""  # Never specify size for text/ntext
+                else:
+                    if row_col[length_field] == -1:
+                        return " (max) "
+                    else:
+                        return f" ({row_col[length_field]}) "
+        elif type_name.lower() in ["decimal", "numeric"]:
+            return f" ({row_col[precision_field]},{row_col[scale_field]}) "
+        else:
+            return ""  # Don't add anything for other types
+
+
+def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent, field_values_builder):
+    """
+    Converts the VB.NET AddVarValueToSQLStr function to Python.
+    Adds formatted variable values to SQL string based on data type.
+    """
+    if db_type == DBType.MSSQL:
+        field_values_builder.append(f"{indent}IF @{col_var_name} IS NULL\n")
+        field_values_builder.append(f"{indent}\tSET @sqlCode+='NULL'\n")
+        field_values_builder.append(f"{indent}ELSE\n")
+        
+        # Check if it's a datetime or string type
+        is_datetime = False
+        if not utils.is_type_string(user_type_name, is_datetime):
+            if is_datetime:
+                field_values_builder.append(f"{indent}\tSET @sqlCode+=''''+CAST(@{col_var_name} AS varchar(30))+''''\n")
+            else:
+                field_values_builder.append(f"{indent}\tSET @sqlCode+=CAST(@{col_var_name} AS varchar(30))\n")
+        else:
+            field_values_builder.append(f"{indent}\tSET @sqlCode+= ''''+@{col_var_name}+''''\n")
+        
+    elif db_type == DBType.PostgreSQL:
+        field_values_builder.append(f"{indent}IF (temprow.{col_name} IS NULL) THEN\n")
+        field_values_builder.append(f"{indent}\tsqlCode = sqlCode || 'NULL';\n")
+        field_values_builder.append(f"{indent}ELSE\n")
+        
+        # Check if it's a datetime or string type
+        is_datetime = False
+        if not utils.is_type_string(user_type_name, is_datetime):
+            if is_datetime:
+                field_values_builder.append(f"{indent}\tsqlCode = sqlCode || '''' || CAST(temprow.{col_name} AS varchar(30)) || '''';\n")
+            else:
+                field_values_builder.append(f"{indent}\tsqlCode = sqlCode || CAST(temprow.{col_name} AS varchar(30));\n")
+        else:
+            field_values_builder.append(f"{indent}\tsqlCode = sqlCode || '''' || temprow.{col_name} ||'''';\n")
+        
+        field_values_builder.append(f"{indent}END IF;\n")
+        field_values_builder.append("\n")

@@ -143,9 +143,9 @@ BEGIN --overall code
             'studentgrades',
             'CREATE TABLE public.studentgrades
 (
-studentid  integer  NOT NULL
-subject  character varying  NOT NULL
-grade  smallint  NOT NULL
+studentid  integer  NOT NULL,
+subject  character varying  NOT NULL,
+grade  smallint  NOT NULL,
 studentgradeid  integer  NOT NULL
 );
 ALTER TABLE public.studentgrades ADD CONSTRAINT studentgrades_pkey PRIMARY KEY
@@ -175,21 +175,21 @@ ALTER TABLE public.studentgrades ALTER COLUMN subject SET DEFAULT ''math''::char
             'CREATE TABLE public.students
 (
 studentid  integer  NOT NULL,
-studentfirstname  character varying  NOT NULL
-studentlastname  character varying  NOT NULL
+studentfirstname  character varying  NOT NULL,
+studentlastname  character varying  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
-)
-;
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -490,6 +490,31 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -605,31 +630,6 @@ grade
 		VALUES ('public','studentgrades','unq_studentid_subj','grade',
 		'2',
 		'2',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
 		False,
 		'False');
 		
@@ -1171,27 +1171,15 @@ IF FOUND THEN
 	DROP TABLE public_students;
 END IF;
 --Data for 'public.students'
-CREATE TABLE public.students
+CREATE TEMP TABLE public_students
 (
 studentid  integer  NULL,
-studentfirstname  character varying  NULL
-studentlastname  character varying  NULL
+studentfirstname  character varying  NULL,
+studentlastname  character varying  NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
-CREATE UNIQUE INDEX students_idx
-ON public.students
-(
-studentfirstname,
-studentlastname
-)
-;
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-;
-ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT 'Scion'::character varying;
+
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
  VALUES ('1','murfi J','Sion','1979-08-15 00:00:00.000',NULL);
@@ -1208,11 +1196,11 @@ studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
 --add status field, and update it:
 ALTER TABLE public_students ADD _CmprState_ smallint NULL;
 --Records to be added:
-UPDATE public_students orig SET _CmprState_=RowState.EXTRA1 FROM public_students t LEFT JOIN public.students p ON t.studentid=p.studentid WHERE orig.studentid = t.studentid  AND p.studentid IS NULL;
+UPDATE public_students orig SET _CmprState_=1 FROM public_students t LEFT JOIN public.students p ON t.studentid=p.studentid WHERE orig.studentid = t.studentid  AND p.studentid IS NULL;
 --add all missing records:
 IF (execCode=True) THEN
 	sqlCode := 'INSERT INTO public.students(studentid, studentfirstname, studentlastname, studentdob, sideoneonly)
- SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _CmprState_=RowState.EXTRA1';
+ SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _CmprState_=1';
 	EXECUTE sqlCode;
 END IF; --of INSERTing into public.students
 END; --end of data section
