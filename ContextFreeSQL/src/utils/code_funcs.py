@@ -162,9 +162,9 @@ def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent
         field_values_builder.append(f"{indent}\tSET @sqlCode+='NULL'\n")
         field_values_builder.append(f"{indent}ELSE\n")
         
-        # Check if it's a datetime or string type
-        is_datetime = False
-        if not utils.is_type_string(user_type_name, is_datetime):
+        # Check if it's a datetime or string type        
+        is_string, is_datetime =  utils.is_type_string(user_type_name)
+        if not is_string:
             if is_datetime:
                 field_values_builder.append(f"{indent}\tSET @sqlCode+=''''+CAST(@{col_var_name} AS varchar(30))+''''\n")
             else:
@@ -178,8 +178,8 @@ def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent
         field_values_builder.append(f"{indent}ELSE\n")
         
         # Check if it's a datetime or string type
-        is_datetime = False
-        if not utils.is_type_string(user_type_name, is_datetime):
+        is_string, is_datetime =  utils.is_type_string(user_type_name)
+        if not is_string:
             if is_datetime:
                 field_values_builder.append(f"{indent}\tsqlCode = sqlCode || '''' || CAST(temprow.{col_name} AS varchar(30)) || '''';\n")
             else:

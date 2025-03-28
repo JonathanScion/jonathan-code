@@ -614,17 +614,17 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write(f"\tIF EXISTS(Select 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}=1)\n")
                 out_buffer.write("\tBEGIN\n")
                 
-                if s_ent_full_name_sql in tables_identity:
+                if s_ent_full_name_sql in ar_tables_identity:
                     out_buffer.write(f"\t\tSET @sqlCode='SET IDENTITY_INSERT {s_ent_full_name_sql} ON'\n")
                     utils.add_exec_sql(db_type, 2, out_buffer)
                 
                 # For MSSQL, remove the # in the temp table name
-                cursor_temp_table_var_name = temp_table_name[1:] if db_type == DBType.MSSQL else temp_table_name
+                cursor_temp_table_var_name = s_temp_table_name[1:] if db_type == DBType.MSSQL else s_temp_table_name
                 
                 out_buffer.write(f"\t\tDECLARE {cursor_temp_table_var_name} CURSOR FAST_FORWARD FOR\n")
                 out_buffer.write("\t\tSelect ")
                 
-                for col_name_select in cols:
+                for col_name_select in ar_cols:
                     out_buffer.write(f"[{col_name_select}],")
                 
                 out_buffer.write(FLD_COMPARE_STATE)
@@ -641,13 +641,13 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 col_count = len(drows_cols)
                 
                 for row_col in drows_cols:
-                    col_var_name = f"{ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
+                    col_var_name = f"{s_ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
                     cols_var_names.append(col_var_name)
                     
                     fields_var_names_declare.append(f"@{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)},@{DIFF_BIT_FLD}{col_var_name} bit")
                     
-                    if script_ops.DataScripting_LeaveReportFieldsUpdated_SaveOldValue:
-                        fields_var_names_declare.append(f", @{existing_fld_val_prefix}{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)}")
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        fields_var_names_declare.append(f", @{EXISTING_FLD_VAL_PREFIX}{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)}")
                     
                     fields_var_names.append(f"@{col_var_name}")
                     field_list.append(f"[{row_col['col_name']}]")
@@ -659,7 +659,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     
                     if count < col_count:
                         fields_var_names_value_list.append("SET @sqlCode+=',' \n")
-                        field_list.append(", ")
+                        #field_list.append(", ") 2025-03-24 no need for it now that we have ','.join. python puts the commas there on its own
                         fields_var_names_declare.append(", ")
                     
                     count += 1
@@ -708,7 +708,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 col_count = len(drows_cols)
                 
                 for row_col in drows_cols:
-                    col_var_name = f"{ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
+                    col_var_name = f"{s_ent_var_name}_{re.sub('[ \\/\\$#:,\\.]', '_', row_col['col_name'])}"
                     cols_var_names.append(col_var_name)
                     
                     field_list.append(row_col["col_name"])
@@ -720,7 +720,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     
                     if count < col_count:
                         fields_var_names_value_list.append("\t\t\tsqlCode = sqlCode || ','; \n")
-                        field_list.append(", ")
+                        #field_list.append(", ") ne nada... we are doing ','.join so proper commans will be there
                     
                     count += 1
                 
@@ -753,7 +753,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("\tEND; --of loop block \n")
             
             # Handle identity tables
-            if s_ent_full_name_sql in tables_identity:
+            if s_ent_full_name_sql in ar_tables_identity:
                 out_buffer.write(f"\t\tSET @sqlCode='SET IDENTITY_INSERT {s_ent_full_name_sql} OFF'\n")
                 utils.add_exec_sql(db_type, 2, out_buffer)
             

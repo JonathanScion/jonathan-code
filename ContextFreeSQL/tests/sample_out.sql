@@ -1152,6 +1152,7 @@ END; --of cursor
 
 
 --Data-----------------------------------------------------------------------------
+DECLARE _CmprState_ smallint;
 DECLARE NumNonEqualRecs INT;
 public_studentsFlagCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
 public_studentgradesFlagCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
@@ -1170,6 +1171,23 @@ WHERE n.nspname like 'pg_temp_%' AND c.relname='public_students' AND pg_catalog.
 IF FOUND THEN
 	DROP TABLE public_students;
 END IF;
+IF (printExec=True AND execCode=False AND public_studentsFlagCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
+	--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
+ VALUES (''1'',''murfi J'',''Sion'',''1979-08-15 00:00:00.000'',NULL);');
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
+ VALUES (''2'',''Raz-Or'',''Sion'',''1976-12-27 00:00:00.000'',NULL);');
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
+ VALUES (''3'',''Yan'',''Scion'',''1973-09-15 00:00:00.000'',NULL);');
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
+ VALUES (''94'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
+
+--END IF;--of Batch INSERT of all the data into public.students
+ELSE --and this begins the INSERT as against potentially existing data
 --Data for 'public.students'
 CREATE TEMP TABLE public_students
 (
@@ -1191,7 +1209,7 @@ studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
  VALUES ('3','Yan','Scion','1973-09-15 00:00:00.000',NULL);
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('4','Dodo','Oh No','1970-03-13 00:00:00.000',NULL);
+ VALUES ('94','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
 
 --add status field, and update it:
 ALTER TABLE public_students ADD _CmprState_ smallint NULL;
@@ -1203,6 +1221,62 @@ IF (execCode=True) THEN
  SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _CmprState_=1';
 	EXECUTE sqlCode;
 END IF; --of INSERTing into public.students
+
+--generating individual DML statements: INSERTS
+IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here
+	PERFORM 1 from public_students s WHERE s._CmprState_=1;
+	IF FOUND THEN
+		declare temprow record;
+		BEGIN
+			FOR temprow IN
+				SELECT studentid,studentfirstname,studentlastname,studentdob,sideoneonly FROM public_students s WHERE s._CmprState_=1
+		LOOP
+			sqlCode='INSERT INTO public.students (studentid, studentfirstname, studentlastname, studentdob, sideoneonly) VALUES (';
+			IF (temprow.studentid IS NULL) THEN
+				sqlCode = sqlCode || 'NULL';
+			ELSE
+				sqlCode = sqlCode || CAST(temprow.studentid AS varchar(30));
+			END IF;
+
+			sqlCode = sqlCode || ','; 
+			IF (temprow.studentfirstname IS NULL) THEN
+				sqlCode = sqlCode || 'NULL';
+			ELSE
+				sqlCode = sqlCode || '''' || temprow.studentfirstname ||'''';
+			END IF;
+
+			sqlCode = sqlCode || ','; 
+			IF (temprow.studentlastname IS NULL) THEN
+				sqlCode = sqlCode || 'NULL';
+			ELSE
+				sqlCode = sqlCode || '''' || temprow.studentlastname ||'''';
+			END IF;
+
+			sqlCode = sqlCode || ','; 
+			IF (temprow.studentdob IS NULL) THEN
+				sqlCode = sqlCode || 'NULL';
+			ELSE
+				sqlCode = sqlCode || '''' || CAST(temprow.studentdob AS varchar(30)) || '''';
+			END IF;
+
+			sqlCode = sqlCode || ','; 
+			IF (temprow.sideoneonly IS NULL) THEN
+				sqlCode = sqlCode || 'NULL';
+			ELSE
+				sqlCode = sqlCode || CAST(temprow.sideoneonly AS varchar(30));
+			END IF;
+
+			sqlCode = sqlCode ||  ')';
+			IF (printExec=True) THEN
+				INSERT INTO scriptoutput (SQLText)
+				VALUES (sqlCode);
+			END IF;
+		END LOOP;
+	END; --of loop block 
+END IF; --of IF FOUND record iteration (temprow) 
+END IF; --of generating DML statements: INSERT for public.students
+END IF;--of INSERT as against potentially existing data
+
 END; --end of data section
 	--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
 --Add indexes: new, or ones dropped before because they were different or underlying columns where different
