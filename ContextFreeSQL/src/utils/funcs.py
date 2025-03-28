@@ -101,21 +101,36 @@ def val_if_null(value: Any, default: Any) -> Any:
 def c_to_bool(value: Any, default: bool = False) -> bool:
     return bool(value) if value is not None else default
 
-def is_type_string(type_name, out_datetime=False):
+def is_type_string(type_name):
     # Convert argument to lowercase for case-insensitive comparison
     type_lower = type_name.lower()
     
     # Check for string types
     if type_lower in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "character varying"]:
-        return True
+        return [True, False]
     
     # Check for datetime types
-    if type_lower in ["datetime", "smalldatetime", "time"]:
+    if type_lower.startswith(("time", "date")): #going by PG: https://www.postgresql.org/docs/current/datatype-datetime.html before was: case ["datetime", "smalldatetime", "time"]
         # In Python we can't modify a boolean directly by reference,
         # but if the caller passes a list with one boolean element, we can modify that
-        if isinstance(out_datetime, list) and len(out_datetime) > 0:
-            out_datetime[0] = True
+        return [False, True]
+    
+    # Not a string or datetime type
+    return [False, False]
+
+
+""""
+"maybe will need this someday:"
+def is_pgsql_quote_required(type_name):
+    # Convert argument to lowercase for case-insensitive comparison
+    type_lower = type_name.lower()
+    
+    # Check for datetime types
+    if type_lower.startswith(("varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "character varying"))  or type_lower.startswith(("time", "date")): #going by PG: https://www.postgresql.org/docs/current/datatype-datetime.html before was: case ["datetime", "smalldatetime", "time"]
+        # In Python we can't modify a boolean directly by reference,
+        # but if the caller passes a list with one boolean element, we can modify that
         return False
     
     # Not a string or datetime type
-    return False
+    return False"
+"""
