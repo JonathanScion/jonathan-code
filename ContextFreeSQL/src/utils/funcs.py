@@ -134,3 +134,13 @@ def is_pgsql_quote_required(type_name):
     # Not a string or datetime type
     return False"
 """
+
+
+
+def can_type_be_compared(type_name):
+    type_name_lower = type_name.lower()
+    
+    if type_name_lower in ["xml", "text", "ntext"]:
+        return False
+    else:
+        return True
