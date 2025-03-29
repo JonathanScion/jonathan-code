@@ -19,17 +19,18 @@ class RowState(Enum):
     EXTRA2 = 2
     DIFF = 3
 
+
+# Constants
+DIFF_BIT_FLD = "_DiffBit_"
+FLD_COMPARE_STATE = "_CmprState_"
+EXISTING_FLD_VAL_PREFIX = "_ExistingVal_"
+NO_UPDATE_FLD = "_NoUpdate_"
+DATA_WINDOW_COL_USED = "_DataWindowColUsed_"
+FLAG_CREATED = "FlagCreated"
+FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
+
 def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO):
-    # Constants
-    DIFF_BIT_FLD = "_DiffBit_"
-    FLD_COMPARE_STATE = "_CmprState_"
-    EXISTING_FLD_VAL_PREFIX = "_ExistingVal_"
-    NO_UPDATE_FLD = "_NoUpdate_"
-    DATA_WINDOW_COL_USED = "_DataWindowColUsed_"
-    FLAG_CREATED = "FlagCreated"
-    FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
-    
-        
+            
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
     
@@ -773,9 +774,990 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("END IF;--of INSERT as against potentially existing data\n")
         
         out_buffer.write("\n")
-     
-    
-    # The second round (deletes/updates) would follow similar patterns
-    # ...
+
+    # Second round: DELETES and UPDATES: most dependent to least dependent
+    drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
+    for drow_ent in drows_ents:
+        s_ent_full_name = f"{drow_ent['EntSchema']}.{drow_ent['EntName'].replace("'", "''")}"
+        if s_ent_full_name in ar_no_script:
+            # Comment was already given for this table. No need for more
+            # add_print(0, out_buffer, f"'Data table '{s_ent_full_name}' has no primary key columns. Data cannot be scripted'")
+            continue
+
+        s_ent_full_name_sql=''
+        if db_type == DBType.MSSQL:
+            s_ent_full_name_sql = f"[{drow_ent['EntSchema']}].[{drow_ent['EntName']}]"
+        elif db_type == DBType.PostgreSQL:
+            s_ent_full_name_sql = f"{drow_ent['EntSchema']}.{drow_ent['EntName']}"
+        
+        s_ent_var_name = re.sub(r'[ \\/\$#:,\.]', '_', f"{drow_ent['EntSchema']}_{drow_ent['EntName']}")
+        s_flag_ent_created = f"{s_ent_var_name}{FLAG_CREATED}"
+
+        if s_ent_full_name_sql in ar_tables_empty:
+            out_buffer.write(f"--Table {s_ent_full_name_sql} needs to be empty: just delete everything\n")
+            
+            if db_type == DBType.MSSQL:
+                out_buffer.write(f"IF exists(select 1 from {s_ent_full_name_sql})\n")
+                out_buffer.write("BEGIN\n")
+                out_buffer.write(f"\tSET {db_syntax.var_prefix}sqlCode='DELETE {s_ent_full_name_sql}' --it should be empty, so just delete everything\n")
+                utils.add_exec_sql(db_type, 1, out_buffer)
+                out_buffer.write("END\n")
+            elif db_type == DBType.PostgreSQL:
+                out_buffer.write(f"IF exists(select 1 from {s_ent_full_name_sql}) THEN\n")
+                out_buffer.write(f"\t{db_syntax.var_prefix}sqlCode='DELETE FROM {s_ent_full_name_sql}'; --it should be empty, so just delete everything\n")
+                utils.add_exec_sql(db_type, 1, out_buffer)
+                out_buffer.write("END IF;\n")
+            
+            continue  # Table is empty - nothing to do here
+
+        s_temp_table_name = f"{db_syntax.temp_table_prefix}{re.sub(r'[ \\/\$#:,\.]', '_', drow_ent['EntSchema'] + '_' + drow_ent['EntName'])}"
+
+        # Check for settings override
+        tbl_settings = None
+        got_settings_override = False
+        
+        #!like comments above, need to decide if we're reactivating this feature
+        #if drow_ent['TableToScript'] is not None:
+        #    ds_data = drow_ent['TableToScript']
+        #    tbl_settings = ds_data.tables[TABLE_NAME_SETTINGS]
+        #    got_settings_override = True
+
+        # Get columns based on settings
+        #if not got_settings_override or tbl_settings is None:
+            #if script_ops.data_window_only:
+            #    drows_cols = tbl_db_tables_cols.select(f"object_id={drow_ent['EntKey']} AND is_computed=0 AND {DATA_WINDOW_COL_USED}=1", "column_id")
+            #else:
+
+        
+        drows_cols = []
+        if db_type == DBType.MSSQL:
+            drows_cols = schema_tables.columns[
+                    (schema_tables.columns["object_id"] == drow_ent["entkey"]) & 
+                    ((schema_tables.columns["is_computed"] == 0))
+                ].sort_values("column_id").to_dict('records')
+        elif db_type == DBType.PostgreSQL:
+            drows_cols = schema_tables.columns[
+                    (schema_tables.columns["object_id"] == drow_ent["entkey"]) & 
+                    ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull()))
+                ].sort_values("column_id").to_dict('records')
+        #else:
+            #drows_cols = tbl_settings.select("IsKey=true OR IsCompare=true")
+
+        # Handle data window specific case
+        tbl_data = None
+        limit_cols_by_data_window = False
+        
+        #!reactivate feature when and if needed
+        #if script_ops.data_window_only:
+            #if drow_ent['TableToScript'] is not None:
+                #ds_data = drow_ent['TableToScript']
+                #tbl_data = ds_data.tables[TABLE_NAME_DATA]
+                #if tbl_data is not None:
+                #    limit_cols_by_data_window = True
+        tbl_data = schema_tables.tables_data[s_ent_full_name] #so instead of the 'TablesToScript' deactivation above, i just put this
+        
+        # Load arrays for faster iteration
+        ar_cols = [] #line 3073 in .net. we are 1 leve in, in iteration of drow_ent for deletes and updates
+        ar_key_cols = []
+        ar_no_key_cols = []
+        ar_no_key_cols_no_compare = []
+        
+        for d_row_col in drows_cols:
+            if limit_cols_by_data_window:
+                if d_row_col['col_name'] not in tbl_data.columns:
+                    continue
+            
+            ar_cols.append(d_row_col['col_name'])
+            
+            # Some types cannot be compared, mark them here
+            if not utils.can_type_be_compared(d_row_col['user_type_name']):
+                ar_no_key_cols_no_compare.append(d_row_col['name'])
+
+        # Find uniqueness
+        if not got_settings_override or tbl_settings is None:
+            if db_type == DBType.MSSQL:
+                drow_unq_index = schema_tables.indexes.query(f"object_id={drow_ent['Entkey']} and is_unique=1").sort_values("is_primary_key DESC", ascending=False).to_dict('records')
+            else:
+                drow_unq_index = schema_tables.indexes.query(f"object_id='{drow_ent['Entkey']}' and is_unique=1").sort_values("is_primary_key DESC", ascending=False).to_dict('records')
+            
+            if len(drow_unq_index) == 0:
+                if s_ent_full_name not in ar_warned_no_script_data_tables:  # So won't warn twice
+                    utils.add_print(db_type, 0, out_buffer, f"'Data table '{s_ent_full_name}' has no uniqueness. Data cannot be scripted'")
+                continue
+            
+            if db_type == DBType.MSSQL:
+                drows_unq_cols = schema_tables.index_cols.query(f"object_id={drow_ent['Entkey']} AND index_id={drow_unq_index[0]['index_id']}").to_dict('records')
+            else:
+                drows_unq_cols = schema_tables.index_cols.query(f"object_id='{drow_ent['Entkey']}' AND index_name='{drow_unq_index[0]['index_name']}'").to_dict('records')
+        else:
+            drows_unq_cols = tbl_settings.select("IsKey=true")
+
+        for d_row_col in drows_unq_cols:
+            ar_key_cols.append(d_row_col['col_name'])
+
+        # Build non-key columns list
+        for col_name in ar_cols:
+            if col_name in ar_key_cols:
+                continue
+            ar_no_key_cols.append(col_name)
+
+        # Records to be removed and updated
+        out_buffer.write("--Records to be deleted or removed: Do not even check if the table was just created\n") #3213 in .net. in iteration for deletes and updates
+        
+        if db_type == DBType.MSSQL:
+            out_buffer.write(f"IF (@{s_flag_ent_created}=0)  --Records to be deleted or removed: do not even check if the table was just created\n")
+            out_buffer.write("BEGIN\n")
+        elif db_type == DBType.PostgreSQL:
+            out_buffer.write(f"IF ({s_flag_ent_created}=False) THEN --Records to be deleted or removed: do not even check if the table was just created\n")
+
+        out_buffer.write("--records to be removed:\n")
+        # Insert the ones we're deleting, just before deleting them
+        if db_type == DBType.MSSQL:
+            out_buffer.write(f"SET @sqlCode='INSERT INTO {s_temp_table_name} (\n")
+            
+            for col_name in ar_cols:
+                out_buffer.write(f"[{col_name}], ")
+            
+            out_buffer.write(f"{FLD_COMPARE_STATE})")  # Last field
+            out_buffer.write(" SELECT ")
+            
+            for col_name in ar_cols:
+                if db_type == DBType.MSSQL:
+                    out_buffer.write(f"p.[{col_name}], ")
+                elif db_type == DBType.PostgreSQL:
+                    out_buffer.write(f"p.{col_name}, ")
+            
+            out_buffer.write(f"''{RowState.EXTRA2.value}''")
+            
+            # Check for WHERE clause
+            #! again, this feature, may activate if there's a need, maybe never
+            #s_where = None
+            #if drow_ent['TableToScript'] is not None:
+            #    s_where = utils.get_where_from_settings_dset(drow_ent['TableToScript'])
+            
+            #if s_where:
+            #    s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where.replace("'", "''")})"
+            #else:
+            s_source_table_name = s_ent_full_name_sql
+            
+            out_buffer.write(f" FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON ")
+            
+            count = 1
+            col_count = len(ar_key_cols)
+            
+            for col_name in ar_key_cols:
+                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                if count < col_count:
+                    out_buffer.write(" AND ")
+                count += 1
+            
+            out_buffer.write(f" WHERE (t.[{ar_key_cols[0]}] IS NULL)'\n")
+            
+            if not script_ops.data_window_only:
+                out_buffer.write("EXEC (@sqlCode)\n")
+            else:
+                out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
+        
+        elif db_type == DBType.PostgreSQL:
+            out_buffer.write(f"sqlCode :='INSERT INTO {s_temp_table_name} (\n")
+            
+            for col_name in ar_cols:
+                out_buffer.write(f"{col_name}, ")
+            
+            out_buffer.write(f"{FLD_COMPARE_STATE})")  # Last field
+            out_buffer.write(" SELECT ")
+            
+            for col_name in ar_cols:
+                out_buffer.write(f"p.{col_name}, ")
+            
+            out_buffer.write(f"''{RowState.EXTRA2.value}''")
+            
+            # Check for WHERE clause
+            # !again, this feature, may activate if there's a need, maybe never
+            #s_where = None
+            #if drow_ent['TableToScript'] is not None:
+            #    s_where = utils.get_where_from_settings_dset(drow_ent['TableToScript'])
+            
+            #if s_where:
+            #    s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where.replace("'", "''")})"
+            #else:
+            s_source_table_name = s_ent_full_name_sql
+            
+            out_buffer.write(f" FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON ")
+            
+            count = 1
+            col_count = len(ar_key_cols)
+            
+            for col_name in ar_key_cols:
+                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                if count < col_count:
+                    out_buffer.write(" AND ")
+                count += 1
+            
+            out_buffer.write(f" WHERE (t.{ar_key_cols[0]} IS NULL)';\n")
+            
+            if not script_ops.data_window_only:
+                out_buffer.write("EXECUTE sqlCode;\n")
+            else:
+                out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
+
+        # Remove all extra records
+        s_source_table_name = "" #3221 in .net
+        if db_type == DBType.MSSQL:
+            out_buffer.write("IF NOT (@printExec=1 AND @execCode=0 AND @" + s_flag_ent_created + "=1) --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there\n")
+            out_buffer.write("BEGIN\n")
+            out_buffer.write("\n")
+            out_buffer.write("--remove all extra records:\n")
+            out_buffer.write(f"If ({db_syntax.var_prefix}execCode=1)\n")
+            out_buffer.write("BEGIN\n")
+            
+            if s_where:
+                s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where.replace("'", "''")})"
+            else:
+                s_source_table_name = s_ent_full_name_sql
+            
+            out_buffer.write(f"\tSET {db_syntax.var_prefix}sqlCode = 'DELETE {s_ent_full_name_sql} FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON ")
+            
+            count = 1
+            col_count = len(ar_key_cols)
+            
+            for col_name in ar_key_cols:
+                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                if count < col_count:
+                    out_buffer.write(" AND ")
+                count += 1
+            
+            out_buffer.write(f" WHERE (t.[{ar_key_cols[0]}] IS NULL OR ({FLD_COMPARE_STATE}={RowState.EXTRA2.value}))'")
+            out_buffer.write(f" --Need to check {FLD_COMPARE_STATE} in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table\n")
+            
+            if not script_ops.data_window_only:
+                out_buffer.write(f"\tEXEC ({db_syntax.var_prefix}sqlCode)\n")
+            else:
+                out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
+            
+            out_buffer.write("END --'of: 'remove all extra recods'\n")
+        
+        elif db_type == DBType.PostgreSQL:
+            out_buffer.write(f"IF NOT (printExec=True AND execCode=False AND {s_flag_ent_created}=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there\n")
+            out_buffer.write("--remove all extra records:\n")
+            out_buffer.write(f"If ({db_syntax.var_prefix}execCode=True) THEN\n")
+            
+            if s_where:
+                s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where.replace("'", "''")})"
+            else:
+                s_source_table_name = s_ent_full_name_sql
+            
+            out_buffer.write(f"\tsqlCode = 'DELETE FROM {s_source_table_name} orig USING {s_temp_table_name} AS p LEFT JOIN {s_temp_table_name} AS t ON ")
+            
+            # Build WHERE key clause
+            s_where_key_clause = []
+            count = 1
+            col_count = len(ar_key_cols)
+            
+            for col_name in ar_key_cols:
+                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                s_where_key_clause.append(f"orig.{col_name}=t.{col_name}")
+                
+                if count < col_count:
+                    out_buffer.write(" AND ")
+                count += 1
+            
+            s_where_key_str = " AND ".join(s_where_key_clause)
+            out_buffer.write(f" WHERE ({s_where_key_str}) AND (t.{ar_key_cols[0]} IS NULL OR (t.{FLD_COMPARE_STATE}={RowState.EXTRA2.value}))';")
+            out_buffer.write(f" --Need to check {FLD_COMPARE_STATE} in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table\n")
+            
+            if not script_ops.data_window_only:
+                out_buffer.write("EXECUTE sqlCode;\n")
+            else:
+                out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
+            
+            out_buffer.write("END IF; --'of: 'remove all extra recods'\n")
+            out_buffer.write("END IF; --Of 'Records to be deleted or removed: do not even check if the table was just created'\n")
+            out_buffer.write("END IF; --of table was just created\n")
+        
+        out_buffer.write("\n")
+
+        # Records in both: find which need to be updated #3288
+        if db_type == DBType.MSSQL:
+            if (len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)) > 0:  # Could be a table that PK actually covers all fields
+                out_buffer.write("--records in both: find which need to be updated\n")
+                out_buffer.write(f"SET {db_syntax.var_prefix}sqlCode = 'UPDATE {s_temp_table_name} SET {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                out_buffer.write(f" FROM {s_temp_table_name} t INNER JOIN {s_source_table_name} p ON ")
+                
+                count = 1
+                col_count = len(ar_key_cols)
+                
+                for key_col_name in ar_key_cols:
+                    out_buffer.write(f"t.{key_col_name} = p.{key_col_name}")
+                    if count < col_count:
+                        out_buffer.write(" AND ")
+                    count += 1
+                
+                out_buffer.write(" WHERE ")
+                
+                count = 1
+                col_count = len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)
+                
+                for no_key_col_name in ar_no_key_cols:
+                    if no_key_col_name in ar_no_key_cols_no_compare:
+                        continue
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write("((")
+                    
+                    out_buffer.write(f"(t.[{no_key_col_name}]<> p.[{no_key_col_name}]) OR (t.[{no_key_col_name}] IS NULL AND p.[{no_key_col_name}] IS NOT NULL) OR (t.[{no_key_col_name}] IS NOT NULL AND p.[{no_key_col_name}] IS NULL)")
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write(f") AND {NO_UPDATE_FLD}{no_key_col_name} IS NULL)")
+                    
+                    if count < col_count:
+                        out_buffer.write(" OR ")
+                    
+                    count += 1
+                
+                out_buffer.write("'\n")
+                out_buffer.write("EXEC (@sqlCode)\n")
+        
+        elif db_type == DBType.PostgreSQL:
+            if (len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)) > 0:  # Could be a table that PK actually covers all fields
+                out_buffer.write("--records in both: find which need to be updated\n")
+                out_buffer.write(f"sqlCode = 'UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                out_buffer.write(f" FROM {s_temp_table_name} t WHERE (\n")
+                
+                count = 1
+                col_count = len(ar_key_cols)
+                
+                for key_col_name in ar_key_cols:
+                    out_buffer.write(f"orig.{key_col_name} = t.{key_col_name}")
+                    if count < col_count:
+                        out_buffer.write(" AND ")
+                    count += 1
+                
+                out_buffer.write(") AND ( ")
+                
+                count = 1
+                col_count = len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)
+                
+                for no_key_col_name in ar_no_key_cols:
+                    if no_key_col_name in ar_no_key_cols_no_compare:
+                        continue
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write("((")
+                    
+                    out_buffer.write(f"(orig.{no_key_col_name}<> t.{no_key_col_name}) OR (orig.{no_key_col_name} IS NULL AND t.{no_key_col_name} IS NOT NULL) OR (orig.{no_key_col_name} IS NOT NULL AND t.{no_key_col_name} IS NULL)")
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write(f") AND {NO_UPDATE_FLD}{no_key_col_name} IS NULL)")
+                    
+                    if count < col_count:
+                        out_buffer.write(" OR ")
+                    
+                    count += 1
+                
+                out_buffer.write(")';\n")
+                out_buffer.write("EXECUTE sqlCode; --flagging the temp table with records that need to be updated\n")
+
+        out_buffer.write("\n")
+        out_buffer.write("--update fields that are different:\n") #3346. we are in the updates and deletes look per entity. so 2 tabs ident is good
+        # Handle field updates
+        if db_type == DBType.MSSQL:
+            for col_name in ar_no_key_cols:
+                # First, report it (this must be done BEFORE we actually update)
+                if script_ops.data_scripting_leave_report_fields_updated:
+                    out_buffer.write(f"--Updating differences in '{col_name}' for reporting purposes\n")
+                    out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD [{DIFF_BIT_FLD}{col_name}] bit NULL\n")
+                    
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        drows_col = schema_tables.columns.query(f"object_id={drow_ent['EntKey']} AND name='{col_name}'")
+                        if len(drows_col) != 1:
+                            raise Exception(f"Internal error: column '{col_name}' not found when about to script retaining its existing value")
+                        
+                        out_buffer.write("--and retaining old value for full report\n")
+                        out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD [{EXISTING_FLD_VAL_PREFIX}{drows_col[0]['name']}] {drows_col[0]['user_type_name']} {code_funcs.add_size_precision_scale(drows_col[0])} NULL\n")
+                    
+                    out_buffer.write(f"SET @sqlCode='UPDATE {s_temp_table_name} SET [{DIFF_BIT_FLD}{col_name}] = 1, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                    
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        out_buffer.write(f",[{EXISTING_FLD_VAL_PREFIX}{col_name}] = p.[{col_name}]\n")
+                    
+                    out_buffer.write(f" FROM {s_temp_table_name} t INNER JOIN {s_source_table_name} p ON ")
+                    
+                    count = 1
+                    col_count = len(ar_key_cols)
+                    
+                    for key_col_name in ar_key_cols:
+                        out_buffer.write(f"t.{key_col_name} = p.{key_col_name}")
+                        if count < col_count:
+                            out_buffer.write(" AND ")
+                        count += 1
+                    
+                    out_buffer.write(" WHERE ")
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write("(")
+                    
+                    if col_name not in ar_no_key_cols_no_compare:
+                        out_buffer.write(f"(t.[{col_name}]<> p.[{col_name}]) OR ")
+                    else:
+                        out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
+                    
+                    out_buffer.write(f"(t.[{col_name}] IS NULL AND p.[{col_name}] IS NOT NULL) OR (t.[{col_name}] IS NOT NULL AND p.[{col_name}] IS NULL)")
+                    
+                    if script_ops.data_window_got_specific_cells:
+                        out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
+                    
+                    out_buffer.write("'\n")
+                    out_buffer.write("EXEC (@sqlCode)\n")
+                
+                out_buffer.write("If (@execCode=1)\n") #3390
+                out_buffer.write("BEGIN\n")
+                out_buffer.write(f"\tSET @sqlCode='UPDATE {s_ent_full_name_sql} SET [{col_name}] = t.[{col_name}]\n")
+                out_buffer.write(f" FROM {s_ent_full_name_sql} p INNER JOIN {s_temp_table_name} t ON ")
+                
+                count = 1
+                col_count = len(ar_key_cols)
+                
+                for key_col_name in ar_key_cols:
+                    out_buffer.write(f"p.[{key_col_name}] = t.[{key_col_name}]")
+                    if count < col_count:
+                        out_buffer.write(" AND ")
+                    count += 1
+                
+                out_buffer.write(" WHERE ")
+                
+                if script_ops.data_window_got_specific_cells:
+                    out_buffer.write("(")
+                
+                if col_name not in ar_no_key_cols_no_compare:
+                    out_buffer.write(f"(t.[{col_name}]<> p.[{col_name}]) OR ")
+                else:
+                    out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
+                
+                out_buffer.write(f"(t.[{col_name}] IS NULL AND p.[{col_name}] IS NOT NULL) OR (t.[{col_name}] IS NOT NULL AND p.[{col_name}] IS NULL)")
+                
+                if script_ops.data_window_got_specific_cells:
+                    out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
+                
+                out_buffer.write("'\n")
+                out_buffer.write("\tEXEC (@sqlCode)\n")
+                out_buffer.write("END\n")
+        
+        elif db_type == DBType.PostgreSQL: #3418
+            for col_name in ar_no_key_cols:
+                # First, report it (this must be done BEFORE we actually update)
+                if script_ops.data_scripting_leave_report_fields_updated:
+                    out_buffer.write(f"--Updating differences in '{col_name}' for reporting purposes\n")
+                    out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD {DIFF_BIT_FLD}{col_name} Boolean NULL;\n")
+                    
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        if db_type == DBType.MSSQL:
+                            drows_col = schema_tables.columns.query(f"object_id={drow_ent['EntKey']} AND col_name='{col_name}'")
+                        elif db_type == DBType.PostgreSQL:
+                            drows_col = schema_tables.columns.query(f"object_id='{drow_ent['EntKey']}' AND col_name='{col_name}'")
+                        
+                        if len(drows_col) != 1:
+                            raise Exception(f"Internal error: column '{col_name}' not found when about to script retaining its existing value")
+                        
+                        out_buffer.write("--and retaining old value for full report\n")
+                        out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD {EXISTING_FLD_VAL_PREFIX}{drows_col[0]['col_name']} {drows_col[0]['user_type_name']} {code_funcs.add_size_precision_scale(drows_col[0])} NULL;\n")
+                    
+                    if db_type == DBType.MSSQL:
+                        out_buffer.write(f"SET @sqlCode='UPDATE {s_temp_table_name} SET {DIFF_BIT_FLD}{col_name} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                        
+                        if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                            out_buffer.write(f",{EXISTING_FLD_VAL_PREFIX}{col_name} = p.{col_name}\n")
+                        
+                        out_buffer.write(f" FROM {s_temp_table_name} t INNER JOIN {s_source_table_name} p ON ")
+                        
+                        count = 1
+                        col_count = len(ar_key_cols)
+                        
+                        for key_col_name in ar_key_cols:
+                            out_buffer.write(f"t.{key_col_name}= p.{key_col_name}")
+                            if count < col_count:
+                                out_buffer.write(" AND ")
+                            count += 1
+                        
+                        out_buffer.write(" WHERE ")
+                        
+                        if script_ops.data_window_got_specific_cells:
+                            out_buffer.write("(")
+                        
+                        if col_name not in ar_no_key_cols_no_compare:
+                            out_buffer.write(f"(t.{col_name}<> p.{col_name}) OR ")
+                        else:
+                            out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
+                        
+                        out_buffer.write(f"(t.{col_name} IS NULL AND p.{col_name} IS NOT NULL) OR (t.{col_name} IS NOT NULL AND p.{col_name} IS NULL)")
+                        
+                        if script_ops.data_window_got_specific_cells:
+                            out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
+                        
+                        out_buffer.write("';")
+                        out_buffer.write("EXECUTE sqlCode;")
+                    
+                    elif db_type == DBType.PostgreSQL:
+                        out_buffer.write(f"sqlCode='UPDATE {s_temp_table_name} orig SET {DIFF_BIT_FLD}{col_name} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                        
+                        if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                            out_buffer.write(f",{EXISTING_FLD_VAL_PREFIX}{col_name} = p.{col_name}\n")
+                        
+                        out_buffer.write(f" FROM {s_source_table_name} p ")
+                        out_buffer.write(" WHERE (")
+                        
+                        count = 1
+                        col_count = len(ar_key_cols)
+                        
+                        for key_col_name in ar_key_cols:
+                            out_buffer.write(f"orig.{key_col_name} = p.{key_col_name}")
+                            if count < col_count:
+                                out_buffer.write(" AND ")
+                            count += 1
+                        
+                        out_buffer.write(") AND (")
+                        
+                        if script_ops.data_window_got_specific_cells:
+                            out_buffer.write("(")
+                        
+                        if col_name not in ar_no_key_cols_no_compare:
+                            out_buffer.write(f"(orig.{col_name}<> p.{col_name}) OR ")
+                        else:
+                            out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
+                        
+                        out_buffer.write(f"(orig.{col_name} IS NULL AND p.{col_name} IS NOT NULL) OR (orig.{col_name} IS NOT NULL AND p.{col_name} IS NULL)")
+                        
+                        if script_ops.data_window_got_specific_cells:
+                            out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
+                        
+                        out_buffer.write(")';")
+                        out_buffer.write("EXECUTE sqlCode;") #3494. and ther's no END IF below so for now deactivating
+                        #out_buffer.write("END IF;\n")
+
+                out_buffer.write("If (execCode=True) THEN\n")
+                out_buffer.write(f"\tsqlCode ='UPDATE {s_ent_full_name_sql} orig SET {col_name} = p.{col_name}\n")
+                out_buffer.write(f" FROM {s_temp_table_name} p \n")
+                out_buffer.write(" WHERE (")
+
+                # The table to itself - required in PG, not in MS
+                count = 1
+                col_count = len(ar_key_cols)
+                for key_col_name in ar_key_cols:
+                    out_buffer.write(f"orig.{key_col_name} = p.{key_col_name}")
+                    if count < col_count:
+                        out_buffer.write(" AND ")
+                    count += 1
+
+                out_buffer.write(") AND (")
+
+                if script_ops.data_window_got_specific_cells:
+                    out_buffer.write("(")
+
+                if col_name not in ar_no_key_cols_no_compare:  # MPBF
+                    out_buffer.write(f"(orig.{col_name}<> p.{col_name}) OR ")  # If that field cannot be compared (say, type XML) simply update if one is null and the other isn't
+                else:
+                    out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
+
+                out_buffer.write(f"(orig.{col_name} IS NULL AND p.{col_name} IS NOT NULL) OR (orig.{col_name} IS NOT NULL AND p.{col_name} IS NULL))")
+
+                if script_ops.data_window_got_specific_cells:
+                    out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
+
+                out_buffer.write("';\n")
+                out_buffer.write("\tEXECUTE sqlCode;\n")
+                out_buffer.write("END IF;\n")
+
+        
+        # Generate individual DML statements for delete, update
+        if script_ops.data_scripting_generate_dml_statements: #3531
+            out_buffer.write("\n")
+            
+            if db_type == DBType.MSSQL:
+                out_buffer.write("--generating individual DML statements: DELETE, UPDATE\n")
+                out_buffer.write("IF (@printExec=1 ) --only if asked to print, since that's the only reason they are here\n")
+                out_buffer.write("BEGIN\n")
+                
+                cursor_temp_table_var_name = s_temp_table_name[1:]  # Remove the #
+                out_buffer.write(f"DECLARE {cursor_temp_table_var_name} CURSOR FAST_FORWARD FOR\n")
+                out_buffer.write("SELECT ")
+                
+                for col_name_select in ar_cols:
+                    out_buffer.write(f"[{col_name_select}], ")
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        if col_name_select not in ar_key_cols:  # We don't do it for key columns
+                            out_buffer.write(f"[{EXISTING_FLD_VAL_PREFIX}{col_name_select}], ")
+                
+                out_buffer.write(f"[{FLD_COMPARE_STATE}]")
+                
+                if len(ar_no_key_cols) > 0:
+                    out_buffer.write(",")
+                
+                # Add flag fields
+                count = 1
+                col_count = len(ar_no_key_cols)
+                
+                for col_name in ar_no_key_cols:
+                    out_buffer.write(f"[{DIFF_BIT_FLD}{col_name}]")
+                    if count < col_count:
+                        out_buffer.write(",")
+                    count += 1
+                
+                out_buffer.write(f" FROM {s_temp_table_name} WHERE {FLD_COMPARE_STATE} IN ({RowState.EXTRA2.value},{RowState.DIFF.value})\n")  # Deleted, updated
+                
+                # Create variable names and SQL builders
+                fields_var_names = []
+                field_list = []
+                fields_update_set_list = StringIO()
+                fields_flag_varnames = []
+                cols_var_names = []
+                
+                count = 1
+                col_count = len(drows_cols)
+                
+                for d_row_col in drows_cols:
+                    if limit_cols_by_data_window:
+                        if d_row_col['name'] not in tbl_data.columns:
+                            continue
+                    
+                    col_var_name = f"{s_ent_var_name}_{re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])}"
+                    cols_var_names.append(col_var_name)
+                    
+                    fields_var_names.append(f"@{col_var_name}")
+                    field_list.append(f"[{d_row_col['col_name']}]")
+                    
+                    if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                        if d_row_col['col_name'] not in ar_key_cols:  # We don't do it for key columns
+                            fields_var_names.append(f", @{EXISTING_FLD_VAL_PREFIX}{col_var_name}")
+                            field_list.append(f", [{EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']}]")
+                    
+                    # Add update SET list according to type
+                    add_var_update_to_sql_str(
+                        db_type = db_type,
+                        db_syntax = db_syntax,
+                        col_name = d_row_col['col_name'],
+                        var_name = col_var_name,
+                        type_name = d_row_col['user_type_name'],
+                        pref_each_line = "\t\t\t",
+                        script = fields_update_set_list,
+                        save_old_value = script_ops.data_scripting_leave_report_fields_updated_save_old_value
+                    )
+                    
+                    fields_var_names.append(", ")
+                    
+                    if count < col_count:
+                        field_list.append(", ")
+                    
+                    count += 1
+                
+                # Build flag variables names
+                count = 1
+                col_count = len(ar_no_key_cols)
+                
+                for col_name in ar_no_key_cols:
+                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', col_name)
+                    fields_flag_varnames.append(f"@{DIFF_BIT_FLD}{s_ent_var_name}_{col_var_name}")
+                    if count < col_count:
+                        fields_flag_varnames.append(",")
+                    count += 1
+                
+                # Build primary key WHERE clause
+                str_where_pk = []
+                count = 1
+                col_count = len(drows_unq_cols)
+                
+                for d_row_col in drows_unq_cols:
+                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
+                    where_part = f"[{d_row_col['col_name']}]='''+"
+                    
+                    if utils.is_type_string(d_row_col['user_type_name']):
+                        where_part += f"@{s_ent_var_name}_{col_var_name}"
+                    else:
+                        where_part += f"CAST({db_syntax.var_prefix}{s_ent_var_name}_{col_var_name} AS VARCHAR(20))"
+                    
+                    where_part += "+''''"
+                    
+                    if count < col_count:
+                        where_part += "+' AND  \n"
+                    
+                    str_where_pk.append(where_part)
+                    count += 1
+                
+                str_where_pk_joined = ''.join(str_where_pk)
+                
+                # Add comparison state variable
+                fields_var_names.append(f"@{FLD_COMPARE_STATE}")
+                
+                if fields_flag_varnames:
+                    fields_var_names.append(", ")
+                
+                # Write cursor operations
+                out_buffer.write(f"OPEN {cursor_temp_table_var_name}\n")
+                out_buffer.write(f"FETCH NEXT FROM {cursor_temp_table_var_name} INTO {''.join(fields_var_names)}{''.join(fields_flag_varnames)}\n")
+                out_buffer.write("WHILE @@FETCH_STATUS = 0\n")
+                out_buffer.write("BEGIN\n")
+                out_buffer.write("\t--Does the row need to be added, updated, removed?\n")
+                out_buffer.write("\tSET @sqlCode = NULL --reset\n")
+                out_buffer.write(f"\tIF (@{FLD_COMPARE_STATE}={RowState.EXTRA2.value}) --to be dropped\n")
+                out_buffer.write("\tBEGIN\n")
+                out_buffer.write(f"\t\tSET @sqlCode='DELETE FROM {s_ent_full_name_sql} WHERE {str_where_pk_joined}\n")
+                out_buffer.write("\tEND\n")
+                out_buffer.write("\tELSE\n")
+                out_buffer.write("\tBEGIN\n")
+                out_buffer.write(f"\t\tIF (@{FLD_COMPARE_STATE}={RowState.DIFF.value}) --to be updated\n")
+                out_buffer.write("\t\tBEGIN\n")
+                out_buffer.write(f"\t\t\tSET @sqlCode='UPDATE {s_ent_full_name_sql} SET '\n")
+                out_buffer.write(fields_update_set_list.getvalue())
+                
+                out_buffer.write(f"\t\t\tSET @sqlCode = LEFT(@sqlCode,LEN(@sqlCode)-1) + ' WHERE {str_where_pk_joined}\n")
+                out_buffer.write("\t\tEND\n")
+                out_buffer.write("\tEND\n")
+                out_buffer.write("\tIF (@printExec=1) PRINT @sqlCode\n")
+                out_buffer.write("\n")
+                out_buffer.write(f"\tFETCH NEXT FROM {cursor_temp_table_var_name} INTO {''.join(fields_var_names)}{''.join(fields_flag_varnames)}\n")
+                out_buffer.write("End\n")
+                out_buffer.write("\n")
+                out_buffer.write(f"CLOSE {cursor_temp_table_var_name}\n")
+                out_buffer.write(f"DEALLOCATE {cursor_temp_table_var_name}\n")
+                out_buffer.write("END --of generating DML statements: UPDATE, DELETE\n")
+                out_buffer.write("\n")
+            
+            elif db_type == DBType.PostgreSQL: #3654
+                out_buffer.write("--generating individual DML statements: DELETE, UPDATE\n")
+                out_buffer.write("IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here\n")
+                out_buffer.write(f"\tPERFORM 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN ({RowState.EXTRA2.value},{RowState.DIFF.value});\n")
+                out_buffer.write("\tIF FOUND THEN\n")
+                
+                # Variables for PostgreSQL implementation
+                fields_var_names = []
+                field_list = []
+                fields_var_names_value_list = []
+                fields_update_set_list = StringIO()
+                cols_var_names = []
+                
+                count = 1
+                col_count = len(drows_cols)
+                
+                for d_row_col in drows_cols:
+                    if d_row_col['col_name'] in ar_key_cols:
+                        continue  # Skip key columns for this part
+                    
+                    col_var_name = f"{s_ent_var_name}_{re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])}"
+                    cols_var_names.append(col_var_name)
+                    
+                    field_list.append(d_row_col['col_name'])
+                    
+                    # Add update SET list according to type
+                    add_var_update_to_sql_str(
+                        db_type = db_type,
+                        db_syntax = db_syntax,
+                        col_name = d_row_col['col_name'],
+                        var_name = col_var_name,
+                        type_name = d_row_col['user_type_name'],
+                        pref_each_line = "\t\t\t",
+                        script = fields_update_set_list,
+                        save_old_value=script_ops.data_scripting_leave_report_fields_updated_save_old_value
+                    )
+                    
+                    fields_var_names.append(", ")
+                    
+                    if count < col_count:
+                        fields_var_names_value_list.append("\t\t\tsqlCode = sqlCode || ','; \n")
+                        field_list.append(", ")
+                    
+                    count += 1
+                
+                # Build WHERE clause for PostgreSQL
+                str_where_pk = []
+                count = 1
+                col_count = len(drows_unq_cols)
+                
+                for d_row_col in drows_unq_cols:
+                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
+                    where_part = f"s.{d_row_col['col_name']}=''' || "
+                    
+                    if utils.is_type_string(d_row_col['user_type_name']):
+                        where_part += f"temprow.{col_var_name}"
+                    else:
+                        where_part += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
+                    
+                    where_part += " || ''''"
+                    
+                    if count < col_count:
+                        where_part += " || ' AND  \n"
+                    
+                    str_where_pk.append(where_part)
+                    count += 1
+                
+                str_where_pk_joined = ''.join(str_where_pk)
+                
+                # PostgreSQL record loop
+                out_buffer.write("\t\tdeclare temprow record;\n")
+                out_buffer.write("\t\tBEGIN\n")
+                out_buffer.write("\t\t\tFOR temprow IN\n")
+                out_buffer.write("\t\t\t\tSELECT  ")
+                
+                count = 1
+                for d_row_col in drows_cols:
+                    out_buffer.write(f"{d_row_col['col_name']} ")
+                    if d_row_col['col_name'] not in ar_key_cols:
+                        out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
+                        out_buffer.write(f", {EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']}")
+                    
+                    if count < col_count:
+                        out_buffer.write(",")
+                    
+                    count += 1
+                
+                out_buffer.write(f",s.{FLD_COMPARE_STATE}") #3700
+
+                str_where_pk = []
+                count = 1
+                col_count = len(drows_unq_cols)
+
+                for d_row_col in drows_unq_cols:
+                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
+                    where_clause = f"s.{d_row_col['col_name']}=''' || "
+                    
+                    if utils.is_type_string(d_row_col['user_type_name']):
+                        where_clause += f"temprow.{col_var_name}"
+                    else:
+                        where_clause += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
+                    
+                    where_clause += " || ''''"
+                    
+                    if count < col_count:
+                        where_clause += " || ' AND  \n"
+                    
+                    str_where_pk.append(where_clause)
+                    count += 1  # Comment from original: 3/21/14. how come we didn't have it before?? i guess it was all 1-field PK?
+
+                # Join the parts into a single string when needed
+                str_where_pk_joined = ''.join(str_where_pk)
+                
+
+                out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN ({RowState.EXTRA2.value},{RowState.DIFF.value})\n") #3719
+                out_buffer.write("\t\tLOOP\n")
+                out_buffer.write(f"If (temprow._CmprState_={RowState.EXTRA2.value}) THEN --to be dropped\n")
+                out_buffer.write(f"\tsqlCode='DELETE FROM {s_ent_full_name_sql} s WHERE {str_where_pk_joined}; \n")
+                out_buffer.write("\tIf (printExec = True) THEN\n")
+                out_buffer.write("\t\tINSERT INTO scriptoutput (SQLText)\n")
+                out_buffer.write("\t\tVALUES (sqlCode);\n")
+                out_buffer.write("\tEnd If;\n")
+                out_buffer.write("ELSE\n")
+                out_buffer.write(f"If (temprow._CmprState_={RowState.DIFF.value}) THEN--to be updated\n")
+                out_buffer.write(f"\t\t\tsqlCode='UPDATE {s_ent_full_name_sql} orig SET ';\n")                
+                out_buffer.write(fields_update_set_list.getvalue())                
+                out_buffer.write(f"\t\t\tsqlCode = LEFT(sqlCode,LENGTH(sqlCode)-1) || ' WHERE {str_where_pk_joined} ;\n")
+                out_buffer.write("\t\t\tIF (printExec=True) THEN\n")
+                out_buffer.write("\t\t\t\tINSERT INTO scriptoutput (SQLText)\n")
+                out_buffer.write("\t\t\t\tVALUES (sqlCode);\n")
+                out_buffer.write("\t\t\tEND IF;\n")
+                out_buffer.write("\t\tEND IF; --of To be updated\n")
+                out_buffer.write("\tEND IF; --Of If-Then To be dropped\n")
+                out_buffer.write("\t\tEND LOOP;\n")
+                out_buffer.write("\tEND; --of record iteration (temprow) \n")
+                out_buffer.write("\tEND IF; --of IF FOUND (for generating individual DML statements: DELETE, UPDATE)\n")
+                out_buffer.write("END IF; --of if asked to print\n")
+        
+        
+
+        # Final cleanup and table state SQL
+        if db_type == DBType.MSSQL: #3747
+            out_buffer.write("\t\tEND--of DELETing\\UPDATEing " + s_ent_full_name + "\n")
+            out_buffer.write("\tEND --!Of Records To be deleted Or removed, If table wasn't_JustCreated (if just created, not doing any of this)\n")
+            out_buffer.write("\n")
+            out_buffer.write(f"SELECT @NumNonEqualRecs=COUNT(*) FROM {s_temp_table_name} WHERE {FLD_COMPARE_STATE}<>0\n")
+            out_buffer.write("IF @NumNonEqualRecs>0\n")
+            out_buffer.write("BEGIN\n")
+            out_buffer.write("\tPRINT '' --empty line before final report line, for readability\n")
+            
+            comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
+            out_buffer.write(f"\tPRINT '{comment_prefix}SELECT * FROM [{s_temp_table_name}] --to get the full state of the data comparison (column {FLD_COMPARE_STATE}: {RowState.EXTRA1.value}=Added, {RowState.EXTRA2.value}=Removed, {RowState.DIFF.value}=Updated). There were '+CAST(@NumNonEqualRecs AS VARCHAR(10)) +' records that were different'\n")
+            out_buffer.write("END\n")
+        
+        elif db_type == DBType.PostgreSQL:
+            out_buffer.write("\n")
+            out_buffer.write(f"NumNonEqualRecs := COUNT(*) FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}<>1;\n")
+            out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
+            comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
+            utils.add_print(db_type, 1, out_buffer, f"'{comment_prefix}SELECT * FROM {s_temp_table_name} --to get the full state of the data comparison (column {FLD_COMPARE_STATE}: {RowState.EXTRA1.value}=Added, {RowState.EXTRA2.value}=Removed, {RowState.DIFF.value}=Updated). There were ' || NumNonEqualRecs || ' records that were different'")
+            out_buffer.write("END IF;\n")     
     
     out_buffer.write("END; --end of data section\n")
+
+
+
+def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, var_name, type_name, pref_each_line, script: StringIO, save_old_value):
+    if db_type == DBType.MSSQL:
+        script.write(f"IF (@{DIFF_BIT_FLD}{var_name}=1)\n")
+        script.write("BEGIN\n")
+        script.write(f"\tIF @{var_name} IS NULL\n")
+        script.write(f"\t\tSET @sqlCode+='[{col_name}]=NULL'\n")
+        script.write("\tELSE\n")
+        
+        is_datetime = False
+        if not utils.is_type_string(type_name, is_datetime):
+            datetime_prefix = "''" if is_datetime else ""
+            datetime_format = "FORMAT(" if is_datetime else ""
+            datetime_suffix = ", 'yyyy-MM-dd HH:mm:ss.fff')" if is_datetime else ""
+            datetime_quotes = "+''''" if is_datetime else ""
+            
+            script.write(f"\tSET @sqlCode+='[{col_name}]={datetime_prefix}'+CAST({datetime_format}@{var_name}{datetime_suffix} AS varchar(max)){datetime_quotes}\n")
+            
+            if save_old_value:
+                script.write("\n")
+                script.write(f"\tIF @{EXISTING_FLD_VAL_PREFIX}{var_name} IS NULL\n")
+                script.write("\t\t SET @sqlCode += '/*NULL*/'\n")
+                script.write("\tELSE\n")
+                script.write(f"\t\tSET @sqlCode += '/*' + CAST({datetime_format}@{EXISTING_FLD_VAL_PREFIX}{var_name}{datetime_suffix} AS varchar(max)) + '*/'\n")
+        else:
+            script.write(f"\tSET @sqlCode+='[{col_name}]= '''+@{var_name}+''''\n")
+            
+            if save_old_value:
+                script.write("\n")
+                script.write(f"\tIF @{EXISTING_FLD_VAL_PREFIX}{var_name} IS NULL\n")
+                script.write("\t\t SET @sqlCode += '/*NULL*/'\n")
+                script.write("\tELSE\n")
+                script.write(f"\t\tSET @sqlCode += '/*' + @{EXISTING_FLD_VAL_PREFIX}{var_name} + '*/'\n")
+        
+        script.write("\tSET @sqlCode += ','\n")
+        script.write("END\n")
+        
+    elif db_type == DBType.PostgreSQL:
+        script.write(f"{pref_each_line}IF (temprow.{DIFF_BIT_FLD}{col_name}=True) THEN\n")
+        script.write(f"{pref_each_line}\tIF temprow.{col_name} IS NULL THEN\n")
+        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=NULL';\n")
+        script.write(f"{pref_each_line}\tELSE\n")
+        
+        is_datetime = False
+        if not utils.is_type_string_pg(type_name, is_datetime):
+            if is_datetime:
+                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=''' || CAST(Format(CAST(temprow.{col_name} AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS {db_syntax.nvarchar_type})  || '''';\n")
+            else:
+                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=' || CAST(temprow.{col_name} AS {db_syntax.nvarchar_type});\n")
+            
+            if save_old_value:
+                script.write(f"{pref_each_line}\t\tIF temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} IS NULL THEN\n")
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
+                script.write(f"{pref_each_line}\t\tELSE\n")
+                
+                datetime_format = "FORMAT(CAST(" if is_datetime else ""
+                datetime_suffix = " AS character varying), 'yyyy-MM-dd HH:mm:ss.fff')" if is_datetime else ""
+                
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || CAST({datetime_format}temprow.{EXISTING_FLD_VAL_PREFIX}{col_name}{datetime_suffix} As {db_syntax.nvarchar_type}) || '*/';\n")
+                script.write(f"{pref_each_line}\t\tEND IF;\n")
+        else:
+            script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}= ''' || temprow.{col_name} || ''''; --DML Update: set the value\n")
+            
+            if save_old_value:
+                script.write(f"{pref_each_line}\t\tIF temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} IS NULL THEN\n")
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
+                script.write(f"{pref_each_line}\t\tELSE\n")
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} || '*/';\n")
+                script.write(f"{pref_each_line}\t\tEND IF;\n")
+        
+        script.write(f"{pref_each_line}\tEND IF; --of: if field IS NULL\n")
+        script.write(f"{pref_each_line}\tsqlCode = sqlCode || ',';\n")
+        script.write(f"{pref_each_line}END IF; --of: if diffbit flag is true\n")
+    
+    script.write("\n")

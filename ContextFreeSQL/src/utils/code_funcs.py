@@ -189,3 +189,5 @@ def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent
         
         field_values_builder.append(f"{indent}END IF;\n")
         field_values_builder.append("\n")
+
+
