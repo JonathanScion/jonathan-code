@@ -85,7 +85,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
     s_where = None
     ar_no_script = []
     
-    # 1st round: insertions
+    # 1st round: insertions #2278
     for drow_ent in drows_ents:
         s_ent_full_name = drow_ent["entschema"] + "." + drow_ent["entname"].replace("'", "''")
         
@@ -167,7 +167,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull()))
                 ].sort_values("column_id").to_dict('records')
         
-        # Load columns for faster iteration
+        # Load columns for faster iteration #2411
         ar_cols = []
         ar_key_cols = []
         ar_no_key_cols = []
@@ -277,7 +277,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("END IF;\n")
 
         # Handle DML statement generation
-        if script_ops.data_scripting_generate_dml_statements:
+        if script_ops.data_scripting_generate_dml_statements: #2508
             if db_type == DBType.MSSQL:
                 out_buffer.write(f"IF (@printExec=1 AND @execCode=0 AND @{s_flag_ent_created}=1) --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there\n")
                 out_buffer.write("BEGIN\n")
@@ -373,7 +373,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("ELSE --and this begins the INSERT as against potentially existing data\n")
 
         # Write table name comment
-        out_buffer.write(f"--Data for '{s_ent_full_name}'\n")
+        out_buffer.write(f"--Data for '{s_ent_full_name}'\n") #2618
         # Set up temp table options
         ops_script_temp_table = ScriptTableOptions()
         ops_script_temp_table.table_name = s_temp_table_name
@@ -469,7 +469,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         out_buffer.write("\n")
         out_buffer.write("--add status field, and update it:\n")
-        out_buffer.write(f"ALTER TABLE {db_syntax.temp_table_prefix}{s_temp_table_name} ADD {FLD_COMPARE_STATE} smallint NULL;\n")
+        out_buffer.write(f"ALTER TABLE {db_syntax.temp_table_prefix}{s_temp_table_name} ADD {FLD_COMPARE_STATE} smallint NULL;\n") #2707
 
         # Find records to add
         out_buffer.write("--Records to be added:\n")
@@ -778,7 +778,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
     # Second round: DELETES and UPDATES: most dependent to least dependent
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
     for drow_ent in drows_ents:
-        s_ent_full_name = f"{drow_ent['EntSchema']}.{drow_ent['EntName'].replace("'", "''")}"
+        s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname'].replace("'", "''")}"
         if s_ent_full_name in ar_no_script:
             # Comment was already given for this table. No need for more
             # add_print(0, out_buffer, f"'Data table '{s_ent_full_name}' has no primary key columns. Data cannot be scripted'")
@@ -786,11 +786,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         s_ent_full_name_sql=''
         if db_type == DBType.MSSQL:
-            s_ent_full_name_sql = f"[{drow_ent['EntSchema']}].[{drow_ent['EntName']}]"
+            s_ent_full_name_sql = f"[{drow_ent['entschema']}].[{drow_ent['entname']}]"
         elif db_type == DBType.PostgreSQL:
-            s_ent_full_name_sql = f"{drow_ent['EntSchema']}.{drow_ent['EntName']}"
+            s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
         
-        s_ent_var_name = re.sub(r'[ \\/\$#:,\.]', '_', f"{drow_ent['EntSchema']}_{drow_ent['EntName']}")
+        s_ent_var_name = re.sub(r'[ \\/\$#:,\.]', '_', f"{drow_ent['entschema']}_{drow_ent['entname']}")
         s_flag_ent_created = f"{s_ent_var_name}{FLAG_CREATED}"
 
         if s_ent_full_name_sql in ar_tables_empty:
@@ -810,7 +810,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             continue  # Table is empty - nothing to do here
 
-        s_temp_table_name = f"{db_syntax.temp_table_prefix}{re.sub(r'[ \\/\$#:,\.]', '_', drow_ent['EntSchema'] + '_' + drow_ent['EntName'])}"
+        s_temp_table_name = f"{db_syntax.temp_table_prefix}{re.sub(r'[ \\/\$#:,\.]', '_', drow_ent['entschema'] + '_' + drow_ent['entname'])}"
 
         # Check for settings override
         tbl_settings = None
@@ -876,9 +876,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Find uniqueness
         if not got_settings_override or tbl_settings is None:
             if db_type == DBType.MSSQL:
-                drow_unq_index = schema_tables.indexes.query(f"object_id={drow_ent['Entkey']} and is_unique=1").sort_values("is_primary_key DESC", ascending=False).to_dict('records')
+                drow_unq_index = schema_tables.indexes.query(f"object_id=={drow_ent['entkey']} & is_unique==1").sort_values("is_primary_key", ascending=False).to_dict('records')
             else:
-                drow_unq_index = schema_tables.indexes.query(f"object_id='{drow_ent['Entkey']}' and is_unique=1").sort_values("is_primary_key DESC", ascending=False).to_dict('records')
+                drow_unq_index = schema_tables.indexes.query(f"object_id=='{drow_ent['entkey']}' & is_unique==1").sort_values("is_primary_key", ascending=False).to_dict('records')
             
             if len(drow_unq_index) == 0:
                 if s_ent_full_name not in ar_warned_no_script_data_tables:  # So won't warn twice
@@ -886,9 +886,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 continue
             
             if db_type == DBType.MSSQL:
-                drows_unq_cols = schema_tables.index_cols.query(f"object_id={drow_ent['Entkey']} AND index_id={drow_unq_index[0]['index_id']}").to_dict('records')
+                drows_unq_cols = schema_tables.index_cols.query(f"object_id=={drow_ent['entkey']} & index_id=={drow_unq_index[0]['index_id']}").to_dict('records')
             else:
-                drows_unq_cols = schema_tables.index_cols.query(f"object_id='{drow_ent['Entkey']}' AND index_name='{drow_unq_index[0]['index_name']}'").to_dict('records')
+                drows_unq_cols = schema_tables.index_cols.query(f"object_id=='{drow_ent['entkey']}' & index_name=='{drow_unq_index[0]['index_name']}'").to_dict('records')
         else:
             drows_unq_cols = tbl_settings.select("IsKey=true")
 
@@ -1468,8 +1468,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 for d_row_col in drows_unq_cols:
                     col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
                     where_part = f"[{d_row_col['col_name']}]='''+"
-                    
-                    if utils.is_type_string(d_row_col['user_type_name']):
+                    is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
+                    if is_string:
                         where_part += f"@{s_ent_var_name}_{col_var_name}"
                     else:
                         where_part += f"CAST({db_syntax.var_prefix}{s_ent_var_name}_{col_var_name} AS VARCHAR(20))"
@@ -1574,8 +1574,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 for d_row_col in drows_unq_cols:
                     col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
                     where_part = f"s.{d_row_col['col_name']}=''' || "
-                    
-                    if utils.is_type_string(d_row_col['user_type_name']):
+                    is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
+                    if is_string:
                         where_part += f"temprow.{col_var_name}"
                     else:
                         where_part += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
@@ -1617,8 +1617,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 for d_row_col in drows_unq_cols:
                     col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
                     where_clause = f"s.{d_row_col['col_name']}=''' || "
-                    
-                    if utils.is_type_string(d_row_col['user_type_name']):
+                    is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
+                    if is_string:
                         where_clause += f"temprow.{col_var_name}"
                     else:
                         where_clause += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
@@ -1696,7 +1696,8 @@ def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, v
         script.write("\tELSE\n")
         
         is_datetime = False
-        if not utils.is_type_string(type_name, is_datetime):
+        is_string, is_datetime = utils.is_type_string(type_name)
+        if not is_string:
             datetime_prefix = "''" if is_datetime else ""
             datetime_format = "FORMAT(" if is_datetime else ""
             datetime_suffix = ", 'yyyy-MM-dd HH:mm:ss.fff')" if is_datetime else ""
@@ -1730,7 +1731,8 @@ def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, v
         script.write(f"{pref_each_line}\tELSE\n")
         
         is_datetime = False
-        if not utils.is_type_string_pg(type_name, is_datetime):
+        is_string, is_datetime = utils.is_type_string(type_name)
+        if not is_string:
             if is_datetime:
                 script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=''' || CAST(Format(CAST(temprow.{col_name} AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS {db_syntax.nvarchar_type})  || '''';\n")
             else:
