@@ -21,12 +21,12 @@ class RowState(Enum):
 
 
 # Constants
-DIFF_BIT_FLD = "_DiffBit_"
-FLD_COMPARE_STATE = "_CmprState_"
-EXISTING_FLD_VAL_PREFIX = "_ExistingVal_"
-NO_UPDATE_FLD = "_NoUpdate_"
-DATA_WINDOW_COL_USED = "_DataWindowColUsed_"
-FLAG_CREATED = "FlagCreated"
+DIFF_BIT_FLD = "_diffbit_"
+FLD_COMPARE_STATE = "_cmprstate_"
+EXISTING_FLD_VAL_PREFIX = "_existingval_"
+NO_UPDATE_FLD = "_noupdate_"
+DATA_WINDOW_COL_USED = "_dataWindowcolused_"
+FLAG_CREATED = "flagcreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
 def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO):
@@ -694,7 +694,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write(f"\t\tDEALLOCATE {cursor_temp_table_var_name}\n")
                 
             elif db_type == DBType.PostgreSQL:
-                out_buffer.write("--generating individual DML statements: INSERTS\n")
+                out_buffer.write("--generating individual DML statements: INSERTS\n") #2908
                 out_buffer.write("IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here\n")
                 out_buffer.write(f"\tPERFORM 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}=1;\n")
                 out_buffer.write("\tIF FOUND THEN\n")
@@ -713,6 +713,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     cols_var_names.append(col_var_name)
                     
                     field_list.append(row_col["col_name"])
+
+                    #if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                    #    fields_var_names_declare.append(f", @{EXISTING_FLD_VAL_PREFIX}{col_var_name} {row_col['user_type_name']}{code_funcs.add_size_precision_scale(row_col)}")
                     
                     # Add value to SQL string
                     code_funcs.add_value_to_sql_str(db_type, row_col["col_name"], col_var_name, row_col["user_type_name"], "\t\t\t", fields_var_names_value_list)
@@ -742,8 +745,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("\t\tLOOP\n")
                 out_buffer.write(f"\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}) VALUES (';\n")
                 
-                for line in fields_var_names_value_list:
-                    out_buffer.write(line)
+                out_buffer.writelines(fields_var_names_value_list)
                 
                 out_buffer.write("\t\t\tsqlCode = sqlCode ||  ')';\n")
                 out_buffer.write("\t\t\tIF (printExec=True) THEN\n")
@@ -1254,13 +1256,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         if db_type == DBType.MSSQL:
                             drows_col = schema_tables.columns.query(f"object_id={drow_ent['EntKey']} AND col_name='{col_name}'")
                         elif db_type == DBType.PostgreSQL:
-                            drows_col = schema_tables.columns.query(f"object_id='{drow_ent['EntKey']}' AND col_name='{col_name}'")
+                            drows_col = schema_tables.columns.query(f"object_id=='{drow_ent['entkey']}' & col_name=='{col_name}'")
                         
                         if len(drows_col) != 1:
                             raise Exception(f"Internal error: column '{col_name}' not found when about to script retaining its existing value")
                         
                         out_buffer.write("--and retaining old value for full report\n")
-                        out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD {EXISTING_FLD_VAL_PREFIX}{drows_col[0]['col_name']} {drows_col[0]['user_type_name']} {code_funcs.add_size_precision_scale(drows_col[0])} NULL;\n")
+                        precision_scale= code_funcs.add_size_precision_scale(drows_col.iloc[0])
+                        add_col_sql = f"ALTER TABLE {s_temp_table_name} ADD {EXISTING_FLD_VAL_PREFIX}{drows_col.iloc[0]['col_name']} {drows_col.iloc[0]['user_type_name']} {precision_scale} NULL;\n"
+                        out_buffer.write(add_col_sql )
                     
                     if db_type == DBType.MSSQL:
                         out_buffer.write(f"SET @sqlCode='UPDATE {s_temp_table_name} SET {DIFF_BIT_FLD}{col_name} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")

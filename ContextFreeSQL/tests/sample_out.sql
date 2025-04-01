@@ -1152,10 +1152,10 @@ END; --of cursor
 
 
 --Data-----------------------------------------------------------------------------
-DECLARE _CmprState_ smallint;
+DECLARE _cmprstate_ smallint;
 DECLARE NumNonEqualRecs INT;
-public_studentsFlagCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
-public_studentgradesFlagCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+public_studentsflagcreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+public_studentgradesflagcreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
 BEGIN --Data Code
 IF (schemaChanged=True and execCode=False) THEN
 	IF (print=True) THEN
@@ -1163,7 +1163,7 @@ IF (schemaChanged=True and execCode=False) THEN
 		VALUES ('--Note: Changes were found in the schema but not executed (because execution flag is turned off) - Data migration may therefore not work');
 	END IF;
 END IF;
-public_studentsFlagCreated := 0;
+public_studentsflagcreated := 0;
 
 perform n.nspname, c.relname
 FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -1171,7 +1171,7 @@ WHERE n.nspname like 'pg_temp_%' AND c.relname='public_students' AND pg_catalog.
 IF FOUND THEN
 	DROP TABLE public_students;
 END IF;
-IF (printExec=True AND execCode=False AND public_studentsFlagCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
+IF (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
 	--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
@@ -1218,24 +1218,24 @@ studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
  VALUES ('1002','Dodo1','oh no','1970-03-13 00:00:00.000',NULL);
 
 --add status field, and update it:
-ALTER TABLE public_students ADD _CmprState_ smallint NULL;
+ALTER TABLE public_students ADD _cmprstate_ smallint NULL;
 --Records to be added:
-UPDATE public_students orig SET _CmprState_=1 FROM public_students t LEFT JOIN public.students p ON t.studentid=p.studentid WHERE orig.studentid = t.studentid  AND p.studentid IS NULL;
+UPDATE public_students orig SET _cmprstate_=1 FROM public_students t LEFT JOIN public.students p ON t.studentid=p.studentid WHERE orig.studentid = t.studentid  AND p.studentid IS NULL;
 --add all missing records:
 IF (execCode=True) THEN
 	sqlCode := 'INSERT INTO public.students(studentid, studentfirstname, studentlastname, studentdob, sideoneonly)
- SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _CmprState_=1';
+ SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _cmprstate_=1';
 	EXECUTE sqlCode;
 END IF; --of INSERTing into public.students
 
 --generating individual DML statements: INSERTS
 IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here
-	PERFORM 1 from public_students s WHERE s._CmprState_=1;
+	PERFORM 1 from public_students s WHERE s._cmprstate_=1;
 	IF FOUND THEN
 		declare temprow record;
 		BEGIN
 			FOR temprow IN
-				SELECT studentid,studentfirstname,studentlastname,studentdob,sideoneonly FROM public_students s WHERE s._CmprState_=1
+				SELECT studentid,studentfirstname,studentlastname,studentdob,sideoneonly FROM public_students s WHERE s._cmprstate_=1
 		LOOP
 			sqlCode='INSERT INTO public.students (studentid, studentfirstname, studentlastname, studentdob, sideoneonly) VALUES (';
 			IF (temprow.studentid IS NULL) THEN
@@ -1284,30 +1284,33 @@ END IF; --of generating DML statements: INSERT for public.students
 END IF;--of INSERT as against potentially existing data
 
 --Records to be deleted or removed: Do not even check if the table was just created
-IF (public_studentsFlagCreated=False) THEN --Records to be deleted or removed: do not even check if the table was just created
+IF (public_studentsflagcreated=False) THEN --Records to be deleted or removed: do not even check if the table was just created
 --records to be removed:
 sqlCode :='INSERT INTO public_students (
-studentid, studentfirstname, studentlastname, studentdob, sideoneonly, _CmprState_) SELECT p.studentid, p.studentfirstname, p.studentlastname, p.studentdob, p.sideoneonly, ''2'' FROM public.students p LEFT JOIN public_students t ON p.studentid=t.studentid WHERE (t.studentid IS NULL)';
+studentid, studentfirstname, studentlastname, studentdob, sideoneonly, _cmprstate_) SELECT p.studentid, p.studentfirstname, p.studentlastname, p.studentdob, p.sideoneonly, ''2'' FROM public.students p LEFT JOIN public_students t ON p.studentid=t.studentid WHERE (t.studentid IS NULL)';
 EXECUTE sqlCode;
-IF NOT (printExec=True AND execCode=False AND public_studentsFlagCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
+IF NOT (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
 --remove all extra records:
 If (execCode=True) THEN
-	sqlCode = 'DELETE FROM public.students orig USING public_students AS p LEFT JOIN public_students AS t ON p.studentid=t.studentid WHERE (orig.studentid=t.studentid) AND (t.studentid IS NULL OR (t._CmprState_=2))'; --Need to check _CmprState_ in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table
+	sqlCode = 'DELETE FROM public.students orig USING public_students AS p LEFT JOIN public_students AS t ON p.studentid=t.studentid WHERE (orig.studentid=t.studentid) AND (t.studentid IS NULL OR (t._cmprstate_=2))'; --Need to check _cmprstate_ in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table
 EXECUTE sqlCode;
 END IF; --'of: 'remove all extra recods'
 END IF; --Of 'Records to be deleted or removed: do not even check if the table was just created'
 END IF; --of table was just created
 
 --records in both: find which need to be updated
-sqlCode = 'UPDATE public_students orig SET _CmprState_=3
+sqlCode = 'UPDATE public_students orig SET _cmprstate_=3
  FROM public_students t WHERE (
 orig.studentid = t.studentid) AND ( (orig.studentfirstname<> t.studentfirstname) OR (orig.studentfirstname IS NULL AND t.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND t.studentfirstname IS NULL) OR (orig.studentlastname<> t.studentlastname) OR (orig.studentlastname IS NULL AND t.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND t.studentlastname IS NULL) OR (orig.studentdob<> t.studentdob) OR (orig.studentdob IS NULL AND t.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND t.studentdob IS NULL) OR (orig.sideoneonly<> t.sideoneonly) OR (orig.sideoneonly IS NULL AND t.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND t.sideoneonly IS NULL))';
 EXECUTE sqlCode; --flagging the temp table with records that need to be updated
 
 --update fields that are different:
 --Updating differences in 'studentfirstname' for reporting purposes
-ALTER TABLE public_students ADD _DiffBit_studentfirstname Boolean NULL;
-sqlCode='UPDATE public_students orig SET _DiffBit_studentfirstname = True, _CmprState_=3
+ALTER TABLE public_students ADD _diffbit_studentfirstname Boolean NULL;
+--and retaining old value for full report
+ALTER TABLE public_students ADD _existingval_studentfirstname character varying  (100)  NULL;
+sqlCode='UPDATE public_students orig SET _diffbit_studentfirstname = True, _cmprstate_=3
+,_existingval_studentfirstname = p.studentfirstname
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentfirstname<> p.studentfirstname) OR (orig.studentfirstname IS NULL AND p.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND p.studentfirstname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentfirstname = p.studentfirstname
  FROM public_students p 
@@ -1315,8 +1318,11 @@ sqlCode='UPDATE public_students orig SET _DiffBit_studentfirstname = True, _Cmpr
 	EXECUTE sqlCode;
 END IF;
 --Updating differences in 'studentlastname' for reporting purposes
-ALTER TABLE public_students ADD _DiffBit_studentlastname Boolean NULL;
-sqlCode='UPDATE public_students orig SET _DiffBit_studentlastname = True, _CmprState_=3
+ALTER TABLE public_students ADD _diffbit_studentlastname Boolean NULL;
+--and retaining old value for full report
+ALTER TABLE public_students ADD _existingval_studentlastname character varying  (100)  NULL;
+sqlCode='UPDATE public_students orig SET _diffbit_studentlastname = True, _cmprstate_=3
+,_existingval_studentlastname = p.studentlastname
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentlastname<> p.studentlastname) OR (orig.studentlastname IS NULL AND p.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND p.studentlastname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentlastname = p.studentlastname
  FROM public_students p 
@@ -1324,8 +1330,11 @@ sqlCode='UPDATE public_students orig SET _DiffBit_studentlastname = True, _CmprS
 	EXECUTE sqlCode;
 END IF;
 --Updating differences in 'studentdob' for reporting purposes
-ALTER TABLE public_students ADD _DiffBit_studentdob Boolean NULL;
-sqlCode='UPDATE public_students orig SET _DiffBit_studentdob = True, _CmprState_=3
+ALTER TABLE public_students ADD _diffbit_studentdob Boolean NULL;
+--and retaining old value for full report
+ALTER TABLE public_students ADD _existingval_studentdob timestamp without time zone  NULL;
+sqlCode='UPDATE public_students orig SET _diffbit_studentdob = True, _cmprstate_=3
+,_existingval_studentdob = p.studentdob
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentdob<> p.studentdob) OR (orig.studentdob IS NULL AND p.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND p.studentdob IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentdob = p.studentdob
  FROM public_students p 
@@ -1333,8 +1342,11 @@ sqlCode='UPDATE public_students orig SET _DiffBit_studentdob = True, _CmprState_
 	EXECUTE sqlCode;
 END IF;
 --Updating differences in 'sideoneonly' for reporting purposes
-ALTER TABLE public_students ADD _DiffBit_sideoneonly Boolean NULL;
-sqlCode='UPDATE public_students orig SET _DiffBit_sideoneonly = True, _CmprState_=3
+ALTER TABLE public_students ADD _diffbit_sideoneonly Boolean NULL;
+--and retaining old value for full report
+ALTER TABLE public_students ADD _existingval_sideoneonly integer  NULL;
+sqlCode='UPDATE public_students orig SET _diffbit_sideoneonly = True, _cmprstate_=3
+,_existingval_sideoneonly = p.sideoneonly
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.sideoneonly<> p.sideoneonly) OR (orig.sideoneonly IS NULL AND p.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND p.sideoneonly IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET sideoneonly = p.sideoneonly
  FROM public_students p 
@@ -1344,12 +1356,12 @@ END IF;
 
 --generating individual DML statements: DELETE, UPDATE
 IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here
-	PERFORM 1 from public_students s WHERE s._CmprState_ IN (2,3);
+	PERFORM 1 from public_students s WHERE s._cmprstate_ IN (2,3);
 	IF FOUND THEN
 		declare temprow record;
 		BEGIN
 			FOR temprow IN
-				SELECT  studentid studentfirstname , _DiffBit_studentfirstname , _ExistingVal_studentfirstnamestudentlastname , _DiffBit_studentlastname , _ExistingVal_studentlastnamestudentdob , _DiffBit_studentdob , _ExistingVal_studentdobsideoneonly , _DiffBit_sideoneonly , _ExistingVal_sideoneonly,s._CmprState_ FROM public_students s WHERE s._CmprState_ IN (2,3)
+				SELECT  studentid studentfirstname , _diffbit_studentfirstname , _existingval_studentfirstnamestudentlastname , _diffbit_studentlastname , _existingval_studentlastnamestudentdob , _diffbit_studentdob , _existingval_studentdobsideoneonly , _diffbit_sideoneonly , _existingval_sideoneonly,s._cmprstate_ FROM public_students s WHERE s._cmprstate_ IN (2,3)
 		LOOP
 If (temprow._CmprState_=2) THEN --to be dropped
 	sqlCode='DELETE FROM public.students s WHERE s.studentid=''' || CAST( temprow.studentid AS VARCHAR(20)) || ''''; 
@@ -1360,38 +1372,58 @@ If (temprow._CmprState_=2) THEN --to be dropped
 ELSE
 If (temprow._CmprState_=3) THEN--to be updated
 			sqlCode='UPDATE public.students orig SET ';
-			IF (temprow._DiffBit_studentfirstname=True) THEN
+			IF (temprow._diffbit_studentfirstname=True) THEN
 				IF temprow.studentfirstname IS NULL THEN
 					sqlCode = sqlCode || 'studentfirstname=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentfirstname= ''' || temprow.studentfirstname || ''''; --DML Update: set the value
+					IF temprow._existingval_studentfirstname IS NULL THEN
+						sqlCode = sqlCode || '/*NULL*/';
+					ELSE
+						sqlCode = sqlCode || '/*' || temprow._existingval_studentfirstname || '*/';
+					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
 
-			IF (temprow._DiffBit_studentlastname=True) THEN
+			IF (temprow._diffbit_studentlastname=True) THEN
 				IF temprow.studentlastname IS NULL THEN
 					sqlCode = sqlCode || 'studentlastname=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentlastname= ''' || temprow.studentlastname || ''''; --DML Update: set the value
+					IF temprow._existingval_studentlastname IS NULL THEN
+						sqlCode = sqlCode || '/*NULL*/';
+					ELSE
+						sqlCode = sqlCode || '/*' || temprow._existingval_studentlastname || '*/';
+					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
 
-			IF (temprow._DiffBit_studentdob=True) THEN
+			IF (temprow._diffbit_studentdob=True) THEN
 				IF temprow.studentdob IS NULL THEN
 					sqlCode = sqlCode || 'studentdob=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentdob=''' || CAST(Format(CAST(temprow.studentdob AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS character varying)  || '''';
+					IF temprow._existingval_studentdob IS NULL THEN
+						sqlCode = sqlCode || '/*NULL*/';
+					ELSE
+						sqlCode = sqlCode || '/*' || CAST(FORMAT(CAST(temprow._existingval_studentdob AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') As character varying) || '*/';
+					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
 
-			IF (temprow._DiffBit_sideoneonly=True) THEN
+			IF (temprow._diffbit_sideoneonly=True) THEN
 				IF temprow.sideoneonly IS NULL THEN
 					sqlCode = sqlCode || 'sideoneonly=NULL';
 				ELSE
 					sqlCode = sqlCode || 'sideoneonly=' || CAST(temprow.sideoneonly AS character varying);
+					IF temprow._existingval_sideoneonly IS NULL THEN
+						sqlCode = sqlCode || '/*NULL*/';
+					ELSE
+						sqlCode = sqlCode || '/*' || CAST(temprow._existingval_sideoneonly As character varying) || '*/';
+					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
@@ -1408,11 +1440,11 @@ If (temprow._CmprState_=3) THEN--to be updated
 	END IF; --of IF FOUND (for generating individual DML statements: DELETE, UPDATE)
 END IF; --of if asked to print
 
-NumNonEqualRecs := COUNT(*) FROM public_students s WHERE s._CmprState_<>1;
+NumNonEqualRecs := COUNT(*) FROM public_students s WHERE s._cmprstate_<>1;
 IF NumNonEqualRecs>0 THEN
 	IF (print=True) THEN
 		INSERT INTO scriptoutput (SQLText)
-		VALUES ('----SELECT * FROM public_students --to get the full state of the data comparison (column _CmprState_: 1=Added, 2=Removed, 3=Updated). There were ' || NumNonEqualRecs || ' records that were different');
+		VALUES ('----SELECT * FROM public_students --to get the full state of the data comparison (column _cmprstate_: 1=Added, 2=Removed, 3=Updated). There were ' || NumNonEqualRecs || ' records that were different');
 	END IF;
 END IF;
 --Table public.studentgrades needs to be empty: just delete everything
