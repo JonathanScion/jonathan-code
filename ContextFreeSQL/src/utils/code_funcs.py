@@ -122,14 +122,14 @@ def append_commit_changes(buffer: StringIO):
     buffer.write("\n")
 
 def add_size_precision_scale(row_col):
-        type_name_field = "typename"
+        type_name_field = "user_type_name"
         length_field = "max_length"
         precision_field = "precision"
         scale_field = "scale"
         
         type_name = str(row_col[type_name_field])
         
-        if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext"]:
+        if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext", "character varying", "bpchar", "character"]: #2025-04-01 added pg string types
             if row_col[length_field] == 0:
                 return " (max) "  # In SQL 2005+ this means max size
             else:
@@ -145,7 +145,7 @@ def add_size_precision_scale(row_col):
                     if row_col[length_field] == -1:
                         return " (max) "
                     else:
-                        return f" ({row_col[length_field]}) "
+                        return f" ({row_col[length_field]:.0f}) "
         elif type_name.lower() in ["decimal", "numeric"]:
             return f" ({row_col[precision_field]},{row_col[scale_field]}) "
         else:
