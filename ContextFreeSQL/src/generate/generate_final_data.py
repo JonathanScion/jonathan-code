@@ -1601,11 +1601,13 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("\t\t\t\tSELECT  ")
                 
                 count = 1
+                col_count = len(drows_cols)
                 for d_row_col in drows_cols:
                     out_buffer.write(f"{d_row_col['col_name']} ")
                     if d_row_col['col_name'] not in ar_key_cols:
-                        out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
-                        out_buffer.write(f", {EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']}")
+                        if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
+                            out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
+                            out_buffer.write(f", {EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']} ")
                     
                     if count < col_count:
                         out_buffer.write(",")
