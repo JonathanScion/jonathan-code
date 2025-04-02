@@ -180,16 +180,16 @@ studentlastname  character varying  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
-)
-;
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -490,6 +490,31 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -605,31 +630,6 @@ grade
 		VALUES ('public','studentgrades','unq_studentid_subj','grade',
 		'2',
 		'2',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
 		False,
 		'False');
 		
@@ -1184,10 +1184,10 @@ IF (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN 
  VALUES (''3'',''Yan'',''Scion'',''1973-09-15 00:00:00.000'',NULL);');
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''94'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
+ VALUES (''4'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''1002'',''Dodo1'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
+ VALUES (''94'',''Dodo'',''nada-ed'',''1970-03-13 00:00:00.000'',NULL);');
 
 --END IF;--of Batch INSERT of all the data into public.students
 ELSE --and this begins the INSERT as against potentially existing data
@@ -1212,10 +1212,10 @@ studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
  VALUES ('3','Yan','Scion','1973-09-15 00:00:00.000',NULL);
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('94','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
+ VALUES ('4','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('1002','Dodo1','oh no','1970-03-13 00:00:00.000',NULL);
+ VALUES ('94','Dodo','nada-ed','1970-03-13 00:00:00.000',NULL);
 
 --add status field, and update it:
 ALTER TABLE public_students ADD _cmprstate_ smallint NULL;
@@ -1307,10 +1307,7 @@ EXECUTE sqlCode; --flagging the temp table with records that need to be updated
 --update fields that are different:
 --Updating differences in 'studentfirstname' for reporting purposes
 ALTER TABLE public_students ADD _diffbit_studentfirstname Boolean NULL;
---and retaining old value for full report
-ALTER TABLE public_students ADD _existingval_studentfirstname character varying  (100)  NULL;
 sqlCode='UPDATE public_students orig SET _diffbit_studentfirstname = True, _cmprstate_=3
-,_existingval_studentfirstname = p.studentfirstname
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentfirstname<> p.studentfirstname) OR (orig.studentfirstname IS NULL AND p.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND p.studentfirstname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentfirstname = p.studentfirstname
  FROM public_students p 
@@ -1319,10 +1316,7 @@ sqlCode='UPDATE public_students orig SET _diffbit_studentfirstname = True, _cmpr
 END IF;
 --Updating differences in 'studentlastname' for reporting purposes
 ALTER TABLE public_students ADD _diffbit_studentlastname Boolean NULL;
---and retaining old value for full report
-ALTER TABLE public_students ADD _existingval_studentlastname character varying  (100)  NULL;
 sqlCode='UPDATE public_students orig SET _diffbit_studentlastname = True, _cmprstate_=3
-,_existingval_studentlastname = p.studentlastname
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentlastname<> p.studentlastname) OR (orig.studentlastname IS NULL AND p.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND p.studentlastname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentlastname = p.studentlastname
  FROM public_students p 
@@ -1331,10 +1325,7 @@ sqlCode='UPDATE public_students orig SET _diffbit_studentlastname = True, _cmprs
 END IF;
 --Updating differences in 'studentdob' for reporting purposes
 ALTER TABLE public_students ADD _diffbit_studentdob Boolean NULL;
---and retaining old value for full report
-ALTER TABLE public_students ADD _existingval_studentdob timestamp without time zone  NULL;
 sqlCode='UPDATE public_students orig SET _diffbit_studentdob = True, _cmprstate_=3
-,_existingval_studentdob = p.studentdob
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentdob<> p.studentdob) OR (orig.studentdob IS NULL AND p.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND p.studentdob IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET studentdob = p.studentdob
  FROM public_students p 
@@ -1343,10 +1334,7 @@ sqlCode='UPDATE public_students orig SET _diffbit_studentdob = True, _cmprstate_
 END IF;
 --Updating differences in 'sideoneonly' for reporting purposes
 ALTER TABLE public_students ADD _diffbit_sideoneonly Boolean NULL;
---and retaining old value for full report
-ALTER TABLE public_students ADD _existingval_sideoneonly integer  NULL;
 sqlCode='UPDATE public_students orig SET _diffbit_sideoneonly = True, _cmprstate_=3
-,_existingval_sideoneonly = p.sideoneonly
  FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.sideoneonly<> p.sideoneonly) OR (orig.sideoneonly IS NULL AND p.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND p.sideoneonly IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
 	sqlCode ='UPDATE public.students orig SET sideoneonly = p.sideoneonly
  FROM public_students p 
@@ -1361,7 +1349,7 @@ IF (printExec=True) THEN --only if asked to print, since that's the only reason 
 		declare temprow record;
 		BEGIN
 			FOR temprow IN
-				SELECT  studentid studentfirstname , _diffbit_studentfirstname , _existingval_studentfirstnamestudentlastname , _diffbit_studentlastname , _existingval_studentlastnamestudentdob , _diffbit_studentdob , _existingval_studentdobsideoneonly , _diffbit_sideoneonly , _existingval_sideoneonly,s._cmprstate_ FROM public_students s WHERE s._cmprstate_ IN (2,3)
+				SELECT  studentid ,studentfirstname ,studentlastname ,studentdob ,sideoneonly ,s._cmprstate_ FROM public_students s WHERE s._cmprstate_ IN (2,3)
 		LOOP
 If (temprow._CmprState_=2) THEN --to be dropped
 	sqlCode='DELETE FROM public.students s WHERE s.studentid=''' || CAST( temprow.studentid AS VARCHAR(20)) || ''''; 
@@ -1377,11 +1365,6 @@ If (temprow._CmprState_=3) THEN--to be updated
 					sqlCode = sqlCode || 'studentfirstname=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentfirstname= ''' || temprow.studentfirstname || ''''; --DML Update: set the value
-					IF temprow._existingval_studentfirstname IS NULL THEN
-						sqlCode = sqlCode || '/*NULL*/';
-					ELSE
-						sqlCode = sqlCode || '/*' || temprow._existingval_studentfirstname || '*/';
-					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
@@ -1391,11 +1374,6 @@ If (temprow._CmprState_=3) THEN--to be updated
 					sqlCode = sqlCode || 'studentlastname=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentlastname= ''' || temprow.studentlastname || ''''; --DML Update: set the value
-					IF temprow._existingval_studentlastname IS NULL THEN
-						sqlCode = sqlCode || '/*NULL*/';
-					ELSE
-						sqlCode = sqlCode || '/*' || temprow._existingval_studentlastname || '*/';
-					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
@@ -1405,11 +1383,6 @@ If (temprow._CmprState_=3) THEN--to be updated
 					sqlCode = sqlCode || 'studentdob=NULL';
 				ELSE
 					sqlCode = sqlCode || 'studentdob=''' || CAST(Format(CAST(temprow.studentdob AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS character varying)  || '''';
-					IF temprow._existingval_studentdob IS NULL THEN
-						sqlCode = sqlCode || '/*NULL*/';
-					ELSE
-						sqlCode = sqlCode || '/*' || CAST(FORMAT(CAST(temprow._existingval_studentdob AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') As character varying) || '*/';
-					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
@@ -1419,11 +1392,6 @@ If (temprow._CmprState_=3) THEN--to be updated
 					sqlCode = sqlCode || 'sideoneonly=NULL';
 				ELSE
 					sqlCode = sqlCode || 'sideoneonly=' || CAST(temprow.sideoneonly AS character varying);
-					IF temprow._existingval_sideoneonly IS NULL THEN
-						sqlCode = sqlCode || '/*NULL*/';
-					ELSE
-						sqlCode = sqlCode || '/*' || CAST(temprow._existingval_sideoneonly As character varying) || '*/';
-					END IF;
 				END IF; --of: if field IS NULL
 				sqlCode = sqlCode || ',';
 			END IF; --of: if diffbit flag is true
