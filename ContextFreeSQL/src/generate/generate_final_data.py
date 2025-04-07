@@ -26,7 +26,7 @@ FLD_COMPARE_STATE = "_cmprstate_"
 EXISTING_FLD_VAL_PREFIX = "_existingval_"
 NO_UPDATE_FLD = "_noupdate_"
 DATA_WINDOW_COL_USED = "_dataWindowcolused_"
-FLAG_CREATED = "flagcreated"
+FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
 def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO):
@@ -50,7 +50,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
     out_buffer.write(f"DECLARE {db_syntax.var_prefix}NumNonEqualRecs INT;\n")
     
     # Flag for table creates
-    for drow_ent in drows_ents:
+    for drow_ent in drows_ents: 
         s_ent_full_name = drow_ent["entschema"] + "." + drow_ent["entname"].replace("'", "''")
         s_ent_var_name = re.sub(r"[ \\/\\$#:,\.]", "_", drow_ent["entschema"] + "_" + drow_ent["entname"])
         s_flag_ent_created = s_ent_var_name + FLAG_CREATED
@@ -137,7 +137,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             if db_type == DBType.MSSQL:
                 out_buffer.write(f"SET {db_syntax.var_prefix}{s_flag_ent_created}=0\n")
             else:  # PostgreSQL
-                out_buffer.write(f"{db_syntax.var_prefix}{s_flag_ent_created} := 0;\n")
+                out_buffer.write(f"{db_syntax.var_prefix}{s_flag_ent_created} := False;\n")
             
         out_buffer.write("\n")
         
