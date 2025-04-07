@@ -180,16 +180,16 @@ studentlastname  character varying  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
+)
+;
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -490,31 +490,6 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -630,6 +605,31 @@ grade
 		VALUES ('public','studentgrades','unq_studentid_subj','grade',
 		'2',
 		'2',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
 		False,
 		'False');
 		
@@ -1154,8 +1154,8 @@ END; --of cursor
 --Data-----------------------------------------------------------------------------
 DECLARE _cmprstate_ smallint;
 DECLARE NumNonEqualRecs INT;
-public_studentsflagcreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
-public_studentgradesflagcreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+public_students_JustCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
+public_studentgrades_JustCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
 BEGIN --Data Code
 IF (schemaChanged=True and execCode=False) THEN
 	IF (print=True) THEN
@@ -1163,7 +1163,12 @@ IF (schemaChanged=True and execCode=False) THEN
 		VALUES ('--Note: Changes were found in the schema but not executed (because execution flag is turned off) - Data migration may therefore not work');
 	END IF;
 END IF;
-public_studentsflagcreated := 0;
+perform 1 from scripttables T WHERE T.table_schema='public' AND T.table_name='students' AND tablestat=1;
+IF FOUND THEN
+	public_students_JustCreated := true;
+ELSE
+	public_students_JustCreated := false;
+END IF;
 
 perform n.nspname, c.relname
 FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -1171,7 +1176,7 @@ WHERE n.nspname like 'pg_temp_%' AND c.relname='public_students' AND pg_catalog.
 IF FOUND THEN
 	DROP TABLE public_students;
 END IF;
-IF (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
+IF (printExec=True AND execCode=False AND public_students_JustCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
 	--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
@@ -1184,10 +1189,10 @@ IF (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN 
  VALUES (''3'',''Yan'',''Scion'',''1973-09-15 00:00:00.000'',NULL);');
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''4'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
+ VALUES (''94'',''Dodo'',''nada-ed'',''1970-03-13 00:00:00.000'',NULL);');
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''94'',''Dodo'',''nada-ed'',''1970-03-13 00:00:00.000'',NULL);');
+ VALUES (''4'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
 
 --END IF;--of Batch INSERT of all the data into public.students
 ELSE --and this begins the INSERT as against potentially existing data
@@ -1212,10 +1217,10 @@ studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
  VALUES ('3','Yan','Scion','1973-09-15 00:00:00.000',NULL);
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('4','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
+ VALUES ('94','Dodo','nada-ed','1970-03-13 00:00:00.000',NULL);
 INSERT INTO public_students (
 studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('94','Dodo','nada-ed','1970-03-13 00:00:00.000',NULL);
+ VALUES ('4','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
 
 --add status field, and update it:
 ALTER TABLE public_students ADD _cmprstate_ smallint NULL;
@@ -1284,12 +1289,12 @@ END IF; --of generating DML statements: INSERT for public.students
 END IF;--of INSERT as against potentially existing data
 
 --Records to be deleted or removed: Do not even check if the table was just created
-IF (public_studentsflagcreated=False) THEN --Records to be deleted or removed: do not even check if the table was just created
+IF (public_students_JustCreated=False) THEN --Records to be deleted or removed: do not even check if the table was just created
 --records to be removed:
 sqlCode :='INSERT INTO public_students (
 studentid, studentfirstname, studentlastname, studentdob, sideoneonly, _cmprstate_) SELECT p.studentid, p.studentfirstname, p.studentlastname, p.studentdob, p.sideoneonly, ''2'' FROM public.students p LEFT JOIN public_students t ON p.studentid=t.studentid WHERE (t.studentid IS NULL)';
 EXECUTE sqlCode;
-IF NOT (printExec=True AND execCode=False AND public_studentsflagcreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
+IF NOT (printExec=True AND execCode=False AND public_students_JustCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
 --remove all extra records:
 If (execCode=True) THEN
 	sqlCode = 'DELETE FROM public.students orig USING public_students AS p LEFT JOIN public_students AS t ON p.studentid=t.studentid WHERE (orig.studentid=t.studentid) AND (t.studentid IS NULL OR (t._cmprstate_=2))'; --Need to check _cmprstate_ in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table

@@ -443,16 +443,16 @@ def load_all_db_ents() -> pd.DataFrame:
         
         # First, fetch the database entities
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        entities_sql = """SELECT CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,
+        entities_sql = """SELECT CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,
                     table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType , NULL as EntParamList
                 FROM information_schema.tables
                 where table_schema not in ('information_schema', 'pg_catalog') and TABLE_TYPE<>'VIEW'
                 UNION
-                select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
+                select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
                 from information_schema.views
                 where table_schema not in ('information_schema', 'pg_catalog')
                 UNION 
-                select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
+                select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
                     p.proname as EntName,
                     cast(p.prokind as character varying)  as EntBaseType,
                     case p.prokind WHEN 'p' THEN 'Procedure' WHEN 'f' THEN 'Function' END as EntType,
@@ -463,7 +463,7 @@ def load_all_db_ents() -> pd.DataFrame:
                 left join pg_type t on t.oid = p.prorettype 
                 where n.nspname not in ('pg_catalog', 'information_schema')
                 UNION 
-                Select CAST(1 as bit) AS ScriptSchema, CAST(0 as bit) as ScriptData, CAST(0 as bit) as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
+                Select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
                                         trigger_name As EntName,
                                         'TR' as EntBaseType,
                                         'Trigger' as EntType,                                         
