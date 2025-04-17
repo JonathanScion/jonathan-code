@@ -433,7 +433,91 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 #def load_tables_defaults():
      #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
 
+def _load_coded_ents() -> pd.DataFrame:
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql =  """select schema_name, schema_owner as principal_name from information_schema.schemata 
+                    WHERE schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and schema_name NOT LIKE 'pg_temp%' and schema_name NOT LIKE 'pg_toast%'"""
+        cur.execute(sql)
+         
+        results = cur.fetchall()
+        
+        return pd.DataFrame(results)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
+    coded_script_rows = schema_entities[
+        (schema_entities['ScriptSchema'] == True) & 
+        (schema_entities['EntType'] != 'Table')
+    ]
+
+    coded_schema_name_in = []
+    for _, row in coded_script_rows.iterrows():
+        # Add schema.name with quotes for SQL IN clause
+        coded_schema_name_in.append(f"'{row['EntSchema']}.{row['EntName']}'")
+
+    # Join the names with commas to create a complete IN clause string
+    coded_schema_name_in_str = ','.join(coded_schema_name_in)
+
+    if coded_schema_name_in:
+        if db_info.src_db_type == DBType.PostgreSQL:
+            sql_get_coded = f"""
+            Select table_schema || '.' || table_name AS EntKey, table_schema as code_schema, table_name as code_name, 
+                  'V' as EntType, 'View' as EntType_PG, 
+                  'CREATE OR REPLACE VIEW ' || table_schema || '.' || table_name || E'\\nAS\\n' || view_definition AS definition, 
+                  NULL as param_type_list 
+            From information_schema.views
+            Where table_schema Not In ('information_schema', 'pg_catalog')
+            UNION
+            Select n.nspname || '.' || p.proname  AS EntKey, n.nspname as code_schema,
+                p.proname as code_name,    
+                CAST(p.prokind AS char)  AS EntType,
+                CASE 
+                    WHEN p.prokind ='p' THEN 'Procedure'
+                    ELSE 'Function'
+                END EntType_PG,
+                case when l.lanname = 'internal' then p.prosrc
+                    else pg_get_functiondef(p.oid)
+                    end as definition,
+                pg_get_function_arguments(p.oid) as param_type_list 
+            From pg_proc p
+            Left Join pg_namespace n on p.pronamespace = n.oid
+            Left Join pg_language l on p.prolang = l.oid
+            Left Join pg_type t on t.oid = p.prorettype 
+            where n.nspname Not in ('pg_catalog', 'information_schema')
+            AND ( (n.nspname || '.' || p.proname) IN ({','.join(coded_schema_name_in)}) )
+            UNION
+            Select trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As code_schema,
+                trigger_name As code_name,
+                'TR' as EntType, 'Trigger' as EntType_PG, action_statement As definition, NULL as param_type_list 
+            From information_schema.triggers
+            Group By 1, 2, 3, 4, 5, 6
+            """
+            # In implementation, this would be queried using an appropriate DB adapter
+            coded_entities = execute_db_query(sql_get_coded, db_info.conn_str)
+        elif db_info.src_db_type == DBType.MSSQL:
+            sql_get_coded = f"""
+            select CAST(o.object_id as varchar(15)) as EntKey, 
+                   SCHEMA_NAME(o.schema_id) as code_schema, 
+                   o.name as code_name, 
+                   sm.* 
+            from sys.sql_modules sm 
+            inner join sys.objects o on sm.object_id=o.object_id  
+            where SCHEMA_NAME(o.schema_id)+'.'+o.name IN ({','.join(coded_schema_name_in)}) 
+            AND o.type in ('FN','TF','IF','P','TR','V')
+            """
+            # In implementation, this would be queried using an appropriate DB adapter
+            coded_entities = execute_db_query(sql_get_coded, db_info.conn_str)
 
 def load_all_db_ents() -> pd.DataFrame:
     conn = None

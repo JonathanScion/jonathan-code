@@ -4,6 +4,7 @@ from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
+from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
 from src.utils import code_funcs 
 
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
@@ -54,8 +55,13 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
             schema_tables = schema_tables
         )
 
-    #!here will 
-    #create_db_state_temp_tables_for_coded (CreateDBStateTempTables_ForCoded)
+    
+    script_db_state_coded: StringIO = create_db_state_temp_tables_for_coded( #CreateDBStateTempTables_ForCoded
+            db_type = db_type,
+            tbl_ents = tbl_ents,
+            script_ops = scrpt_ops,
+            schema_tables = schema_tables
+        )
     
     buffer.write("\t--Iterate tables, generate all code----------------\n")
 
@@ -124,8 +130,10 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\n\n")
 
     
-    # Write DB state tables
+    # Write DB state tables: for tables, for coded, for security. all state tables
     buffer.write(script_db_state_tables.getvalue())
+    buffer.write("\n\n")
+    buffer.write(script_db_state_coded.getvalue())
     buffer.write("\n\n")
     
     # Write add tables if needed
@@ -226,12 +234,11 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Skip to label
     # Label: SkipTillGotFullTablesData in VB.NET
     
-    # Write coded entities if needed
-    #!reactivate
-    """if j2_coded_ents.getvalue():
+    # Write coded entities if needed    
+    if j2_coded_ents.getvalue():
         buffer.write("--Coded Entities---------------------------------------------------------------\n")
         buffer.write(j2_coded_ents.getvalue())
-        buffer.write("\n")"""
+        buffer.write("\n")
     
     # Write enable/disable entities if needed
     #!reactivate
