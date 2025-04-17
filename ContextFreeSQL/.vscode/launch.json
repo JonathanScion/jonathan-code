@@ -12,6 +12,19 @@
                 "PYTHONPATH": "${workspaceFolder}/ContextFreeSQL",
                 "DOTENV_PATH": "${workspaceFolder}/ContextFreeSQL/.env"
             }
+        },
+        {            
+            "name": "Python Debugger: sqlglot",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.sample_load_sqlglot",
+            "python": "${workspaceFolder}/venv/Scripts/python.exe",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/ContextFreeSQL",
+                "DOTENV_PATH": "${workspaceFolder}/ContextFreeSQL/.env"
+            }
         }
     ]
 }

@@ -64,6 +64,8 @@ class ScriptingOptions:
    script_schemas: bool = True  # turning it off from MA, when doing only data. for now, its always on other wise 07-17-14
    all_schemas: bool = True  # if off, will only script schemas that we are using in entities we chose to script
    script_security: bool = False
+   #code comparison
+   code_compare_no_whitespace : bool = False
 
    # Data scripting options
    data_scripting_leave_report_fields_updated: bool = False
