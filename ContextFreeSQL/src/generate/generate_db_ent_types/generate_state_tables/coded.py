@@ -23,14 +23,13 @@ def create_db_state_temp_tables_for_coded(
     
     # Filter entities for scripting (non-Table types)
     coded_script_rows = tbl_ents[
-            (tbl_ents['ScriptSchema'] == True) & 
-            (tbl_ents['EntType'] != 'Table')
+            (tbl_ents['scriptschema'] == True) & 
+            (tbl_ents['enttype'] != 'Table')
     ]
     
     # Build schema.name list for SQL IN clause
     for _, row in coded_script_rows.iterrows():
-        coded_schema_name_in.append(f"'{row['EntSchema']}.{row['EntName']}'")
-    
+        coded_schema_name_in.append(f"'{row['entschema']}.{row['entname']}'")
     
     
     # Combine both lists for output
@@ -93,8 +92,8 @@ END IF;
     
     # Process entities for scripting
     coded_ents = tbl_ents[
-        (tbl_ents['EntType'] != 'Table') & 
-        (tbl_ents['ScriptSchema'] == True)
+        (tbl_ents['enttype'] != 'Table') & 
+        (tbl_ents['scriptschema'] == True)
     ]
     
     if not coded_ents.empty:
@@ -107,8 +106,8 @@ END IF;
         # Find matching coded entity
         if db_type == DBType.PostgreSQL:
             select_cond = (
-                (coded_ents['code_schema'] == ent_row['EntSchema']) & 
-                (coded_ents['code_name'] == ent_row['EntName'])
+                (coded_ents['code_schema'] == ent_row['entschema']) & 
+                (coded_ents['code_name'] == ent_row['entname'])
             )
             
             # Add param list condition
@@ -125,15 +124,15 @@ END IF;
             matching_rows = coded_ents[select_cond]
         else:
             matching_rows = coded_ents[
-                (coded_ents['code_schema'] == ent_row['EntSchema']) & 
-                (coded_ents['code_name'] == ent_row['EntName'])
+                (coded_ents['code_schema'] == ent_row['entschema']) & 
+                (coded_ents['code_name'] == ent_row['entname'])
             ]
         
         if len(matching_rows) == 1:
             create_ent = matching_rows.iloc[0]['definition']
         
         # Format entity name based on DB type
-        ent_full_name = f"{ent_row['EntSchema']}.{ent_row['EntName']}"
+        ent_full_name = f"{ent_row['entschema']}.{ent_row['entname']}"
         
         # Skip if no creation code found
         if not create_ent:
@@ -147,25 +146,25 @@ END IF;
             script_builder.write(f"INSERT INTO {db_syntax.temp_table_prefix}ScriptCode (ent_schema, ent_name, ent_type, SQL_CREATE, SQL_DROP)\n")
         
         # Entity schema and name
-        script_builder.write(f"VALUES ({quote_str_or_null(ent_row['EntSchema'])}, ")
-        script_builder.write(f"{quote_str_or_null(ent_row['EntName'])}, ")
+        script_builder.write(f"VALUES ({quote_str_or_null(ent_row['entschema'])}, ")
+        script_builder.write(f"{quote_str_or_null(ent_row['entname'])}, ")
         
         # Entity type
         if db_type == DBType.PostgreSQL:
-            script_builder.write(f"{quote_str_or_null(matching_rows.iloc[0]['EntType_PG'])}, ")
+            script_builder.write(f"{quote_str_or_null(matching_rows.iloc[0]['enttype_PG'])}, ")
         else:
-            script_builder.write(f"{quote_str_or_null(ent_row['EntType'])}, ")
+            script_builder.write(f"{quote_str_or_null(ent_row['enttype'])}, ")
         
         # SQL CREATE
         script_builder.write(f"{quote_str_or_null(create_ent)}, ")
         
         # SQL DROP
         if db_type == DBType.MSSQL:
-            script_builder.write(f"'DROP {ent_row['EntType']} [{ent_row['EntSchema']}].[{ent_row['EntName']}];');\n")
+            script_builder.write(f"'DROP {ent_row['enttype']} [{ent_row['entschema']}].[{ent_row['entname']}];');\n")
         else:
             param_list_str = ent_row['EntParamList'] if not pd.isna(ent_row['EntParamList']) else ''
             ent_param_list_val = f"'{param_list_str}'" if param_list_str else "''"
-            script_builder.write(f"'DROP {ent_row['EntType']} {ent_row['EntSchema']}.{ent_row['EntName']} {param_list_str};', {ent_param_list_val});\n")
+            script_builder.write(f"'DROP {ent_row['enttype']} {ent_row['entschema']}.{ent_row['entname']} {param_list_str};', {ent_param_list_val});\n")
     
     # Update state against existing entities
     script_builder.write("\n--Entities only On Johannes database (need To add)\n")
@@ -227,7 +226,7 @@ RIGHT JOIN (Select v.table_schema || '.' || v.table_name AS EntKey, v.table_sche
     CASE 
         WHEN p.prokind ='p' THEN 'Procedure'
         ELSE 'Function'
-    END EntType,
+    END enttype,
     pg_get_function_arguments(p.oid) as param_type_list 
     From pg_proc p 
     Left Join pg_namespace n on p.pronamespace = n.oid
@@ -235,7 +234,7 @@ RIGHT JOIN (Select v.table_schema || '.' || v.table_name AS EntKey, v.table_sche
     UNION
     Select t.trigger_schema || '.' || t.trigger_name AS ent_type, t.trigger_schema As ent_schema,
     t.trigger_name As ent_name,
-    'Trigger' as EntType, '' as param_type_list
+    'Trigger' as enttype, '' as param_type_list
     From information_schema.triggers t
     Group By 1, 2, 3, 4
 ) DB ON LOWER(J.ent_schema) = LOWER(DB.ent_schema) 
@@ -261,7 +260,7 @@ on J.ent_schema=DB.ent_schema AND J.ent_name = DB.ent_name
             script_builder.write("WHERE J.SQL_CREATE<>DB.definition \n")
     else:  # PostgreSQL
         script_builder.write(f"""FROM {db_syntax.temp_table_prefix}ScriptCode J INNER JOIN (
-Select v.table_schema || '.' || v.table_name AS "EntKey", v.table_schema as ent_schema, v.table_name as ent_name, 'V' as "EntType", 
+Select v.table_schema || '.' || v.table_name AS "EntKey", v.table_schema as ent_schema, v.table_name as ent_name, 'V' as "enttype", 
 'CREATE OR REPLACE VIEW ' || v.table_schema || '.' || v.table_name || E'\\nAS\\n' || v.view_definition AS definition, 
 '' as param_type_list 
 From information_schema.views v
@@ -274,7 +273,7 @@ Where v.table_schema Not In ('information_schema', 'pg_catalog')
         script_builder.write("""UNION
 Select n.nspname || '.' || p.proname  AS "EntKey", n.nspname as ent_schema,
 p.proname As ent_name,
-CAST(p.prokind As Char)  AS "EntType",
+CAST(p.prokind As Char)  AS "enttype",
 case when l.lanname = 'internal' then p.prosrc
 else pg_get_functiondef(p.oid)
 end as definition, 
@@ -292,7 +291,7 @@ where n.nspname Not in ('pg_catalog', 'information_schema')
         script_builder.write("""UNION
 Select t.trigger_schema || '.' || t.trigger_name AS "EntKey", t.trigger_schema As ent_schema,
 t.trigger_name As ent_name,
-'TR' as "EntType", t.action_statement As definition, '' as param_type_list 
+'TR' as "enttype", t.action_statement As definition, '' as param_type_list 
 From information_schema.triggers t
 """)
         

@@ -11,7 +11,7 @@ from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_i
 from src.generate.generate_final_tables import generate_add_tables, generate_drop_tables
 from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
-
+from src.generate.generate_final_coded_ents import generate_coded_ents
 
 
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
@@ -88,6 +88,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     j2_ccs_add = StringIO()
     drop_tables = StringIO()
     add_tables = StringIO()
+    coded_ents = StringIO()
 
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
@@ -96,6 +97,8 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if scrpt_ops.remove_all_extra_ents:
         generate_add_tables(db_type=db_type, sql_buffer=drop_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
+    generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents)
+
   
     # Bad data check StringBuilders
     bad_data_pre_add_indx = StringIO()
@@ -235,9 +238,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Label: SkipTillGotFullTablesData in VB.NET
     
     # Write coded entities if needed    
-    if j2_coded_ents.getvalue():
+    if coded_ents.getvalue():
         buffer.write("--Coded Entities---------------------------------------------------------------\n")
-        buffer.write(j2_coded_ents.getvalue())
+        buffer.write(coded_ents.getvalue())
         buffer.write("\n")
     
     # Write enable/disable entities if needed

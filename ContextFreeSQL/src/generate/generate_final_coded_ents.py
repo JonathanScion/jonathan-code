@@ -2,13 +2,12 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
 
-def generate_coded_ents(db_type: DBType, sql_buffer, script_ops):
-    """Generate SQL statements for handling coded entities (stored procedures, functions, etc.)."""
-    
+def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool):
+
     sql_buffer.write("\n")
     
     # Drop extra entities if configured
-    if script_ops.remove_all_extra_ents:
+    if remove_all_extra_ents:
         if db_type == DBType.MSSQL:
             sql_buffer.write("--Dropping Entities that need to be dropped:\n")
             sql_buffer.write("DECLARE codedDrop CURSOR FAST_FORWARD \n")
@@ -103,7 +102,7 @@ def generate_coded_ents(db_type: DBType, sql_buffer, script_ops):
         utils.add_print(db_type, 1, sql_buffer, "'Table ['+@table_schema+'].['+@table_name+']: adding column ['+@col_name+']'")
         sql_buffer.write("\t\tSET @sqlCode = @SQL_CREATE \n")
         # Note: The original code had an additional parameter for add_exec_sql that we need to handle
-        utils.add_exec_sql(db_type, 1, sql_buffer, is_batch=True)
+        utils.add_exec_sql(db_type, 1, sql_buffer) #had here another param, not sure if important: , is_batch=True
         sql_buffer.write("\n")
         sql_buffer.write("\tFETCH NEXT FROM codedAdd INTO @table_schema, @table_name, @SQL_CREATE \n")
         sql_buffer.write("END\n")
