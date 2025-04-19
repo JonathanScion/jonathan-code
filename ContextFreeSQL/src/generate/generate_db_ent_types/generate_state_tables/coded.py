@@ -91,16 +91,17 @@ END IF;
     script_builder.write(create_table_script)
     
     # Process entities for scripting
-    coded_ents = tbl_ents[
+    tbl_ents_coded = tbl_ents[
         (tbl_ents['enttype'] != 'Table') & 
         (tbl_ents['scriptschema'] == True)
     ]
     
-    if not coded_ents.empty:
+    if not tbl_ents_coded.empty:
         script_builder.write("--Fill it with code entities\n")
-        
+    
+    coded_ents=schema_tables.coded_ents    
     # For each entity, get CREATE/DROP SQL and add to script
-    for _, ent_row in coded_ents.iterrows():
+    for _, ent_row in tbl_ents_coded.iterrows():
         create_ent = None
         
         # Find matching coded entity
@@ -111,14 +112,14 @@ END IF;
             )
             
             # Add param list condition
-            if pd.isna(ent_row['EntParamList']) or ent_row['EntParamList'] == '':
+            if pd.isna(ent_row['entparamlist']) or ent_row['entparamlist'] == '':
                 select_cond = select_cond & (
                     pd.isna(coded_ents['param_type_list']) | 
                     (coded_ents['param_type_list'] == '')
                 )
             else:
                 select_cond = select_cond & (
-                    coded_ents['param_type_list'] == ent_row['EntParamList']
+                    coded_ents['param_type_list'] == ent_row['entparamlist']
                 )
             
             matching_rows = coded_ents[select_cond]
@@ -151,7 +152,7 @@ END IF;
         
         # Entity type
         if db_type == DBType.PostgreSQL:
-            script_builder.write(f"{quote_str_or_null(matching_rows.iloc[0]['enttype_PG'])}, ")
+            script_builder.write(f"{quote_str_or_null(matching_rows.iloc[0]['enttype_pg'])}, ")
         else:
             script_builder.write(f"{quote_str_or_null(ent_row['enttype'])}, ")
         
@@ -162,7 +163,7 @@ END IF;
         if db_type == DBType.MSSQL:
             script_builder.write(f"'DROP {ent_row['enttype']} [{ent_row['entschema']}].[{ent_row['entname']}];');\n")
         else:
-            param_list_str = ent_row['EntParamList'] if not pd.isna(ent_row['EntParamList']) else ''
+            param_list_str = ent_row['entparamlist'] if not pd.isna(ent_row['entparamlist']) else ''
             ent_param_list_val = f"'{param_list_str}'" if param_list_str else "''"
             script_builder.write(f"'DROP {ent_row['enttype']} {ent_row['entschema']}.{ent_row['entname']} {param_list_str};', {ent_param_list_val});\n")
     
