@@ -1,0 +1,4 @@
+2025-04-29 13:49:39,672 - INFO - Starting SQL execution script
+2025-04-29 13:50:04,853 - INFO - Found 169 SQL files to execute
+2025-04-29 13:50:08,401 - INFO - Connected to database successfully
+2025-04-29 13:50:40,032 - INFO - Executing R__9999_collateral_database_permissions.sql...
