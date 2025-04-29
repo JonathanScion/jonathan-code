@@ -1,0 +1,134 @@
+-- Drop the existing foreign key constraint and add one with ON DELETE CASCADE
+
+DO $$
+BEGIN
+
+-- Real Estates
+ALTER TABLE collateral.real_estate DROP CONSTRAINT IF EXISTS fk__re__customer;
+ALTER TABLE collateral.real_estate ADD CONSTRAINT fk__re__customer FOREIGN KEY (customer_id) REFERENCES collateral.customers (customer_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_sites DROP CONSTRAINT IF EXISTS fk__re_sites__real_estate;
+ALTER TABLE collateral.real_estate_sites ADD CONSTRAINT fk__re_sites__real_estate FOREIGN KEY (real_estate_id) REFERENCES collateral.real_estate (real_estate_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_related_parties DROP CONSTRAINT IF EXISTS fk__re_site_related_parties__parcel;
+ALTER TABLE collateral.real_estate_site_related_parties ADD CONSTRAINT fk__re_site_related_parties__parcel FOREIGN KEY (real_estate_site_id) REFERENCES collateral.real_estate_sites (real_estate_site_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_notes DROP CONSTRAINT IF EXISTS fk__re_site_notes__site;
+ALTER TABLE collateral.real_estate_site_notes ADD CONSTRAINT fk__re_site_notes__site FOREIGN KEY (real_estate_site_id) REFERENCES collateral.real_estate_sites (real_estate_site_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_parcels DROP CONSTRAINT IF EXISTS fk__parcel__site;
+ALTER TABLE collateral.real_estate_site_parcels ADD CONSTRAINT fk__parcel__site FOREIGN KEY (real_estate_site_id) REFERENCES collateral.real_estate_sites (real_estate_site_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_parcel_related_parties DROP CONSTRAINT IF EXISTS fk__re_site_parcel_related_parties__parcel;
+ALTER TABLE collateral.real_estate_site_parcel_related_parties ADD CONSTRAINT fk__re_site_parcel_related_parties__parcel FOREIGN KEY (real_estate_site_parcel_id) REFERENCES collateral.real_estate_site_parcels (real_estate_site_parcel_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_parcel_commitments DROP CONSTRAINT IF EXISTS fk__re_site_parcel_commitments__parcel;
+ALTER TABLE collateral.real_estate_site_parcel_commitments ADD CONSTRAINT fk__re_site_parcel_commitments__parcel FOREIGN KEY (real_estate_site_parcel_id) REFERENCES collateral.real_estate_site_parcels (real_estate_site_parcel_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.real_estate_site_parcel_notes DROP CONSTRAINT IF EXISTS fk__re_site_parcel_notes__parcel;
+ALTER TABLE collateral.real_estate_site_parcel_notes ADD CONSTRAINT fk__re_site_parcel_notes__parcel FOREIGN KEY (real_estate_site_parcel_id) REFERENCES collateral.real_estate_site_parcels (real_estate_site_parcel_id) ON DELETE CASCADE;
+
+-- Collateral
+ALTER TABLE collateral.collateral DROP CONSTRAINT IF EXISTS fk__col_customer;
+ALTER TABLE collateral.collateral ADD CONSTRAINT fk__col_customer FOREIGN KEY (customer_id) REFERENCES collateral.customers (customer_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_related_parties DROP CONSTRAINT IF EXISTS fk__col_related_party__collateral;
+ALTER TABLE collateral.collateral_related_parties ADD CONSTRAINT fk__col_related_party__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_commitments DROP CONSTRAINT IF EXISTS fk__col_commitment__collateral;
+ALTER TABLE collateral.collateral_commitments ADD CONSTRAINT fk__col_commitment__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_document DROP CONSTRAINT IF EXISTS fk__col_document__collateral;
+ALTER TABLE collateral.collateral_document ADD CONSTRAINT fk__col_document__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_warehouse_receipt DROP CONSTRAINT IF EXISTS fk__col_receivables_warehouse_receipt__collateral;
+ALTER TABLE collateral.collateral_receivables_warehouse_receipt ADD CONSTRAINT fk__col_receivables_warehouse_receipt__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_chattel_paper DROP CONSTRAINT IF EXISTS fk__col_receivables_chattel_paper__collateral;
+ALTER TABLE collateral.collateral_receivables_chattel_paper ADD CONSTRAINT fk__col_receivables_chattel_paper__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_letter_of_credit DROP CONSTRAINT IF EXISTS fk__col_receivables_letter_of_credit__collateral;
+ALTER TABLE collateral.collateral_receivables_letter_of_credit ADD CONSTRAINT fk__col_receivables_letter_of_credit__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_accounts_receivable DROP CONSTRAINT IF EXISTS fk__col_receivables_accounts_receivable__collateral;
+ALTER TABLE collateral.collateral_receivables_accounts_receivable ADD CONSTRAINT fk__col_receivables_accounts_receivable__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_life_insurance DROP CONSTRAINT IF EXISTS fk__col_receivables_life_insurance__collateral;
+ALTER TABLE collateral.collateral_receivables_life_insurance ADD CONSTRAINT fk__col_receivables_life_insurance__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_pledged_note DROP CONSTRAINT IF EXISTS fk__col_receivables_pledged_note__collateral;
+ALTER TABLE collateral.collateral_receivables_pledged_note ADD CONSTRAINT fk__col_receivables_pledged_note__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_receivables_bonds DROP CONSTRAINT IF EXISTS fk__col_receivables_bonds__collateral;
+ALTER TABLE collateral.collateral_receivables_bonds ADD CONSTRAINT fk__col_receivables_bonds__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_revenues DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_revenues__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_revenues ADD CONSTRAINT fk__col_pers_prop_specific_revenues__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_consumer_goods DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_consumer_goods__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_consumer_goods ADD CONSTRAINT fk__col_pers_prop_specific_consumer_goods__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_equipment DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_equipment__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_equipment ADD CONSTRAINT fk__col_pers_prop_specific_equipment__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_crops DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_crops__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_crops ADD CONSTRAINT fk__col_pers_prop_specific_crops__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_livestock DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_livestock__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_livestock ADD CONSTRAINT fk__col_pers_prop_specific_livestock__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_inventory DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_inventory__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_inventory ADD CONSTRAINT fk__col_pers_prop_specific_inventory__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_specific_aircraft DROP CONSTRAINT IF EXISTS fk__col_pers_prop_specific_aircraft__collateral;
+ALTER TABLE collateral.collateral_personal_property_specific_aircraft ADD CONSTRAINT fk__col_pers_prop_specific_aircraft__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_personal_property_general_ribg_gba DROP CONSTRAINT IF EXISTS fk__col_personal_general_ribg_gba__collateral;
+ALTER TABLE collateral.collateral_personal_property_general_ribg_gba ADD CONSTRAINT fk__col_personal_general_ribg_gba__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_titled_property_vehicle DROP CONSTRAINT IF EXISTS fk__col_titled_property_vehicle__collateral;
+ALTER TABLE collateral.collateral_titled_property_vehicle ADD CONSTRAINT fk__col_titled_property_vehicle__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_titled_property_railroad_cars DROP CONSTRAINT IF EXISTS fk__col_titled_property_railroad_cars__collateral;
+ALTER TABLE collateral.collateral_titled_property_railroad_cars ADD CONSTRAINT fk__col_titled_property_railroad_cars__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_titled_property_vessels DROP CONSTRAINT IF EXISTS fk__col_titled_property_vessels__collateral;
+ALTER TABLE collateral.collateral_titled_property_vessels ADD CONSTRAINT fk__col_titled_property_vessels__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_titled_property_trailers DROP CONSTRAINT IF EXISTS fk__col_titled_property_trailers__collateral;
+ALTER TABLE collateral.collateral_titled_property_trailers ADD CONSTRAINT fk__col_titled_property_trailers__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_extracted_collateral_oil_gas DROP CONSTRAINT IF EXISTS fk__col_extracted_collateral_oil_gas__collateral;
+ALTER TABLE collateral.collateral_extracted_collateral_oil_gas ADD CONSTRAINT fk__col_extracted_collateral_oil_gas__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_extracted_collateral_minerals DROP CONSTRAINT IF EXISTS fk__col_extracted_collateral_minerals__collateral;
+ALTER TABLE collateral.collateral_extracted_collateral_minerals ADD CONSTRAINT fk__col_extracted_collateral_minerals__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_intellectual_property_patents DROP CONSTRAINT IF EXISTS fk__col_intellectual_property_patents__collateral;
+ALTER TABLE collateral.collateral_intellectual_property_patents ADD CONSTRAINT fk__col_intellectual_property_patents__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_intellectual_property_trademark DROP CONSTRAINT IF EXISTS fk__col_intellectual_property_trademark__collateral;
+ALTER TABLE collateral.collateral_intellectual_property_trademark ADD CONSTRAINT fk__col_intellectual_property_trademark__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_intellectual_property_copyrights DROP CONSTRAINT IF EXISTS fk__col_intellectual_property_copyrights__collateral;
+ALTER TABLE collateral.collateral_intellectual_property_copyrights ADD CONSTRAINT fk__col_intellectual_property_copyrights__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_commodity_account DROP CONSTRAINT IF EXISTS fk__col_cash_investments_commodity_account__collateral;
+ALTER TABLE collateral.collateral_cash_investments_commodity_account ADD CONSTRAINT fk__col_cash_investments_commodity_account__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_deposit_account DROP CONSTRAINT IF EXISTS fk__col_cash_investments_deposit_account__collateral;
+ALTER TABLE collateral.collateral_cash_investments_deposit_account ADD CONSTRAINT fk__col_cash_investments_deposit_account__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_hedge_account DROP CONSTRAINT IF EXISTS fk__col_cash_investments_hedge_account__collateral;
+ALTER TABLE collateral.collateral_cash_investments_hedge_account ADD CONSTRAINT fk__col_cash_investments_hedge_account__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_equity_non_cobank DROP CONSTRAINT IF EXISTS fk__col_cash_investments_equity_non_cobank__collateral;
+ALTER TABLE collateral.collateral_cash_investments_equity_non_cobank ADD CONSTRAINT fk__col_cash_investments_equity_non_cobank__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_bailee DROP CONSTRAINT IF EXISTS fk__col_cash_investments_bailee__collateral;
+ALTER TABLE collateral.collateral_cash_investments_bailee ADD CONSTRAINT fk__col_cash_investments_bailee__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+ALTER TABLE collateral.collateral_cash_investments_stock DROP CONSTRAINT IF EXISTS fk__col_cash_investments_stock__collateral;
+ALTER TABLE collateral.collateral_cash_investments_stock ADD CONSTRAINT fk__col_cash_investments_stock__collateral FOREIGN KEY (collateral_id) REFERENCES collateral.collateral (collateral_id) ON DELETE CASCADE;
+
+END $$;

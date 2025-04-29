@@ -1,0 +1,4 @@
+2025-04-29 13:41:49,024 - INFO - Starting SQL execution script
+2025-04-29 13:43:42,384 - INFO - Found 169 SQL files to execute
+2025-04-29 13:43:48,919 - ERROR - Error connecting to database: connection to server at "localhost" (::1), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+

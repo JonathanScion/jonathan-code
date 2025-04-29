@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: SQL Executor",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "src.main",
+            "args": [
+                "C:/Users/yonis/source/repos/veteran-developer/SQLExecuter/sample_data/sql",
+                "postgresql://postgres:yonision@localhost:5432/col"
+            ],
+            "console": "integratedTerminal",            
+        }
+    ]
+}

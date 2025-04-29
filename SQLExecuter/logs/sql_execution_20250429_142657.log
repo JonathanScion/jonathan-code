@@ -1,0 +1,6 @@
+2025-04-29 14:26:57,488 - INFO - Starting SQL execution script
+2025-04-29 14:26:57,490 - INFO - Found 168 SQL files to execute
+2025-04-29 14:26:57,518 - INFO - Connected to database successfully
+2025-04-29 14:26:57,518 - INFO - Executing V1.0.0__CREATE_SCHEMA.sql...
+2025-04-29 14:26:57,523 - INFO - Successfully executed V1.0.0__CREATE_SCHEMA.sql
+2025-04-29 14:26:57,523 - INFO - Executing V1.1.0__CREATE_CUSTOMER_TABLE.sql...

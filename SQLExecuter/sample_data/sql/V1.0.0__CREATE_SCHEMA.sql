@@ -1,0 +1,6 @@
+DO $$
+BEGIN
+
+CREATE SCHEMA IF NOT EXISTS collateral;
+
+END $$;
