@@ -34,7 +34,8 @@ def create_db_state_temp_tables_for_tables(
     #!note: this part is half baked. will have to get back to it later and see whats going on, maybe based on .net stuff
     table_schema_name_in_scripting = StringIO()
     overall_table_schema_name_in_scripting = StringIO()    
-    for idx, row in rows_tables_script.iterrows():
+    for i, (idx, row) in enumerate(rows_tables_script.iterrows()):
+        schema_name = ""
         if db_type == DBType.MSSQL:
             schema_name = f"'{row['entschema']}{row['entname']}'"
         elif db_type == DBType.PostgreSQL:
@@ -43,7 +44,7 @@ def create_db_state_temp_tables_for_tables(
         table_schema_name_in_scripting.write(schema_name)
         overall_table_schema_name_in_scripting.write(schema_name)
         
-        if idx < len(rows_tables_script) - 1:
+        if i < len(rows_tables_script) - 1:
             table_schema_name_in_scripting.write(",")
             overall_table_schema_name_in_scripting.write(",")
     #!end note. so what do we do with all this section and these 2 StringIOs? go back to .net code, see if needed here. i think its for filtering, when user on the GUI requests only some table. and so will be converted to command line params here
@@ -124,10 +125,10 @@ def create_db_state_tables(
     # Drop table if exists logic
     if db_type == DBType.MSSQL:
         script_builder.write(
-            "IF (OBJECT_ID('tempdb..#ScriptTables') IS NOT NULL) ",
-            "BEGIN",
-            f"\tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;",
-            "END;"
+            f"""IF (OBJECT_ID('tempdb..#ScriptTables') IS NOT NULL) 
+            BEGIN",
+            \tDROP TABLE {db_syntax.temp_table_prefix}ScriptTables;",
+            END;\n"""
         )
     else:  # PostgreSQL
         script_builder.write(
@@ -215,17 +216,17 @@ def create_db_state_tables(
     # Add tables that need to be dropped
     script_builder.write(f"\n{align}--table only on DB (need to drop)")
     if db_type == DBType.MSSQL:
-        script_builder.write([
-            "INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
-            "SELECT  DB.table_schema ,DB.table_name,2 ",
-            "FROM    #ScriptTables J ",
-            "RIGHT JOIN ( SELECT SCHEMA_NAME(o.schema_id) AS table_schema , ",
-            "o.name AS table_name ",
-            "FROM   sys.tables O WHERE is_ms_shipped=0 ",
-            ") DB ON J.table_schema = DB.table_schema ",
-            "AND J.table_name = DB.table_name ",
-            "WHERE J.table_name Is NULL "
-        ])
+        script_builder.write(
+            f"""INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
+            SELECT  DB.table_schema ,DB.table_name,2 ",
+            FROM    #ScriptTables J ",
+            RIGHT JOIN ( SELECT SCHEMA_NAME(o.schema_id) AS table_schema , ",
+            o.name AS table_name ",
+            FROM   sys.tables O WHERE is_ms_shipped=0 ",
+            ) DB ON J.table_schema = DB.table_schema ",
+            AND J.table_name = DB.table_name ",
+            WHERE J.table_name Is NULL """
+        )
     else:
         script_builder.write(
             f"""\n{align}INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
