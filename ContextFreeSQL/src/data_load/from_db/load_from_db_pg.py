@@ -1,6 +1,7 @@
 import os
 from pydantic import BaseModel
 from src.infra.database import Database
+from src.defs.script_defs import ConfigVals, DBConnSettings
 from psycopg2.extras import RealDictCursor #!see if we need this
 import pandas as pd
 import numpy as np
@@ -27,17 +28,17 @@ class DBSchema(BaseModel):
         arbitrary_types_allowed = True  # Needed for pd.DataFrame
 
 
-def load_all_schema() -> DBSchema:
+def load_all_schema(conn_settings: DBConnSettings) -> DBSchema:
     
-    schemas = _load_schemas()
-    tables = _load_tables()
-    columns = _load_tables_columns()
-    defaults = _load_tables_columns_defaults()
-    indexes = _load_tables_indexes()
+    schemas = _load_schemas(conn_settings)
+    tables = _load_tables(conn_settings)
+    columns = _load_tables_columns(conn_settings)
+    defaults = _load_tables_columns_defaults(conn_settings)
+    indexes = _load_tables_indexes(conn_settings)
     index_cols = _process_index_cols_pg(columns, indexes)
-    fks = _load_tables_foreign_keys()
+    fks = _load_tables_foreign_keys(conn_settings)
     fk_cols = _process_fk_cols_pg(columns, fks)
-    coded_ents = _load_coded_ents()
+    coded_ents = _load_coded_ents(conn_settings)
     #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format. 
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
 
@@ -53,11 +54,11 @@ def load_all_schema() -> DBSchema:
         coded_ents = coded_ents
     )
 
-def _load_schemas() -> pd.DataFrame:
+def _load_schemas(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql =  """select schema_name, schema_owner as principal_name from information_schema.schemata 
                     WHERE schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and schema_name NOT LIKE 'pg_temp%' and schema_name NOT LIKE 'pg_toast%'"""
@@ -69,6 +70,7 @@ def _load_schemas() -> pd.DataFrame:
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -77,11 +79,11 @@ def _load_schemas() -> pd.DataFrame:
             conn.close()
 
 
-def _load_tables() -> pd.DataFrame:   
+def _load_tables(conn_settings: DBConnSettings) -> pd.DataFrame:   
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql =  """SELECT  table_schema || '.' || table_name as object_id, table_name as entname, 'U' as type,  null as crdate, table_schema as entschema, table_schema, table_name,
                             null as schema_ver, 
@@ -94,9 +96,11 @@ def _load_tables() -> pd.DataFrame:
         results = cur.fetchall()
         
         return pd.DataFrame(results)
+    
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -104,11 +108,11 @@ def _load_tables() -> pd.DataFrame:
         if conn:
             conn.close()
 
-def _load_tables_columns() -> pd.DataFrame:
+def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, 
                             CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
@@ -126,6 +130,7 @@ def _load_tables_columns() -> pd.DataFrame:
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -133,11 +138,11 @@ def _load_tables_columns() -> pd.DataFrame:
         if conn:
             conn.close()
 
-def _load_tables_columns_defaults() -> pd.DataFrame:
+def _load_tables_columns_defaults(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         sql = """select table_schema, table_name, COLUMN_NAME as col_name, 
                         'def_' || table_schema || '_' || table_name || '_' || COLUMN_NAME as default_name, 
@@ -152,6 +157,7 @@ def _load_tables_columns_defaults() -> pd.DataFrame:
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -159,11 +165,11 @@ def _load_tables_columns_defaults() -> pd.DataFrame:
         if conn:
             conn.close()
 
-def _load_tables_indexes() -> pd.DataFrame:
+def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
   
         #small note: i had below '0 as index_id' but it made no sense when its time to select the index
@@ -213,6 +219,8 @@ def _load_tables_indexes() -> pd.DataFrame:
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
+
         
     finally:
         if cur:
@@ -295,11 +303,11 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
     
     return output
 
-def _load_tables_foreign_keys() -> pd.DataFrame:
+def _load_tables_foreign_keys(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         sql = """SELECT fk.conrelid as fkey_table_id, fk.confrelid as rkey_table_id, fk.oid AS fkey_constid,fk.conname as fk_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name, ns_f.nspname as rkey_table_schema,t_f.relname as rkey_table_name,
@@ -327,6 +335,7 @@ def _load_tables_foreign_keys() -> pd.DataFrame:
         
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -433,11 +442,11 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 #def load_tables_defaults():
      #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
 
-def _load_coded_ents() -> pd.DataFrame:
+def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         #had this code here that claude converted, essentially to select only coded ents taht are in tbl_ents. but i dont pass tbl_ents as param and all other load funcs in this module load the whole thing
         #so for now, i just load the whole thing
@@ -493,8 +502,10 @@ def _load_coded_ents() -> pd.DataFrame:
         results = cur.fetchall()
         
         return pd.DataFrame(results)
+    
     except Exception as e:
         print(f"Error: {e}")
+        return pd.DataFrame()  # Return empty DataFrame on error
         
     finally:
         if cur:
@@ -503,11 +514,11 @@ def _load_coded_ents() -> pd.DataFrame:
             conn.close()
 
     
-def load_all_db_ents() -> pd.DataFrame:
+def load_all_db_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         
         # First, fetch the database entities
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -613,11 +624,11 @@ def load_all_db_ents() -> pd.DataFrame:
             conn.close()
 
 
-def load_all_tables_data(db_all: DBSchema, table_names: List[str]) -> None:    
+def load_all_tables_data(conn_settings: DBConnSettings,db_all: DBSchema, table_names: List[str]) -> None:    
     conn = None
     cur = None
     try:
-        conn = Database.connect_to_database()
+        conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
         for table_name in table_names:

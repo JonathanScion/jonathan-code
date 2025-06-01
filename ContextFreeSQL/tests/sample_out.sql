@@ -276,14 +276,20 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 				);
 
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying ,
-	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentfirstname'		);
+		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying ,
+	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentlastname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
+	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'subject',		'character varying',		20.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD subject  character varying  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN subject  TYPE  character varying ,
 	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentfirstname  character varying  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentfirstname  TYPE  character varying ,
 	ALTER COLUMN studentfirstname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentfirstname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'vw_students1',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentlastname'		);
@@ -318,23 +324,17 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 		VALUES ('public',		'students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.students DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
-	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentdob'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentgradeid  TYPE  integer ,
 	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentgradeid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentid  TYPE  integer ,
-	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentid'		);
+		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying ,
+	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentid'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying ,
-	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentlastname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN grade  TYPE  smallint ,
 	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN grade'		);
@@ -1408,7 +1408,7 @@ IF (printExec=True AND execCode=False AND public_students_JustCreated=True) THEN
 --END IF;--of Batch INSERT of all the data into public.students
 ELSE --and this begins the INSERT as against potentially existing data
 --Data for 'public.students'
-CREATE TEMP TABLE public_students
+CREATE TEMP TABLE public.students
 (
 studentid  integer  NULL,
 studentfirstname  character varying  NULL,
@@ -1795,6 +1795,37 @@ LOOP
 	END LOOP;
 END; --of cursor 
 
+
+COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+SELECT 
+ERROR_NUMBER() AS ErrorNumber,
+ERROR_SEVERITY() AS ErrorSeverity,
+ERROR_STATE() as ErrorState,
+--ERROR_PROCEDURE() as ErrorProcedure,
+ERROR_LINE() as ErrorLine,
+ERROR_MESSAGE() as ErrorMessage;
+
+-- Test XACT_STATE for 1 or -1.
+-- XACT_STATE = 0 means there is no transaction and
+-- a commit or rollback operation would generate an error.
+
+-- Test whether the transaction is uncommittable.
+If (XACT_STATE()) = -1
+BEGIN
+	Print N'The transaction is in an uncommittable state. '
+	+ 'Rolling back transaction. No Changes were made to the database'
+	ROLLBACK TRANSACTION;
+END;
+-- Test whether the transaction is active and valid.
+If (XACT_STATE()) = 1
+BEGIN
+	Print N'The transaction is committable. '
+	+ 'Committing transaction. Only changes mentioned above were committed'
+	COMMIT TRANSACTION;   
+END;
+END CATCH
 
 END; --overall code
 $$

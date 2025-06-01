@@ -1,0 +1,38 @@
+{
+    "database": {
+      "host": "localhost",
+      "db_name": "Jonathan1",
+      "user": "postgres",
+      "password": "yonision",
+      "port": "5432"
+    },
+    "scripting_options": {
+      "remove_all_extra_ents": true,
+      "column_collation": true,
+      "code_compare_no_white_space": true,
+      "as_transaction": true,
+      "pre_add_constraints_data_checks": false,
+      "script_schemas": true,
+      "all_schemas": true,
+      "script_security": false,
+      "code_compare_no_whitespace": false,
+      "data_scripting_leave_report_fields_updated": false,
+      "data_scripting_leave_report_fields_updated_save_old_value": false,
+      "data_scripting_generate_dml_statements": false,
+      "data_window_only": false,
+      "data_window_got_specific_cells": false
+    },
+    "table_script_ops": {
+      "column_identity": true,
+      "indexes": true,
+      "foreign_keys": true,
+      "defaults": true,
+      "check_constraints": true,
+      "extended_props": true
+    },
+    "tables_to_load": [
+      "public.students",
+      "public.studentgrades"
+    ]
+  }
+  

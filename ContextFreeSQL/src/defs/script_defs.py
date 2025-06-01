@@ -1,5 +1,6 @@
 from enum import Enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 class DBType(Enum):
     MSSQL = 1
@@ -36,7 +37,21 @@ class DBSyntax:
                     temp_table_create="CREATE TABLE #",
                     boolean_true_value="1"
                 )
-            case DBType.PostgreSQL:
+            case DBType.PostgreSQL:            
+                return cls(
+                    set_operator=":=",
+                    declare_separator=";",
+                    var_prefix="",
+                    nvarchar_type="character varying",
+                    boolean_type="boolean",
+                    max_length_str="",
+                    var_set_value=":=",
+                    temp_table_prefix="",
+                    temp_table_create="CREATE TEMP TABLE ",
+                    boolean_true_value="true"
+                )
+            case _:  # Default case
+                # Default to PostgreSQL for any other value
                 return cls(
                     set_operator=":=",
                     declare_separator=";",
@@ -79,7 +94,6 @@ class ScriptingOptions:
 
 @dataclass
 class ScriptTableOptions:
-    table_name: str = None
     column_identity: bool = True
     indexes: bool = True
     foreign_keys: bool = True
@@ -93,5 +107,21 @@ class DBEntScriptState(Enum):
     Alter = 2
     Drop = 3
     InLine = 4
+
+@dataclass
+class DBConnSettings:
+    host: str
+    db_name: str
+    user: str
+    password: str
+    port: str
+  
     
     
+#everything that's gonna be in 
+@dataclass
+class ConfigVals:
+    db_conn: DBConnSettings
+    script_ops: ScriptingOptions
+    table_script_ops: ScriptTableOptions
+    tables_to_load: List[str]

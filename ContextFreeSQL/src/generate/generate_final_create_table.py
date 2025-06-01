@@ -35,19 +35,16 @@ def get_create_table_from_sys_tables(
         ]
         
         if len(table_rows) == 0:
-            return "could not find table in the result set: {table_schema}.{table_name}"
+            return ("","could not find table in the result set: {table_schema}.{table_name}")
         
         table_row = table_rows.iloc[0]
         create_table_lines = []
 
         # Determine full table name based on DB type        
-        if script_table_ops.table_name:  # Checks if not empty
-            full_table_name = script_table_ops.table_name
-        else:
-            if db_type == DBType.MSSQL:
-                full_table_name = f"[{table_schema}].[{table_name}]"
-            else:  # MySQL or PostgreSQL
-                full_table_name = f"{table_schema}.{table_name}"
+        if db_type == DBType.MSSQL:
+            full_table_name = f"[{table_schema}].[{table_name}]"
+        else:  # MySQL or PostgreSQL
+            full_table_name = f"{table_schema}.{table_name}"
 
         # Start CREATE TABLE statement
         if as_temp_table:
@@ -109,7 +106,7 @@ def get_create_table_from_sys_tables(
                     (schema_tables.fk_cols['fkey_table_name'] == fk_row['fkey_table_name']) &
                     (schema_tables.fk_cols['fk_name'] == fk_row['fk_name'])
                 ]
-                create_table_lines.append(get_fk_sql(fk_row, fk_cols, db_type) + ";")
+                create_table_lines.append(get_fk_sql(fk_row.to_dict(), fk_cols, db_type) + ";")
         
         #defaults
         if script_table_ops.defaults and schema_tables.defaults is not None:
@@ -119,31 +116,15 @@ def get_create_table_from_sys_tables(
             ]
     
             for _, default_row in default_rows.iterrows():
-                create_table_lines.append(get_default_sql(db_type, default_row))
+                create_table_lines.append(get_default_sql(db_type, default_row.to_dict()))
 
-        return ["\n".join(create_table_lines),""]
+        return ("\n".join(create_table_lines),"")
     
     except Exception as e:
-        return ["", str(e)]
+        return ("", str(e))
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-   
         """to be completed later, once we do MSSQL, if at all
         # Add check constraints if requested
         if script_table_ops.check_constraints and db_check_constraints is not None:
@@ -168,9 +149,7 @@ def get_create_table_from_sys_tables(
 """
         return "\n".join(create_table_lines).strip()
 
-    except Exception as e:
-        error_msg = f"Error occurred: {str(e)}"
-        return error_msg
+
     
 def get_col_sql(
     sys_cols_row: pd.Series, 
@@ -280,7 +259,7 @@ def add_size_precision_scale(row: pd.Series, actual_size: bool) -> str:
     # This is a placeholder - implement the actual logic based on your needs
     return ""
 
-def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any]], db_type: DBType, in_line: bool = False) -> str:
+def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_type: DBType, in_line: bool = False) -> str:
     buffer = StringIO()
     
     if utils.val_if_null(index_row.get('is_primary_key'), False):
@@ -298,7 +277,7 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: List[Dict[str, Any
                     raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
                 
                 buffer.write(f"[{col['col_name']}]")
-                if utils.utils.c_to_bool(col.get('is_descending_key'), False):
+                if utils.c_to_bool(col.get('is_descending_key'), False):
                     buffer.write(" DESC")
                 buffer.write(",\n")
             
