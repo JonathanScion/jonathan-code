@@ -82,11 +82,13 @@ def create_db_state_columns(
 
         
     # Generate the column script rows
+    alter_col=''
     for _, row in schema_tables.columns.iterrows():
         if db_type == DBType.MSSQL:
             alter_col = f"'ALTER TABLE [{row['table_schema']}].[{row['table_name']}] DROP COLUMN [{row['col_name']}]'"
         elif db_type == DBType.PostgreSQL:
             alter_col = f"'ALTER TABLE {row['table_schema']}.{row['table_name']} DROP COLUMN {row['col_name']}'"
+            
         
         script_db_state_tables.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP{',SQL_ALTER_PostData_NotNULL' if scripting_data else ''})\n")
         script_db_state_tables.write(f"{align}VALUES ({quote_str_or_null(row['table_schema'])},")
@@ -101,7 +103,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['is_computed'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['collation_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['computed_definition'])},")
-        script_db_state_tables.write(f"{align}{quote_str_or_null(get_col_sql(sys_cols_row=row, table_schema = row['table_schema'], table_name = row['table_name'], script_state = DBEntScriptState.Add, db_type = DBType.PostgreSQL, column_identity =False, force_allow_null = scripting_data, actual_size = True))},")
+        script_db_state_tables.write(f"{align}{quote_str_or_null(get_col_sql(sys_cols_row=row, table_schema = row['table_schema'], table_name = row['table_name'], script_state = DBEntScriptState.Add, db_type = DBType.PostgreSQL, column_identity =False, force_allow_null = scripting_data or False, actual_size = True))},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(get_col_sql(sys_cols_row=row, table_schema = row['table_schema'], table_name = row['table_name'], script_state = DBEntScriptState.Alter, db_type = DBType.PostgreSQL, column_identity =False, force_allow_null = False, actual_size = True))},")
         script_db_state_tables.write(f"{alter_col}")
         
@@ -110,7 +112,7 @@ def create_db_state_columns(
             if row['is_nullable']:
                 script_db_state_tables.write(f"{align},NULL")  # code for this field
             else:
-                script_db_state_tables.write(f",{quote_str_or_null(get_col_sql(row, row['table_schema'], row['table_name'], 'Alter', db_type, False, False, True))}")
+                script_db_state_tables.write(f",{quote_str_or_null(get_col_sql(row, row['table_schema'], row['table_name'], DBEntScriptState.Alter, db_type, False, False, True))}")
         
         script_db_state_tables.write(f"{align});\n")
     
