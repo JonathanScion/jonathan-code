@@ -6,7 +6,8 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTable
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from typing import List, Dict, Any
 from io import StringIO
-from src.utils import funcs as utils
+from src.utils import funcs as utils, code_funcs 
+
 
 def get_create_table_from_sys_tables(
     db_type: DBType,
@@ -210,7 +211,7 @@ def get_col_sql(
         sql.append(f" {actual_type} ")
 
     # Add size, precision, scale (assuming Utils.AddSizePrecisionScale is implemented elsewhere)
-    type_size_prec_scale = add_size_precision_scale(sys_cols_row, actual_size)
+    type_size_prec_scale = code_funcs.add_size_precision_scale(sys_cols_row)
     if type_size_prec_scale:
         sql.append(type_size_prec_scale)
 
@@ -255,9 +256,7 @@ def get_col_sql(
 
     return "".join(sql)
 
-def add_size_precision_scale(row: pd.Series, actual_size: bool) -> str:
-    # This is a placeholder - implement the actual logic based on your needs
-    return ""
+
 
 def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_type: DBType, in_line: bool = False) -> str:
     buffer = StringIO()

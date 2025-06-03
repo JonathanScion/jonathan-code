@@ -101,7 +101,7 @@ def val_if_null(value: Any, default: Any) -> Any:
 def c_to_bool(value: Any, default: bool = False) -> bool:
     return bool(value) if value is not None else default
 
-def is_type_string(type_name):
+def is_type_string(type_name: str):
     # Convert argument to lowercase for case-insensitive comparison
     type_lower = type_name.lower()
     
@@ -117,6 +117,7 @@ def is_type_string(type_name):
     
     # Not a string or datetime type
     return [False, False]
+
 
 
 """"

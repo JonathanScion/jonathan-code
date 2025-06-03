@@ -144,7 +144,7 @@ BEGIN --overall code
             'CREATE TABLE public.studentgrades
 (
 studentid  integer  NOT NULL,
-subject  character varying  NOT NULL,
+subject  character varying  (20)  NOT NULL,
 grade  smallint  NOT NULL,
 studentgradeid  integer  NOT NULL
 );
@@ -175,7 +175,7 @@ ALTER TABLE public.studentgrades ALTER COLUMN grade SET DEFAULT 0;',
             'CREATE TABLE public.studentgrades1
 (
 studentid  integer  NOT NULL,
-subject  character varying  NOT NULL,
+subject  character varying  (22)  NOT NULL,
 grade  smallint  NOT NULL,
 studentgradeid  integer  NOT NULL
 );
@@ -194,8 +194,8 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN studentid SET DEFAULT nextval(''s
             'CREATE TABLE public.students
 (
 studentid  integer  NOT NULL,
-studentfirstname  character varying  NOT NULL,
-studentlastname  character varying  NOT NULL,
+studentfirstname  character varying  (100)  NOT NULL,
+studentlastname  character varying  (100)  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
@@ -276,25 +276,25 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 				);
 
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying ,
+		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentlastname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students1',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades',		'subject',		'character varying',		20.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD subject  character varying  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN subject  TYPE  character varying ,
+		VALUES ('public',		'studentgrades',		'subject',		'character varying',		20.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD subject  character varying  (20)  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN subject  TYPE  character varying  (20) ,
 	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentfirstname  character varying  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentfirstname  TYPE  character varying ,
+		VALUES ('public',		'students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentfirstname  character varying  (100)  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students1',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying ,
+		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentlastname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		20.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying ,
+		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		22.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  (22)  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying  (22) ,
 	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
@@ -312,7 +312,7 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 		VALUES ('public',		'show_views',		'table_name',		'name',		NULL,		NULL,		NULL,		True,		False,		'0',		'C',		NULL,		'ALTER TABLE public.show_views ADD table_name  name  COLLATE C NULL ',		'ALTER TABLE public.show_views ALTER COLUMN table_name  TYPE  name  COLLATE C,
 	ALTER COLUMN table_name SET  NULL ','ALTER TABLE public.show_views DROP COLUMN table_name'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentfirstname  TYPE  character varying ,
+		VALUES ('public',		'vw_students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentfirstname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades1',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentgradeid  TYPE  integer ,
@@ -327,7 +327,7 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 		VALUES ('public',		'studentgrades',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentgradeid  TYPE  integer ,
 	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentgradeid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying ,
+		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentid  TYPE  integer ,
@@ -339,7 +339,7 @@ ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::
 		VALUES ('public',		'studentgrades',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN grade  TYPE  smallint ,
 	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN grade'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentlastname  character varying  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentlastname  TYPE  character varying ,
+		VALUES ('public',		'students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentlastname  character varying  (100)  NOT NULL ',		'ALTER TABLE public.students ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentlastname'		);
 		
 		--columns only on Johannes database (need to add)
@@ -1362,288 +1362,6 @@ END; --of cursor
 
 
 
---Data-----------------------------------------------------------------------------
-DECLARE _cmprstate_ smallint;
-DECLARE NumNonEqualRecs INT;
-public_students_JustCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.students'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
-public_studentgrades_JustCreated boolean := false; --This flag is used in case the script was doing schema, and this table was just created. this script is not doing schema for 'public.studentgrades'so the table wasn't just created. set it to 1 if it did, in which case the script will just do a bunch of INSERTs as against comparing to existing data
-BEGIN --Data Code
-IF (schemaChanged=True and execCode=False) THEN
-	IF (print=True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--Note: Changes were found in the schema but not executed (because execution flag is turned off) - Data migration may therefore not work');
-	END IF;
-END IF;
-perform 1 from scripttables T WHERE T.table_schema='public' AND T.table_name='students' AND tablestat=1;
-IF FOUND THEN
-	public_students_JustCreated := true;
-ELSE
-	public_students_JustCreated := false;
-END IF;
-
-perform n.nspname, c.relname
-FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname like 'pg_temp_%' AND c.relname='public_students' AND pg_catalog.pg_table_is_visible(c.oid);
-IF FOUND THEN
-	DROP TABLE public_students;
-END IF;
-IF (printExec=True AND execCode=False AND public_students_JustCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
-	--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''1'',''murfi J'',''Sion'',''1979-08-15 00:00:00.000'',NULL);');
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''2'',''Raz-Or'',''Sion'',''1976-12-27 00:00:00.000'',NULL);');
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''3'',''Yan'',''Scion'',''1973-09-15 00:00:00.000'',NULL);');
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''94'',''Dodo'',''nada-ed'',''1970-03-13 00:00:00.000'',NULL);');
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES (''4'',''Dodo'',''oh no'',''1970-03-13 00:00:00.000'',NULL);');
-
---END IF;--of Batch INSERT of all the data into public.students
-ELSE --and this begins the INSERT as against potentially existing data
---Data for 'public.students'
-CREATE TEMP TABLE public.students
-(
-studentid  integer  NULL,
-studentfirstname  character varying  NULL,
-studentlastname  character varying  NULL,
-studentdob  timestamp without time zone  NULL,
-sideoneonly  integer  NULL
-);
-
-INSERT INTO public_students (
-studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('1','murfi J','Sion','1979-08-15 00:00:00.000',NULL);
-INSERT INTO public_students (
-studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('2','Raz-Or','Sion','1976-12-27 00:00:00.000',NULL);
-INSERT INTO public_students (
-studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('3','Yan','Scion','1973-09-15 00:00:00.000',NULL);
-INSERT INTO public_students (
-studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('94','Dodo','nada-ed','1970-03-13 00:00:00.000',NULL);
-INSERT INTO public_students (
-studentid,studentfirstname,studentlastname,studentdob,sideoneonly)
- VALUES ('4','Dodo','oh no','1970-03-13 00:00:00.000',NULL);
-
---add status field, and update it:
-ALTER TABLE public_students ADD _cmprstate_ smallint NULL;
---Records to be added:
-UPDATE public_students orig SET _cmprstate_=1 FROM public_students t LEFT JOIN public.students p ON t.studentid=p.studentid WHERE orig.studentid = t.studentid  AND p.studentid IS NULL;
---add all missing records:
-IF (execCode=True) THEN
-	sqlCode := 'INSERT INTO public.students(studentid, studentfirstname, studentlastname, studentdob, sideoneonly)
- SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students WHERE _cmprstate_=1';
-	EXECUTE sqlCode;
-END IF; --of INSERTing into public.students
-
---generating individual DML statements: INSERTS
-IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here
-	PERFORM 1 from public_students s WHERE s._cmprstate_=1;
-	IF FOUND THEN
-		declare temprow record;
-		BEGIN
-			FOR temprow IN
-				SELECT studentid,studentfirstname,studentlastname,studentdob,sideoneonly FROM public_students s WHERE s._cmprstate_=1
-		LOOP
-			sqlCode='INSERT INTO public.students (studentid, studentfirstname, studentlastname, studentdob, sideoneonly) VALUES (';
-			IF (temprow.studentid IS NULL) THEN
-				sqlCode = sqlCode || 'NULL';
-			ELSE
-				sqlCode = sqlCode || CAST(temprow.studentid AS varchar(30));
-			END IF;
-
-			sqlCode = sqlCode || ','; 
-			IF (temprow.studentfirstname IS NULL) THEN
-				sqlCode = sqlCode || 'NULL';
-			ELSE
-				sqlCode = sqlCode || '''' || temprow.studentfirstname ||'''';
-			END IF;
-
-			sqlCode = sqlCode || ','; 
-			IF (temprow.studentlastname IS NULL) THEN
-				sqlCode = sqlCode || 'NULL';
-			ELSE
-				sqlCode = sqlCode || '''' || temprow.studentlastname ||'''';
-			END IF;
-
-			sqlCode = sqlCode || ','; 
-			IF (temprow.studentdob IS NULL) THEN
-				sqlCode = sqlCode || 'NULL';
-			ELSE
-				sqlCode = sqlCode || '''' || CAST(temprow.studentdob AS varchar(30)) || '''';
-			END IF;
-
-			sqlCode = sqlCode || ','; 
-			IF (temprow.sideoneonly IS NULL) THEN
-				sqlCode = sqlCode || 'NULL';
-			ELSE
-				sqlCode = sqlCode || CAST(temprow.sideoneonly AS varchar(30));
-			END IF;
-
-			sqlCode = sqlCode ||  ')';
-			IF (printExec=True) THEN
-				INSERT INTO scriptoutput (SQLText)
-				VALUES (sqlCode);
-			END IF;
-		END LOOP;
-	END; --of loop block 
-END IF; --of IF FOUND record iteration (temprow) 
-END IF; --of generating DML statements: INSERT for public.students
-END IF;--of INSERT as against potentially existing data
-
---Records to be deleted or removed: Do not even check if the table was just created
-IF (public_students_JustCreated=False) THEN --Records to be deleted or removed: do not even check if the table was just created
---records to be removed:
-sqlCode :='INSERT INTO public_students (
-studentid, studentfirstname, studentlastname, studentdob, sideoneonly, _cmprstate_) SELECT p.studentid, p.studentfirstname, p.studentlastname, p.studentdob, p.sideoneonly, ''2'' FROM public.students p LEFT JOIN public_students t ON p.studentid=t.studentid WHERE (t.studentid IS NULL)';
-EXECUTE sqlCode;
-IF NOT (printExec=True AND execCode=False AND public_students_JustCreated=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there
---remove all extra records:
-If (execCode=True) THEN
-	sqlCode = 'DELETE FROM public.students orig USING public_students AS p LEFT JOIN public_students AS t ON p.studentid=t.studentid WHERE (orig.studentid=t.studentid) AND (t.studentid IS NULL OR (t._cmprstate_=2))'; --Need to check _cmprstate_ in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table
-EXECUTE sqlCode;
-END IF; --'of: 'remove all extra recods'
-END IF; --Of 'Records to be deleted or removed: do not even check if the table was just created'
-END IF; --of table was just created
-
---records in both: find which need to be updated
-sqlCode = 'UPDATE public_students orig SET _cmprstate_=3
- FROM public_students t WHERE (
-orig.studentid = t.studentid) AND ( (orig.studentfirstname<> t.studentfirstname) OR (orig.studentfirstname IS NULL AND t.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND t.studentfirstname IS NULL) OR (orig.studentlastname<> t.studentlastname) OR (orig.studentlastname IS NULL AND t.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND t.studentlastname IS NULL) OR (orig.studentdob<> t.studentdob) OR (orig.studentdob IS NULL AND t.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND t.studentdob IS NULL) OR (orig.sideoneonly<> t.sideoneonly) OR (orig.sideoneonly IS NULL AND t.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND t.sideoneonly IS NULL))';
-EXECUTE sqlCode; --flagging the temp table with records that need to be updated
-
---update fields that are different:
---Updating differences in 'studentfirstname' for reporting purposes
-ALTER TABLE public_students ADD _diffbit_studentfirstname Boolean NULL;
-sqlCode='UPDATE public_students orig SET _diffbit_studentfirstname = True, _cmprstate_=3
- FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentfirstname<> p.studentfirstname) OR (orig.studentfirstname IS NULL AND p.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND p.studentfirstname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
-	sqlCode ='UPDATE public.students orig SET studentfirstname = p.studentfirstname
- FROM public_students p 
- WHERE (orig.studentid = p.studentid) AND ((orig.studentfirstname<> p.studentfirstname) OR (orig.studentfirstname IS NULL AND p.studentfirstname IS NOT NULL) OR (orig.studentfirstname IS NOT NULL AND p.studentfirstname IS NULL))';
-	EXECUTE sqlCode;
-END IF;
---Updating differences in 'studentlastname' for reporting purposes
-ALTER TABLE public_students ADD _diffbit_studentlastname Boolean NULL;
-sqlCode='UPDATE public_students orig SET _diffbit_studentlastname = True, _cmprstate_=3
- FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentlastname<> p.studentlastname) OR (orig.studentlastname IS NULL AND p.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND p.studentlastname IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
-	sqlCode ='UPDATE public.students orig SET studentlastname = p.studentlastname
- FROM public_students p 
- WHERE (orig.studentid = p.studentid) AND ((orig.studentlastname<> p.studentlastname) OR (orig.studentlastname IS NULL AND p.studentlastname IS NOT NULL) OR (orig.studentlastname IS NOT NULL AND p.studentlastname IS NULL))';
-	EXECUTE sqlCode;
-END IF;
---Updating differences in 'studentdob' for reporting purposes
-ALTER TABLE public_students ADD _diffbit_studentdob Boolean NULL;
-sqlCode='UPDATE public_students orig SET _diffbit_studentdob = True, _cmprstate_=3
- FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.studentdob<> p.studentdob) OR (orig.studentdob IS NULL AND p.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND p.studentdob IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
-	sqlCode ='UPDATE public.students orig SET studentdob = p.studentdob
- FROM public_students p 
- WHERE (orig.studentid = p.studentid) AND ((orig.studentdob<> p.studentdob) OR (orig.studentdob IS NULL AND p.studentdob IS NOT NULL) OR (orig.studentdob IS NOT NULL AND p.studentdob IS NULL))';
-	EXECUTE sqlCode;
-END IF;
---Updating differences in 'sideoneonly' for reporting purposes
-ALTER TABLE public_students ADD _diffbit_sideoneonly Boolean NULL;
-sqlCode='UPDATE public_students orig SET _diffbit_sideoneonly = True, _cmprstate_=3
- FROM public.students p  WHERE (orig.studentid = p.studentid) AND ((orig.sideoneonly<> p.sideoneonly) OR (orig.sideoneonly IS NULL AND p.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND p.sideoneonly IS NULL))';EXECUTE sqlCode;If (execCode=True) THEN
-	sqlCode ='UPDATE public.students orig SET sideoneonly = p.sideoneonly
- FROM public_students p 
- WHERE (orig.studentid = p.studentid) AND ((orig.sideoneonly<> p.sideoneonly) OR (orig.sideoneonly IS NULL AND p.sideoneonly IS NOT NULL) OR (orig.sideoneonly IS NOT NULL AND p.sideoneonly IS NULL))';
-	EXECUTE sqlCode;
-END IF;
-
---generating individual DML statements: DELETE, UPDATE
-IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here
-	PERFORM 1 from public_students s WHERE s._cmprstate_ IN (2,3);
-	IF FOUND THEN
-		declare temprow record;
-		BEGIN
-			FOR temprow IN
-				SELECT  studentid ,studentfirstname ,studentlastname ,studentdob ,sideoneonly ,s._cmprstate_ FROM public_students s WHERE s._cmprstate_ IN (2,3)
-		LOOP
-If (temprow._CmprState_=2) THEN --to be dropped
-	sqlCode='DELETE FROM public.students s WHERE s.studentid=''' || CAST( temprow.studentid AS VARCHAR(20)) || ''''; 
-	If (printExec = True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES (sqlCode);
-	End If;
-ELSE
-If (temprow._CmprState_=3) THEN--to be updated
-			sqlCode='UPDATE public.students orig SET ';
-			IF (temprow._diffbit_studentfirstname=True) THEN
-				IF temprow.studentfirstname IS NULL THEN
-					sqlCode = sqlCode || 'studentfirstname=NULL';
-				ELSE
-					sqlCode = sqlCode || 'studentfirstname= ''' || temprow.studentfirstname || ''''; --DML Update: set the value
-				END IF; --of: if field IS NULL
-				sqlCode = sqlCode || ',';
-			END IF; --of: if diffbit flag is true
-
-			IF (temprow._diffbit_studentlastname=True) THEN
-				IF temprow.studentlastname IS NULL THEN
-					sqlCode = sqlCode || 'studentlastname=NULL';
-				ELSE
-					sqlCode = sqlCode || 'studentlastname= ''' || temprow.studentlastname || ''''; --DML Update: set the value
-				END IF; --of: if field IS NULL
-				sqlCode = sqlCode || ',';
-			END IF; --of: if diffbit flag is true
-
-			IF (temprow._diffbit_studentdob=True) THEN
-				IF temprow.studentdob IS NULL THEN
-					sqlCode = sqlCode || 'studentdob=NULL';
-				ELSE
-					sqlCode = sqlCode || 'studentdob=''' || CAST(Format(CAST(temprow.studentdob AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS character varying)  || '''';
-				END IF; --of: if field IS NULL
-				sqlCode = sqlCode || ',';
-			END IF; --of: if diffbit flag is true
-
-			IF (temprow._diffbit_sideoneonly=True) THEN
-				IF temprow.sideoneonly IS NULL THEN
-					sqlCode = sqlCode || 'sideoneonly=NULL';
-				ELSE
-					sqlCode = sqlCode || 'sideoneonly=' || CAST(temprow.sideoneonly AS character varying);
-				END IF; --of: if field IS NULL
-				sqlCode = sqlCode || ',';
-			END IF; --of: if diffbit flag is true
-
-			sqlCode = LEFT(sqlCode,LENGTH(sqlCode)-1) || ' WHERE s.studentid=''' || CAST( temprow.studentid AS VARCHAR(20)) || '''' ;
-			IF (printExec=True) THEN
-				INSERT INTO scriptoutput (SQLText)
-				VALUES (sqlCode);
-			END IF;
-		END IF; --of To be updated
-	END IF; --Of If-Then To be dropped
-		END LOOP;
-	END; --of record iteration (temprow) 
-	END IF; --of IF FOUND (for generating individual DML statements: DELETE, UPDATE)
-END IF; --of if asked to print
-
-NumNonEqualRecs := COUNT(*) FROM public_students s WHERE s._cmprstate_<>1;
-IF NumNonEqualRecs>0 THEN
-	IF (print=True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('----SELECT * FROM public_students --to get the full state of the data comparison (column _cmprstate_: 1=Added, 2=Removed, 3=Updated). There were ' || NumNonEqualRecs || ' records that were different');
-	END IF;
-END IF;
---Table public.studentgrades needs to be empty: just delete everything
-IF exists(select 1 from public.studentgrades) THEN
-	sqlCode='DELETE FROM public.studentgrades'; --it should be empty, so just delete everything
-	IF (printExec = True) THEN 
-		INSERT INTO scriptoutput (SQLText)
-		VALUES (sqlCode);
-	END IF;
-	IF (execCode = True) THEN
-		EXECUTE sqlCode;
-	END IF;
-	schemaChanged := True;
-END IF;
-END; --end of data section
 	--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
 --Add indexes: new, or ones dropped before because they were different or underlying columns where different
 	declare temprow record;
@@ -1795,37 +1513,6 @@ LOOP
 	END LOOP;
 END; --of cursor 
 
-
-COMMIT TRANSACTION;
-END TRY
-BEGIN CATCH
-SELECT 
-ERROR_NUMBER() AS ErrorNumber,
-ERROR_SEVERITY() AS ErrorSeverity,
-ERROR_STATE() as ErrorState,
---ERROR_PROCEDURE() as ErrorProcedure,
-ERROR_LINE() as ErrorLine,
-ERROR_MESSAGE() as ErrorMessage;
-
--- Test XACT_STATE for 1 or -1.
--- XACT_STATE = 0 means there is no transaction and
--- a commit or rollback operation would generate an error.
-
--- Test whether the transaction is uncommittable.
-If (XACT_STATE()) = -1
-BEGIN
-	Print N'The transaction is in an uncommittable state. '
-	+ 'Rolling back transaction. No Changes were made to the database'
-	ROLLBACK TRANSACTION;
-END;
--- Test whether the transaction is active and valid.
-If (XACT_STATE()) = 1
-BEGIN
-	Print N'The transaction is committable. '
-	+ 'Committing transaction. Only changes mentioned above were committed'
-	COMMIT TRANSACTION;   
-END;
-END CATCH
 
 END; --overall code
 $$
