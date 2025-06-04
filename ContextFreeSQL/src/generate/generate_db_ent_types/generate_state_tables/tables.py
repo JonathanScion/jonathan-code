@@ -208,9 +208,14 @@ def create_db_state_tables(
         )
     else:
         script_builder.write(
-            f"""{align}FROM {db_syntax.temp_table_prefix}ScriptTables J left join (select t.table_schema, t.table_name FROM information_schema.tables t WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%' ) DB 
-            on LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) 
-            where DB.table_name Is null;\n"""
+            f"""{align}WHERE NOT EXISTS (
+            SELECT 1 
+            FROM information_schema.tables t 
+            WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog') 
+            AND t.table_schema NOT LIKE 'pg_temp%'
+            AND LOWER(t.table_schema) = LOWER({db_syntax.temp_table_prefix}ScriptTables.table_schema) 
+            AND LOWER(t.table_name) = LOWER({db_syntax.temp_table_prefix}ScriptTables.table_name)
+          );\n"""
         )
 
     # Add tables that need to be dropped
