@@ -119,18 +119,29 @@ def create_db_state_columns(
     # Now update state as against existing table
     script_db_state_tables.write(f"{align}\n")
     script_db_state_tables.write(f"{align}--columns only on Johannes database (need to add)\n")
-    script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols set colStat = 1\n")
     
     if db_type == DBType.MSSQL:
+        script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols set colStat = 1\n")
         script_db_state_tables.write(f"{align}from #ScriptCols J left join (select SCHEMA_NAME(o.schema_id) as table_schema, o.name as table_name, c.name as col_name from sys.tables O inner join sys.columns c on o.object_id=c.object_id) DB \n")
         script_db_state_tables.write(f"{align}on J.table_schema=DB.table_schema and J.table_name=DB.table_name and J.col_name=DB.col_name \n")
         script_db_state_tables.write(f"{align}where DB.col_name Is null; \n")
     elif db_type == DBType.PostgreSQL:
-        script_db_state_tables.write(f"FROM ScriptCols J left join (select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' ) DB \n")
-        script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
-        script_db_state_tables.write(f"{align}where DB.column_name Is null \n")
-        script_db_state_tables.write(f"{align}AND J.table_schema=ScriptCols.table_schema and J.table_name=ScriptCols.table_name and J.col_name=ScriptCols.col_name;\n")
-    
+        script_db_state_tables.write(f"""UPDATE ScriptCols 
+                                    SET colStat = 1
+                                    WHERE NOT EXISTS (
+                                        SELECT 1 
+                                        FROM information_schema.tables t 
+                                        INNER JOIN information_schema.columns c 
+                                            ON t.table_schema = c.table_schema 
+                                            AND t.table_name = c.table_name 
+                                        WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog') 
+                                        AND t.table_schema NOT LIKE 'pg_temp%'  
+                                        AND t.table_type LIKE '%TABLE%'
+                                        AND LOWER(t.table_schema) = LOWER(ScriptCols.table_schema) 
+                                        AND LOWER(t.table_name) = LOWER(ScriptCols.table_name) 
+                                        AND LOWER(c.column_name) = LOWER(ScriptCols.col_name)
+                                    );""")
+        
     script_db_state_tables.write(f"{align}\n")
     
     # Generate columns only on DB (need to drop)
