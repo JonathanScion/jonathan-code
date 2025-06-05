@@ -24,14 +24,13 @@ def main():
    
     
     # Mark tables for scripting
-    if config_vals.tables_to_load:
+    if len(config_vals.tables_data.tables)>1: #would need one like that for tables_to_load. thats in the json already
         mask = False
-        for table in config_vals.tables_to_load:
-            mask = mask | (tbl_ents['entkey'] == table)
-        tbl_ents.loc[mask, 'scriptdata'] = True
-    
-
-    load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_to_load)
+        #!implement this later        
+    elif config_vals.tables_data.all: #just load all tables
+        table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
+        config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
+        load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
     script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops )
 

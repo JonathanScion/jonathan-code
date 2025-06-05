@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import Optional, Union
-from src.defs.script_defs import ConfigVals, DBConnSettings, ScriptingOptions, ScriptTableOptions
+from src.defs.script_defs import ConfigVals, DBConnSettings, ScriptingOptions, ScriptTableOptions, ListTables
 
 def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
     """Load configuration from JSON file and return ConfigVals object."""
@@ -25,14 +25,16 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
     # Create ScriptTableOptions
     table_script_ops = ScriptTableOptions(**data['table_script_ops'])
 
-    tables_to_load = data['tables_to_load']
-    
+    tables_to_load = ListTables(**data['tables_to_load'])
+    tables_data = ListTables(**data['tables_data'])
+
     # Create and return ConfigVals
     return ConfigVals(
         db_conn = db_conn,
         script_ops = script_ops,
         table_script_ops = table_script_ops,
-        tables_to_load = tables_to_load
+        tables_to_load = tables_to_load,
+        tables_data = tables_data
     )
 
 # Example usage
