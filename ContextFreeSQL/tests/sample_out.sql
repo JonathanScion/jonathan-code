@@ -180,16 +180,16 @@ studentlastname  character varying  (100)  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
-)
-;
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -209,8 +209,8 @@ ALTER TABLE public.studentgrades1 ADD CONSTRAINT studentgrades1_pkey PRIMARY KEY
 studentid
 )
 ;
-ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;
-ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::character varying;',
+ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::character varying;
+ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;',
             'DROP TABLE public.studentgrades1;');
 		--tables only on Johannes database (need to add)
         update ScriptTables set tableStat = 1
@@ -283,14 +283,8 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::cha
 		VALUES ('public',		'vw_students1',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentlastname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentlastname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN grade  TYPE  smallint ,
-	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN grade'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students1',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentdob'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentgradeid  TYPE  integer ,
-	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentgradeid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'subject',		'character varying',		20.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD subject  character varying  (20)  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN subject  TYPE  character varying  (20) ,
 	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN subject'		);
@@ -301,17 +295,20 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::cha
 		VALUES ('public',		'vw_students1',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentid'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentid  TYPE  integer ,
-	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentid'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentlastname'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		22.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  (22)  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying  (22) ,
+	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN grade  TYPE  smallint ,
+	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN grade'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'sideoneonly',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD sideoneonly  integer  NULL ',		'ALTER TABLE public.students ALTER COLUMN sideoneonly  TYPE  integer ,
 	ALTER COLUMN sideoneonly SET  NULL ','ALTER TABLE public.students DROP COLUMN sideoneonly'		);
@@ -322,6 +319,12 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::cha
 		VALUES ('public',		'vw_students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentfirstname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentgradeid  TYPE  integer ,
+	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentgradeid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.students DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
@@ -330,9 +333,6 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::cha
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students1',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students1 ADD studentfirstname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students1 ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students1 DROP COLUMN studentfirstname'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		22.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  (22)  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying  (22) ,
-	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'studentgrades',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades DROP COLUMN studentid'		);
@@ -347,12 +347,21 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::cha
 	ALTER COLUMN studentlastname SET  NOT NULL ','ALTER TABLE public.students DROP COLUMN studentlastname'		);
 		
 		--columns only on Johannes database (need to add)
-update ScriptCols set colStat = 1
-FROM ScriptCols J left join (select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' ) DB 
-		on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) 
-		where DB.column_name Is null 
-		AND J.table_schema=ScriptCols.table_schema and J.table_name=ScriptCols.table_name and J.col_name=ScriptCols.col_name;
-		
+UPDATE ScriptCols 
+                                    SET colStat = 1
+                                    WHERE NOT EXISTS (
+                                        SELECT 1 
+                                        FROM information_schema.tables t 
+                                        INNER JOIN information_schema.columns c 
+                                            ON t.table_schema = c.table_schema 
+                                            AND t.table_name = c.table_name 
+                                        WHERE t.table_schema NOT IN ('information_schema', 'pg_catalog') 
+                                        AND t.table_schema NOT LIKE 'pg_temp%'  
+                                        AND t.table_type LIKE '%TABLE%'
+                                        AND LOWER(t.table_schema) = LOWER(ScriptCols.table_schema) 
+                                        AND LOWER(t.table_name) = LOWER(ScriptCols.table_name) 
+                                        AND LOWER(c.column_name) = LOWER(ScriptCols.col_name)
+                                    );		
 		--columns only on DB (need to drop)
 INSERT INTO ScriptCols (table_schema, table_name, col_name, colStat, SQL_DROP) 
 		SELECT  DB.table_schema, DB.table_name, DB.column_name, 2, 'ALTER TABLE ' || DB.table_schema || '.' || DB.table_name || ' DROP COLUMN ' || DB.column_name || ';' 
@@ -525,6 +534,31 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -644,31 +678,6 @@ grade
 		'False');
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','studentgrades1','studentgrades1_pkey',True,
 		False,
 		NULL,
@@ -694,23 +703,19 @@ studentid
 		'False');
 		
 		--Indexes only on Johannes database (need to add)
-		UPDATE  ScriptIndexes SET indexStat = 1
-		From ScriptIndexes J
-		Left Join (SELECT
-		scm.nspname  || '.' || t.relname as object_id, i.oid as index_oid,
-		scm.nspname As table_schema,
-		t.relname As table_name,
-		i.relname as index_name
-		from
-		pg_index ix
-		inner Join pg_class i  ON i.oid = ix.indexrelid
-		inner Join pg_class t on t.oid = ix.indrelid
-		inner Join pg_namespace scm on t.relnamespace = scm.oid
-		WHERE scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
-		) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
-		And LOWER(J.table_name) = LOWER(DB.table_name)
-		And LOWER(J.index_name) = LOWER(DB.index_name)
-		WHERE DB.table_name Is NULL AND ScriptIndexes.index_name = J.index_name;
+UPDATE ScriptIndexes 
+                SET indexStat = 1
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM pg_index ix
+                    INNER JOIN pg_class i ON i.oid = ix.indexrelid
+                    INNER JOIN pg_class t ON t.oid = ix.indrelid
+                    INNER JOIN pg_namespace scm ON t.relnamespace = scm.oid
+                    WHERE scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
+                    AND LOWER(scm.nspname) = LOWER(ScriptIndexes.table_schema)
+                    AND LOWER(t.relname) = LOWER(ScriptIndexes.table_name)
+                    AND LOWER(i.relname) = LOWER(ScriptIndexes.index_name)
+                );
 		
 		--Indexes only on DB (need to drop)
 		INSERT INTO ScriptIndexes (table_schema, table_name, index_name, is_unique_constraint, is_primary_key, indexStat)
@@ -737,28 +742,27 @@ studentid
 		AND LOWER(J.index_name) = LOWER(DB.index_name)
 		WHERE J.table_name IS NULL;
 		
-		update ScriptIndexes Set is_unique_diff=True, indexStat = 3
-		From ScriptIndexes J INNER Join (
-		Select
-		scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,
-		scm.nspname AS table_schema,
-		t.relname AS table_name,
-		i.relname as index_name,
-		substring(idx.indexdef,'\((.*?)\)') as index_columns
-		from
-		pg_index ix
-		inner Join pg_class i ON i.oid = ix.indexrelid
-		inner Join pg_class t on t.oid = ix.indrelid
-		inner Join pg_namespace scm on t.relnamespace = scm.oid
-		inner Join pg_class cls ON cls.oid = ix.indexrelid
-		inner JOIN pg_am am ON am.oid = cls.relam
-		inner Join pg_indexes idx on idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname
-		Left Join pg_constraint cnst on t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype='u'
-		where scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
-		) DB
-		On LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) AND LOWER(J.index_name) = LOWER(DB.index_name)
-		where J.index_columns <> DB.index_columns AND ScriptIndexes.index_name = J.index_name;
-		
+UPDATE ScriptIndexes 
+SET is_unique_diff = True, indexStat = 3
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_index ix
+    INNER JOIN pg_class i ON i.oid = ix.indexrelid
+    INNER JOIN pg_class t ON t.oid = ix.indrelid
+    INNER JOIN pg_namespace scm ON t.relnamespace = scm.oid
+    INNER JOIN pg_class cls ON cls.oid = ix.indexrelid
+    INNER JOIN pg_am am ON am.oid = cls.relam
+    INNER JOIN pg_indexes idx ON idx.schemaname = scm.nspname 
+                              AND idx.tablename = t.relname 
+                              AND idx.indexname = i.relname
+    LEFT JOIN pg_constraint cnst ON t.oid = cnst.conrelid 
+                                 AND i.oid = cnst.conindid 
+                                 AND cnst.contype = 'u'
+    WHERE scm.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
+      AND LOWER(scm.nspname) = LOWER(ScriptIndexes.table_schema)
+      AND LOWER(t.relname) = LOWER(ScriptIndexes.table_name)
+      AND LOWER(i.relname) = LOWER(ScriptIndexes.index_name)
+      AND ScriptIndexes.index_columns <> substring(idx.indexdef, '\((.*?)\)'));		
 		---updates Of index And index columns flags--------------------
 		---updates Of index flags--------------------
 		--is_unique
@@ -878,20 +882,21 @@ studentid
 		
 		
 		--FKs only on Johannes database (need to add)
-		UPDATE scriptfks SET fkStat = 1
-		FROM scriptfks J
-		LEFT JOIN ( SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name
-			FROM pg_catalog.pg_constraint fk
-			inner join pg_class t on fk.conrelid = t.oid
-			inner join pg_namespace ns on ns.oid = t.relnamespace
-			inner join pg_class t_f on fk.confrelid=t_f.oid
-			inner join pg_namespace ns_f on ns_f.oid = t_f.relnamespace
-			where fk.contype = 'f'
-			AND ns.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
-		) DB ON LOWER(J.fkey_table_schema) = LOWER(DB.fkey_table_schema)
-		AND LOWER(J.fkey_table_name) = LOWER(DB.fkey_table_name)
-		AND LOWER(J.fk_name) = LOWER(DB.fkey_name)
-		WHERE DB.fkey_table_name Is NULL AND scriptfks.fk_name = J.fk_name;
+UPDATE scriptfks 
+                SET fkStat = 1
+                WHERE NOT EXISTS (
+                    SELECT 1 
+                    FROM pg_catalog.pg_constraint fk
+                    INNER JOIN pg_class t ON fk.conrelid = t.oid
+                    INNER JOIN pg_namespace ns ON ns.oid = t.relnamespace
+                    INNER JOIN pg_class t_f ON fk.confrelid = t_f.oid
+                    INNER JOIN pg_namespace ns_f ON ns_f.oid = t_f.relnamespace
+                    WHERE fk.contype = 'f'
+                    AND ns.nspname || t.relname IN ('publicstudentgrades', 'publicstudentgrades1', 'publicstudents')
+                    AND LOWER(ns.nspname) = LOWER(scriptfks.fkey_table_schema)
+                    AND LOWER(t.relname) = LOWER(scriptfks.fkey_table_name)
+                    AND LOWER(fk.conname) = LOWER(scriptfks.fk_name)
+                );
 		
 		--FKs only on DB (need to drop)
 		INSERT INTO scriptfks (fkey_table_schema, fkey_table_name, fk_name, fkStat)
@@ -1080,25 +1085,42 @@ AS
 
 --Entities only On Johannes database (need To add)
 update ScriptCode Set codeStat = 1
-from ScriptCode J left join (
-Select v.table_schema || '.' || v.table_name AS "EntKey", v.table_schema as ent_schema, v.table_name as ent_name, 'V' AS ent_type,'' as param_type_list  
-From information_schema.views v
-Where v.table_schema Not In ('information_schema', 'pg_catalog')
-UNION
-Select n.nspname || '.' || p.proname  AS "EntKey", n.nspname as ent_schema,
-p.proname as ent_name,
-CAST(p.prokind AS char)  AS ent_type,
-pg_get_function_arguments(p.oid) as param_type_list 
-From pg_proc p 
-Left Join pg_namespace n on p.pronamespace = n.oid
-where n.nspname Not in ('pg_catalog', 'information_schema')
-UNION
-Select t.trigger_schema || '.' || t.trigger_name AS "EntKey", t.trigger_schema As ent_schema,
-t.trigger_name As ent_name,'TR' AS ent_type, '' as param_type_list 
-From information_schema.triggers t
-Group By 1, 2, 3, 4
-) DB on J.ent_schema=DB.ent_schema AND J.ent_name = DB.ent_name AND J.param_type_list = DB.param_type_list 
-where DB.ent_name Is null AND (ScriptCode.ent_schema = J.ent_schema AND ScriptCode.ent_name = J.ent_name AND ScriptCode.param_type_list = J.param_type_list ); --PG wants an explicit join of the updated table to its alias  
+WHERE NOT EXISTS (
+    SELECT 1 
+    FROM (
+        SELECT v.table_schema || '.' || v.table_name AS "EntKey", 
+               v.table_schema as ent_schema, 
+               v.table_name as ent_name, 
+               'V' AS ent_type,
+               '' as param_type_list  
+        FROM information_schema.views v
+        WHERE v.table_schema NOT IN ('information_schema', 'pg_catalog')
+        
+        UNION
+        
+        SELECT n.nspname || '.' || p.proname AS "EntKey", 
+               n.nspname as ent_schema,
+               p.proname as ent_name,
+               CAST(p.prokind AS char) AS ent_type,
+               pg_get_function_arguments(p.oid) as param_type_list 
+        FROM pg_proc p 
+        LEFT JOIN pg_namespace n on p.pronamespace = n.oid
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+        
+        UNION
+        
+        SELECT t.trigger_schema || '.' || t.trigger_name AS "EntKey", 
+               t.trigger_schema As ent_schema,
+               t.trigger_name As ent_name,
+               'TR' AS ent_type, 
+               '' as param_type_list 
+        FROM information_schema.triggers t
+        GROUP BY 1, 2, 3, 4
+    ) existing_entities
+    WHERE existing_entities.ent_schema = ScriptCode.ent_schema 
+      AND existing_entities.ent_name = ScriptCode.ent_name 
+      AND existing_entities.param_type_list = ScriptCode.param_type_list
+);
 
 --Entities only on DB (need to drop)
 INSERT INTO ScriptCode (ent_schema, ent_name, ent_type, param_type_list, codeStat)

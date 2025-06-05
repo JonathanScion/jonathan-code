@@ -209,20 +209,21 @@ def create_db_state_fks(
             script_db_state_tables.write(f"{align}WHERE DB.table_name Is NULL\n")
         
         elif db_type == DBType.PostgreSQL:
-            script_db_state_tables.write(f"{align}UPDATE scriptfks SET fkStat = 1\n")
-            script_db_state_tables.write(f"{align}FROM scriptfks J\n")
-            script_db_state_tables.write(f"{align}LEFT JOIN ( SELECT fk.conname as fkey_name, ns.nspname as fkey_table_schema, t.relname as fkey_table_name\n")
-            script_db_state_tables.write(f"{align}\tFROM pg_catalog.pg_constraint fk\n")
-            script_db_state_tables.write(f"{align}\tinner join pg_class t on fk.conrelid = t.oid\n")
-            script_db_state_tables.write(f"{align}\tinner join pg_namespace ns on ns.oid = t.relnamespace\n")
-            script_db_state_tables.write(f"{align}\tinner join pg_class t_f on fk.confrelid=t_f.oid\n")
-            script_db_state_tables.write(f"{align}\tinner join pg_namespace ns_f on ns_f.oid = t_f.relnamespace\n")
-            script_db_state_tables.write(f"{align}\twhere fk.contype = 'f'\n")
-            script_db_state_tables.write(f"{align}\tAND ns.nspname || t.relname IN ({overall_table_schema_name_in_scripting})\n")
-            script_db_state_tables.write(f"{align}) DB ON LOWER(J.fkey_table_schema) = LOWER(DB.fkey_table_schema)\n")
-            script_db_state_tables.write(f"{align}AND LOWER(J.fkey_table_name) = LOWER(DB.fkey_table_name)\n")
-            script_db_state_tables.write(f"{align}AND LOWER(J.fk_name) = LOWER(DB.fkey_name)\n")
-            script_db_state_tables.write(f"{align}WHERE DB.fkey_table_name Is NULL AND scriptfks.fk_name = J.fk_name;\n")
+            script_db_state_tables.write(f"""UPDATE scriptfks 
+                SET fkStat = 1
+                WHERE NOT EXISTS (
+                    SELECT 1 
+                    FROM pg_catalog.pg_constraint fk
+                    INNER JOIN pg_class t ON fk.conrelid = t.oid
+                    INNER JOIN pg_namespace ns ON ns.oid = t.relnamespace
+                    INNER JOIN pg_class t_f ON fk.confrelid = t_f.oid
+                    INNER JOIN pg_namespace ns_f ON ns_f.oid = t_f.relnamespace
+                    WHERE fk.contype = 'f'
+                    AND ns.nspname || t.relname IN ({overall_table_schema_name_in_scripting})
+                    AND LOWER(ns.nspname) = LOWER(scriptfks.fkey_table_schema)
+                    AND LOWER(t.relname) = LOWER(scriptfks.fkey_table_name)
+                    AND LOWER(fk.conname) = LOWER(scriptfks.fk_name)
+                );\n""")
         
         script_db_state_tables.write(f"{align}\n")
         

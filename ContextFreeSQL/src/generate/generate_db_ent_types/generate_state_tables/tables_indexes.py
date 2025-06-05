@@ -225,23 +225,19 @@ def create_db_state_indexes(
             script_db_state_tables.write(f"{align}WHERE   DB.table_name IS NULL\n")
         
         elif db_type == DBType.PostgreSQL:
-            script_db_state_tables.write(f"{align}UPDATE  ScriptIndexes SET indexStat = 1\n")
-            script_db_state_tables.write(f"{align}From ScriptIndexes J\n")
-            script_db_state_tables.write(f"{align}Left Join (SELECT\n")
-            script_db_state_tables.write(f"{align}scm.nspname  || '.' || t.relname as object_id, i.oid as index_oid,\n")
-            script_db_state_tables.write(f"{align}scm.nspname As table_schema,\n")
-            script_db_state_tables.write(f"{align}t.relname As table_name,\n")
-            script_db_state_tables.write(f"{align}i.relname as index_name\n")
-            script_db_state_tables.write(f"{align}from\n")
-            script_db_state_tables.write(f"{align}pg_index ix\n")
-            script_db_state_tables.write(f"{align}inner Join pg_class i  ON i.oid = ix.indexrelid\n")
-            script_db_state_tables.write(f"{align}inner Join pg_class t on t.oid = ix.indrelid\n")
-            script_db_state_tables.write(f"{align}inner Join pg_namespace scm on t.relnamespace = scm.oid\n")
-            script_db_state_tables.write(f"{align}WHERE scm.nspname || t.relname IN ({overall_table_schema_name_in_scripting})\n")
-            script_db_state_tables.write(f"{align}) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)\n")
-            script_db_state_tables.write(f"{align}And LOWER(J.table_name) = LOWER(DB.table_name)\n")
-            script_db_state_tables.write(f"{align}And LOWER(J.index_name) = LOWER(DB.index_name)\n")
-            script_db_state_tables.write(f"{align}WHERE DB.table_name Is NULL AND ScriptIndexes.index_name = J.index_name;\n")
+            script_db_state_tables.write(f"""UPDATE ScriptIndexes 
+                SET indexStat = 1
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM pg_index ix
+                    INNER JOIN pg_class i ON i.oid = ix.indexrelid
+                    INNER JOIN pg_class t ON t.oid = ix.indrelid
+                    INNER JOIN pg_namespace scm ON t.relnamespace = scm.oid
+                    WHERE scm.nspname || t.relname IN ({overall_table_schema_name_in_scripting})
+                    AND LOWER(scm.nspname) = LOWER(ScriptIndexes.table_schema)
+                    AND LOWER(t.relname) = LOWER(ScriptIndexes.table_name)
+                    AND LOWER(i.relname) = LOWER(ScriptIndexes.index_name)
+                );\n""")
         
         script_db_state_tables.write(f"{align}\n")
         
@@ -351,27 +347,27 @@ def create_db_state_indexes(
         
         elif db_type == DBType.PostgreSQL:
             # For PostgreSQL, different approach - just mark the index as different if columns are different (could later implement in MSSQL as well)
-            script_db_state_tables.write(f"{align}update ScriptIndexes Set is_unique_diff=True, indexStat = 3\n")
-            script_db_state_tables.write(f"{align}From ScriptIndexes J INNER Join (\n")
-            script_db_state_tables.write(f"{align}Select\n")
-            script_db_state_tables.write(f"{align}scm.nspname || '.' || t.relname as object_id, i.oid as index_oid,\n")
-            script_db_state_tables.write(f"{align}scm.nspname AS table_schema,\n")
-            script_db_state_tables.write(f"{align}t.relname AS table_name,\n")
-            script_db_state_tables.write(f"{align}i.relname as index_name,\n")
-            script_db_state_tables.write(f"{align}substring(idx.indexdef,'\\((.*?)\\)') as index_columns\n")
-            script_db_state_tables.write(f"{align}from\n")
-            script_db_state_tables.write(f"{align}pg_index ix\n")
-            script_db_state_tables.write(f"{align}inner Join pg_class i ON i.oid = ix.indexrelid\n")
-            script_db_state_tables.write(f"{align}inner Join pg_class t on t.oid = ix.indrelid\n")
-            script_db_state_tables.write(f"{align}inner Join pg_namespace scm on t.relnamespace = scm.oid\n")
-            script_db_state_tables.write(f"{align}inner Join pg_class cls ON cls.oid = ix.indexrelid\n")
-            script_db_state_tables.write(f"{align}inner JOIN pg_am am ON am.oid = cls.relam\n")
-            script_db_state_tables.write(f"{align}inner Join pg_indexes idx on idx.schemaname = scm.nspname AND idx.tablename = t.relname AND idx.indexname = i.relname\n")
-            script_db_state_tables.write(f"{align}Left Join pg_constraint cnst on t.oid = cnst.conrelid AND i.oid = cnst.conindid AND cnst.contype='u'\n")
-            script_db_state_tables.write(f"{align}where scm.nspname || t.relname IN ({overall_table_schema_name_in_scripting})\n")
-            script_db_state_tables.write(f"{align}) DB\n")
-            script_db_state_tables.write(f"{align}On LOWER(J.table_schema) = LOWER(DB.table_schema) AND LOWER(J.table_name) = LOWER(DB.table_name) AND LOWER(J.index_name) = LOWER(DB.index_name)\n")
-            script_db_state_tables.write(f"{align}where J.index_columns <> DB.index_columns AND ScriptIndexes.index_name = J.index_name;\n")
+            script_db_state_tables.write(f"""UPDATE ScriptIndexes 
+SET is_unique_diff = True, indexStat = 3
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_index ix
+    INNER JOIN pg_class i ON i.oid = ix.indexrelid
+    INNER JOIN pg_class t ON t.oid = ix.indrelid
+    INNER JOIN pg_namespace scm ON t.relnamespace = scm.oid
+    INNER JOIN pg_class cls ON cls.oid = ix.indexrelid
+    INNER JOIN pg_am am ON am.oid = cls.relam
+    INNER JOIN pg_indexes idx ON idx.schemaname = scm.nspname 
+                              AND idx.tablename = t.relname 
+                              AND idx.indexname = i.relname
+    LEFT JOIN pg_constraint cnst ON t.oid = cnst.conrelid 
+                                 AND i.oid = cnst.conindid 
+                                 AND cnst.contype = 'u'
+    WHERE scm.nspname || t.relname IN ({overall_table_schema_name_in_scripting})
+      AND LOWER(scm.nspname) = LOWER(ScriptIndexes.table_schema)
+      AND LOWER(t.relname) = LOWER(ScriptIndexes.table_name)
+      AND LOWER(i.relname) = LOWER(ScriptIndexes.index_name)
+      AND ScriptIndexes.index_columns <> substring(idx.indexdef, '\\((.*?)\\)'));""")
         
         script_db_state_tables.write(f"{align}\n")
     

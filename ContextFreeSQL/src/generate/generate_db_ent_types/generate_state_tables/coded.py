@@ -178,25 +178,42 @@ on J.ent_schema=DB.ent_schema AND J.ent_name = DB.ent_name
 where DB.ent_name Is null 
 """)
     else:  # PostgreSQL
-        script_builder.write(f"""from {db_syntax.temp_table_prefix}ScriptCode J left join (
-Select v.table_schema || '.' || v.table_name AS "EntKey", v.table_schema as ent_schema, v.table_name as ent_name, 'V' AS ent_type,'' as param_type_list  
-From information_schema.views v
-Where v.table_schema Not In ('information_schema', 'pg_catalog')
-UNION
-Select n.nspname || '.' || p.proname  AS "EntKey", n.nspname as ent_schema,
-p.proname as ent_name,
-CAST(p.prokind AS char)  AS ent_type,
-pg_get_function_arguments(p.oid) as param_type_list 
-From pg_proc p 
-Left Join pg_namespace n on p.pronamespace = n.oid
-where n.nspname Not in ('pg_catalog', 'information_schema')
-UNION
-Select t.trigger_schema || '.' || t.trigger_name AS "EntKey", t.trigger_schema As ent_schema,
-t.trigger_name As ent_name,'TR' AS ent_type, '' as param_type_list 
-From information_schema.triggers t
-Group By 1, 2, 3, 4
-) DB on J.ent_schema=DB.ent_schema AND J.ent_name = DB.ent_name AND J.param_type_list = DB.param_type_list 
-where DB.ent_name Is null AND (ScriptCode.ent_schema = J.ent_schema AND ScriptCode.ent_name = J.ent_name AND ScriptCode.param_type_list = J.param_type_list ); --PG wants an explicit join of the updated table to its alias  
+        script_builder.write(f"""WHERE NOT EXISTS (
+    SELECT 1 
+    FROM (
+        SELECT v.table_schema || '.' || v.table_name AS "EntKey", 
+               v.table_schema as ent_schema, 
+               v.table_name as ent_name, 
+               'V' AS ent_type,
+               '' as param_type_list  
+        FROM information_schema.views v
+        WHERE v.table_schema NOT IN ('information_schema', 'pg_catalog')
+        
+        UNION
+        
+        SELECT n.nspname || '.' || p.proname AS "EntKey", 
+               n.nspname as ent_schema,
+               p.proname as ent_name,
+               CAST(p.prokind AS char) AS ent_type,
+               pg_get_function_arguments(p.oid) as param_type_list 
+        FROM pg_proc p 
+        LEFT JOIN pg_namespace n on p.pronamespace = n.oid
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+        
+        UNION
+        
+        SELECT t.trigger_schema || '.' || t.trigger_name AS "EntKey", 
+               t.trigger_schema As ent_schema,
+               t.trigger_name As ent_name,
+               'TR' AS ent_type, 
+               '' as param_type_list 
+        FROM information_schema.triggers t
+        GROUP BY 1, 2, 3, 4
+    ) existing_entities
+    WHERE existing_entities.ent_schema = ScriptCode.ent_schema 
+      AND existing_entities.ent_name = ScriptCode.ent_name 
+      AND existing_entities.param_type_list = ScriptCode.param_type_list
+);
 """)
     
     # Add entities that need to be dropped
