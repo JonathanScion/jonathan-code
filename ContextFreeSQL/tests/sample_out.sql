@@ -180,16 +180,16 @@ studentlastname  character varying  (100)  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
+)
+;
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -209,8 +209,8 @@ ALTER TABLE public.studentgrades1 ADD CONSTRAINT studentgrades1_pkey PRIMARY KEY
 studentid
 )
 ;
-ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::character varying;
-ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;',
+ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;
+ALTER TABLE public.studentgrades1 ALTER COLUMN subject SET DEFAULT ''math''::character varying;',
             'DROP TABLE public.studentgrades1;');
 		--tables only on Johannes database (need to add)
         update ScriptTables set tableStat = 1
@@ -298,17 +298,20 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;',
 		VALUES ('public',		'vw_students',		'studentlastname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentlastname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentlastname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentlastname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentlastname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		22.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  (22)  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying  (22) ,
-	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN subject'		);
+		VALUES ('public',		'studentgrades1',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentgradeid  TYPE  integer ,
+	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentgradeid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentid  TYPE  integer ,
+	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentid'		);
+		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
+		VALUES ('public',		'studentgrades1',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN grade  TYPE  smallint ,
+	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN grade'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentdob'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'vw_students',		'studentid',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentid  integer  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentid  TYPE  integer ,
 	ALTER COLUMN studentid SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentid'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'grade',		'smallint',		NULL,		16.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD grade  smallint  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN grade  TYPE  smallint ,
-	ALTER COLUMN grade SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN grade'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'sideoneonly',		'integer',		NULL,		32.0,		0.0,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD sideoneonly  integer  NULL ',		'ALTER TABLE public.students ALTER COLUMN sideoneonly  TYPE  integer ,
 	ALTER COLUMN sideoneonly SET  NULL ','ALTER TABLE public.students DROP COLUMN sideoneonly'		);
@@ -319,11 +322,8 @@ ALTER TABLE public.studentgrades1 ALTER COLUMN grade SET DEFAULT 0;',
 		VALUES ('public',		'vw_students',		'studentfirstname',		'character varying',		100.0,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.vw_students ADD studentfirstname  character varying  (100)  NULL ',		'ALTER TABLE public.vw_students ALTER COLUMN studentfirstname  TYPE  character varying  (100) ,
 	ALTER COLUMN studentfirstname SET  NULL ','ALTER TABLE public.vw_students DROP COLUMN studentfirstname'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'studentgradeid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentgradeid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentgradeid  TYPE  integer ,
-	ALTER COLUMN studentgradeid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentgradeid'		);
-		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
-		VALUES ('public',		'studentgrades1',		'studentid',		'integer',		NULL,		32.0,		0.0,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD studentid  integer  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN studentid  TYPE  integer ,
-	ALTER COLUMN studentid SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN studentid'		);
+		VALUES ('public',		'studentgrades1',		'subject',		'character varying',		22.0,		NULL,		NULL,		False,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.studentgrades1 ADD subject  character varying  (22)  NOT NULL ',		'ALTER TABLE public.studentgrades1 ALTER COLUMN subject  TYPE  character varying  (22) ,
+	ALTER COLUMN subject SET  NOT NULL ','ALTER TABLE public.studentgrades1 DROP COLUMN subject'		);
 		INSERT INTO ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP)
 		VALUES ('public',		'students',		'studentdob',		'timestamp without time zone',		NULL,		NULL,		NULL,		True,		False,		'0',		NULL,		NULL,		'ALTER TABLE public.students ADD studentdob  timestamp without time zone  NULL ',		'ALTER TABLE public.students ALTER COLUMN studentdob  TYPE  timestamp without time zone ,
 	ALTER COLUMN studentdob SET  NULL ','ALTER TABLE public.students DROP COLUMN studentdob'		);
@@ -534,31 +534,6 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -674,6 +649,31 @@ grade
 		VALUES ('public','studentgrades','unq_studentid_subj','grade',
 		'2',
 		'2',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
 		False,
 		'False');
 		

@@ -119,9 +119,17 @@ class DBConnSettings:
     
     
 #everything that's gonna be in 
+
+@dataclass
+class ListTables:
+    all: bool = False
+    tables: List[str] = field(default_factory=list)
+    
 @dataclass
 class ConfigVals:
     db_conn: DBConnSettings
     script_ops: ScriptingOptions
     table_script_ops: ScriptTableOptions
-    tables_to_load: List[str]
+    tables_to_load: ListTables
+    tables_data: ListTables
+
