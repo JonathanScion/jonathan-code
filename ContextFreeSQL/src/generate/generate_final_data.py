@@ -1476,7 +1476,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     if is_string:
                         where_part += f"@{s_ent_var_name}_{col_var_name}"
                     else:
-                        where_part += f"CAST({db_syntax.var_prefix}{s_ent_var_name}_{col_var_name} AS VARCHAR(20))"
+                        where_part += f"CAST({db_syntax.var_prefix}{s_ent_var_name}_{col_var_name} AS character varying)"
                     
                     where_part += "+''''"
                     
@@ -1605,8 +1605,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 for d_row_col in drows_cols:
                     out_buffer.write(f"{d_row_col['col_name']} ")
                     if d_row_col['col_name'] not in ar_key_cols:
-                        if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
-                            out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
+                        out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
+                        if script_ops.data_scripting_leave_report_fields_updated_save_old_value:                            
                             out_buffer.write(f", {EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']} ")
                     
                     if count < col_count:

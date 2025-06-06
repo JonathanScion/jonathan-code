@@ -41,11 +41,14 @@ def get_create_table_from_sys_tables(
         table_row = table_rows.iloc[0]
         create_table_lines = []
 
-        # Determine full table name based on DB type        
-        if db_type == DBType.MSSQL:
-            full_table_name = f"[{table_schema}].[{table_name}]"
-        else:  # MySQL or PostgreSQL
-            full_table_name = f"{table_schema}.{table_name}"
+        # Determine full table name based on DB type
+        if script_table_ops.table_name and script_table_ops.table_name.strip():
+            full_table_name = script_table_ops.table_name.strip()
+        else: #table name not overriden. MP
+            if db_type == DBType.MSSQL:
+                full_table_name = f"[{table_schema}].[{table_name}]"
+            else:  # MySQL or PostgreSQL
+                full_table_name = f"{table_schema}.{table_name}"
 
         # Start CREATE TABLE statement
         if as_temp_table:

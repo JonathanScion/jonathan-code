@@ -30,6 +30,9 @@ def main():
     elif config_vals.tables_data.all: #just load all tables
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
+        # Set scriptdata to True for all tables
+        tbl_ents.loc[tbl_ents['enttype'] == 'Table', 'scriptdata'] = True
+        #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
     script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops )

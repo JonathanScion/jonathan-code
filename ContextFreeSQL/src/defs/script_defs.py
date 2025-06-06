@@ -100,6 +100,7 @@ class ScriptTableOptions:
     defaults: bool = True
     check_constraints: bool = True
     extended_props: bool = True
+    table_name: str = ""
     
     
 class DBEntScriptState(Enum):
