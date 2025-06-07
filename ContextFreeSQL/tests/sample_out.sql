@@ -1549,7 +1549,7 @@ IF (printExec=True AND execCode=False AND public_studentgrades1_JustCreated=True
  VALUES (''3'',''Portogese'',''68'',''1'');');
 		INSERT INTO scriptoutput (SQLText)
 		VALUES ('--INSERT INTO public.studentgrades1 (studentid,subject,grade,studentgradeid)
- VALUES (''2'',''arab'',''65'',''1'');');
+ VALUES (''2'',''arab'',''52'',''1'');');
 
 --END IF;--of Batch INSERT of all the data into public.studentgrades1
 ELSE --and this begins the INSERT as against potentially existing data
@@ -1570,7 +1570,7 @@ studentid,subject,grade,studentgradeid)
  VALUES ('3','Portogese','68','1');
 INSERT INTO public_studentgrades1 (
 studentid,subject,grade,studentgradeid)
- VALUES ('2','arab','65','1');
+ VALUES ('2','arab','52','1');
 
 --add status field, and update it:
 ALTER TABLE public_studentgrades1 ADD _cmprstate_ smallint NULL;

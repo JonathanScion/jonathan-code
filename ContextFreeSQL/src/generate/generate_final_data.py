@@ -1577,7 +1577,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 
                 for d_row_col in drows_unq_cols:
                     col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
-                    where_part = f"s.{d_row_col['col_name']}=''' || "
+                    where_part = f"orig.{d_row_col['col_name']}=''' || "
                     is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
                     if is_string:
                         where_part += f"temprow.{col_var_name}"
