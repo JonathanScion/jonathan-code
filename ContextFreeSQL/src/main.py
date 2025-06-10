@@ -20,13 +20,31 @@ def main():
 
     schema = load_all_schema(config_vals.db_conn)
 
-    tbl_ents = load_all_db_ents(config_vals.db_conn)
-   
+     # Determine which entities to load
+    if len(config_vals.db_ents_to_load.tables) >= 1:
+        # Load specific entities from config
+        entities_to_load = config_vals.db_ents_to_load.tables
+        tbl_ents = load_all_db_ents(config_vals.db_conn, entity_filter=entities_to_load)  # Assuming load_all_db_ents supports filtering
+    elif hasattr(config_vals.db_ents_to_load, 'all') and config_vals.db_ents_to_load.all:
+        # Load all entities
+        tbl_ents = load_all_db_ents(config_vals.db_conn)
+    else:
+        # Default: load all entities
+        tbl_ents = load_all_db_ents(config_vals.db_conn)
+
+    
     
     # Mark tables for scripting
-    if len(config_vals.tables_data.tables)>1: #would need one like that for tables_to_load. thats in the json already
-        mask = False
-        #!implement this later        
+    if len(config_vals.tables_data.tables) >= 1:  # Changed from >1 to >=1 to handle single table
+        # Get the specific tables from config
+        tables_to_script = config_vals.tables_data.tables
+        
+        # Mark scriptdata=True for the specified tables
+        table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
+        tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
+        
+        # Load data for these specific tables
+        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script)    
     elif config_vals.tables_data.all: #just load all tables
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()

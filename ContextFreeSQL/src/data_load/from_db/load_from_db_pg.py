@@ -514,7 +514,7 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
             conn.close()
 
     
-def load_all_db_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
+def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List[str]] = None) -> pd.DataFrame:
     conn = None
     cur = None
     try:
@@ -553,6 +553,11 @@ def load_all_db_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
         entities_results = cur.fetchall()
         tbl_ents = pd.DataFrame(entities_results)
         
+        # Apply filter if provided
+        if entity_filter:
+            tbl_ents = tbl_ents[tbl_ents['entkey'].isin(entity_filter)]
+        
+        # Rest of the function remains the same...
         # Now, fetch the foreign key dependencies
         fk_sql = """SELECT ns.nspname as child_schema, t.relname as child_table, ns_f.nspname as parent_schema,t_f.relname as parent_table 
         FROM pg_catalog.pg_constraint fk 
