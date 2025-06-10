@@ -131,6 +131,6 @@ class ConfigVals:
     db_conn: DBConnSettings
     script_ops: ScriptingOptions
     table_script_ops: ScriptTableOptions
-    tables_to_load: ListTables
+    db_ents_to_load: ListTables
     tables_data: ListTables
 

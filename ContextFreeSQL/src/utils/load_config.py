@@ -25,7 +25,7 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
     # Create ScriptTableOptions
     table_script_ops = ScriptTableOptions(**data['table_script_ops'])
 
-    tables_to_load = ListTables(**data['tables_to_load'])
+    db_ents_to_load = ListTables(**data['tables_to_load'])
     tables_data = ListTables(**data['tables_data'])
 
     # Create and return ConfigVals
@@ -33,7 +33,7 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
         db_conn = db_conn,
         script_ops = script_ops,
         table_script_ops = table_script_ops,
-        tables_to_load = tables_to_load,
+        db_ents_to_load = db_ents_to_load,
         tables_data = tables_data
     )
 

@@ -30,13 +30,12 @@
       "check_constraints": true,
       "extended_props": true
     },
-    "tables_to_load":  {
+    "db_ents_to_load":  {
       "all": true,
       "tables": []
     },
-    "tables_data": {
-      "all": true,
-      "tables": []
+    "tables_data": {      
+      "tables": ["public.students"]
     }
   }
   
