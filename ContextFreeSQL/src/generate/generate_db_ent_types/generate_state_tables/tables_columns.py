@@ -80,10 +80,22 @@ def create_db_state_columns(
     
     script_db_state_tables.write(f"{align}{align});\n\n")
 
+    tables_to_script_set = set()
+    filtered_ents = tbl_ents_to_script[
+        (tbl_ents_to_script['scriptschema'] == True) & 
+        (tbl_ents_to_script['enttype'] == 'Table')
+    ]
+    
+    for _, ent_row in filtered_ents.iterrows():
+        tables_to_script_set.add((ent_row['entschema'], ent_row['entname']))
         
-    # Generate the column script rows
+    # Generate the column script rows (but only for tables that should be scripted, in case filter was applied)
     alter_col=''
     for _, row in schema_tables.columns.iterrows():
+        # Only process if this table is in our tbl_ents_to_script with scriptschema=True
+        if (row['table_schema'], row['table_name']) not in tables_to_script_set:
+            continue
+
         if db_type == DBType.MSSQL:
             alter_col = f"'ALTER TABLE [{row['table_schema']}].[{row['table_name']}] DROP COLUMN [{row['col_name']}]'"
         elif db_type == DBType.PostgreSQL:

@@ -155,10 +155,24 @@ def create_db_state_tables(
         );\n"""
     )
 
-    # Process each table
+    # Filter tables to script based on tbl_ents_to_script
+    tables_to_script_set = set()
+    filtered_ents = tbl_ents_to_script[
+        (tbl_ents_to_script['scriptschema'] == True) & 
+        (tbl_ents_to_script['enttype'] == 'Table')
+    ]
+    
+    for _, ent_row in filtered_ents.iterrows():
+        tables_to_script_set.add((ent_row['entschema'], ent_row['entname']))
+
+    # Process each table - but only if it should be scripted
     script_table_options_no_fk = ScriptTableOptions(foreign_keys=False)
     
     for _, row in schema_tables.tables.iterrows():
+        # Only process if this table is in our tbl_ents_to_script with scriptschema=True
+        if (row['entschema'], row['entname']) not in tables_to_script_set:
+            continue
+            
         # Get table creation code
         create_table_sql, create_table_err = get_create_table_from_sys_tables(
             db_type = db_type,
@@ -193,6 +207,7 @@ def create_db_state_tables(
             'DROP TABLE {ent_full_name};');"""
         )
 
+    # Rest of the function remains the same...
     # Update state against existing tables
     script_builder.write(
         f"""\n{align}--tables only on Johannes database (need to add)
@@ -248,6 +263,7 @@ def create_db_state_tables(
     script_builder.write("\n")
 
     return script_builder
+
 
 def get_table_names_to_script(tables_to_script: pd.DataFrame, with_dot: Optional[bool]=False):
     # Filter for rows where scriptschema equals 1 AND enttype is 'Table'
