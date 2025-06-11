@@ -32,7 +32,7 @@
     },
     "db_ents_to_load":  {
       "all": true,
-      "tables": []
+      "tables": ["public.students"]
     },
     "tables_data": {      
       "tables": ["public.students"]

@@ -117,8 +117,22 @@ def create_db_state_indexes(
     script_db_state_tables.write(f"{align});\n")
     script_db_state_tables.write(f"{align}\n")
     
-    # Process Indexes from schema_tables
+    # Filter tables to script based on tbl_ents_to_script
+    tables_to_script_set = set()
+    filtered_ents = tbl_ents_to_script[
+        (tbl_ents_to_script['scriptschema'] == True) & 
+        (tbl_ents_to_script['enttype'] == 'Table')
+    ]
+    
+    for _, ent_row in filtered_ents.iterrows():
+        tables_to_script_set.add((ent_row['entschema'], ent_row['entname']))
+    
+    # Process Indexes from schema_tables - but only for tables that should be scripted
     for _, index_row in schema_tables.indexes.iterrows():
+        # Only process if this table is in our tbl_ents_to_script with scriptschema=True
+        if (index_row['table_schema'], index_row['table_name']) not in tables_to_script_set:
+            continue
+            
         # Get associated index columns
         index_cols = schema_tables.index_cols[
             (schema_tables.index_cols['table_schema'] == index_row['table_schema']) & 
@@ -634,7 +648,7 @@ WHERE EXISTS (
             bad_data_pre_add_indx.write("\t\t\t\t\t\t\tUPDATE ScriptIndexes SET GotBadData=False WHERE ScriptIndexes.index_name = ''' || temprow.index_name || ''';\n")
             bad_data_pre_add_indx.write("\t\t\t\t\t\tEnd If;\n")
             bad_data_pre_add_indx.write("\t\t\t\t\tEnd;\n")
-            bad_data_pre_add_indx.write("\t\t\t\t$chkData$';\n")
+            bad_data_pre_add_indx.write("\t\t\t\t$chkData;\n")
             bad_data_pre_add_indx.write("\t\t\t\texecute sqlCode;\n")
             bad_data_pre_add_indx.write("\t\t\tEnd If;\n")
             bad_data_pre_add_indx.write("\t\tEnd Loop;\n")

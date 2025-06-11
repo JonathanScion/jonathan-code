@@ -102,8 +102,21 @@ def create_db_state_fks(
     script_db_state_tables.write(f"{align});\n")
     script_db_state_tables.write(f"{align}\n")
     
+    tables_to_script_set = set()
+    filtered_ents = tbl_ents_to_script[
+        (tbl_ents_to_script['scriptschema'] == True) & 
+        (tbl_ents_to_script['enttype'] == 'Table')
+    ]
+
+    for _, ent_row in filtered_ents.iterrows():
+        tables_to_script_set.add((ent_row['entschema'], ent_row['entname']))
+
     # Process foreign keys from schema_tables
     for _, fk_row in schema_tables.fks.iterrows():
+        # Only process if this table is in our tbl_ents_to_script with scriptschema=True
+        if (fk_row['fkey_table_schema'], fk_row['fkey_table_name']) not in tables_to_script_set:
+            continue
+        
         # Get FK columns for the current FK
         fk_cols = schema_tables.fk_cols[
             (schema_tables.fk_cols['fkey_table_schema'] == fk_row['fkey_table_schema']) &

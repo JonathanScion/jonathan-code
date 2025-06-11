@@ -13,7 +13,7 @@ from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
 from src.generate.generate_final_coded_ents import generate_coded_ents
 
-
+#core proc for this whole app
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
