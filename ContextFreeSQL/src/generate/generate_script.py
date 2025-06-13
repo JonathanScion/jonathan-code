@@ -93,9 +93,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
-    generate_drop_tables(db_type=db_type, sql_buffer=add_tables)
     if scrpt_ops.remove_all_extra_ents:
-        generate_add_tables(db_type=db_type, sql_buffer=drop_tables)
+        generate_drop_tables(db_type=db_type, sql_buffer=add_tables)
+    generate_add_tables(db_type=db_type, sql_buffer=drop_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
     generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents)
 
