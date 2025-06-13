@@ -5,6 +5,8 @@ from src.utils import funcs as utils
 def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool):
 
     sql_buffer.write("\n")
+    if db_type == DBType.PostgreSQL:
+        sql_buffer.write("BEGIN --coded entities\n")
     
     # Drop extra entities if configured
     if remove_all_extra_ents:
@@ -125,4 +127,4 @@ def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool
     
     # Wrap it up
     if db_type == DBType.PostgreSQL:
-        sql_buffer.write("END; --of coded entities\n")
+        sql_buffer.write("END; --coded entities\n")

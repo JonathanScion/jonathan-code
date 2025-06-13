@@ -90,7 +90,6 @@ BEGIN --overall code
 		Where J.schema_name Not In ('pg_catalog','information_schema') AND J.schema_name NOT LIKE 'pg_temp%' AND J.schema_name NOT LIKE 'pg_toast%' 
 		AND LOWER(J.schema_name) Not IN (select LOWER(J1.schema_name) from scriptschemas J1);
 		
-		--Dropping Schemas that need to be dropped:
 		--Adding new entities and ones that were modified
 		declare temprow record;
 		BEGIN
@@ -788,180 +787,6 @@ UPDATE scriptfks
 	End; --DB State Temp Tables for Tables
 
 
---DB State Temp Tables for Codes
---Code Entities
-BEGIN --coded entities
-perform n.nspname, c.relname
-FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname like 'pg_temp_%' AND c.relname='scriptcode' AND pg_catalog.pg_table_is_visible(c.oid);
-IF FOUND THEN
-	DROP TABLE ScriptCode;
-END IF;
-
-CREATE TEMP TABLE ScriptCode
-(
-	ent_schema character varying (128) not null,
-	ent_name character varying (128) not null,
-	ent_type character varying (25) null,
-	ent_type_pg character varying (25) null,
-	SQL_CREATE character varying  null,
-	SQL_DROP character varying  null,
-	param_type_list character varying  null,
-	codeStat smallint null
-);
-
-
---Entities only On Johannes database (need To add)
-update ScriptCode Set codeStat = 1
-WHERE NOT EXISTS (
-    SELECT 1 
-    FROM (
-        SELECT v.table_schema || '.' || v.table_name AS "EntKey", 
-               v.table_schema as ent_schema, 
-               v.table_name as ent_name, 
-               'V' AS ent_type,
-               '' as param_type_list  
-        FROM information_schema.views v
-        WHERE v.table_schema NOT IN ('information_schema', 'pg_catalog')
-        
-        UNION
-        
-        SELECT n.nspname || '.' || p.proname AS "EntKey", 
-               n.nspname as ent_schema,
-               p.proname as ent_name,
-               CAST(p.prokind AS char) AS ent_type,
-               pg_get_function_arguments(p.oid) as param_type_list 
-        FROM pg_proc p 
-        LEFT JOIN pg_namespace n on p.pronamespace = n.oid
-        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-        
-        UNION
-        
-        SELECT t.trigger_schema || '.' || t.trigger_name AS "EntKey", 
-               t.trigger_schema As ent_schema,
-               t.trigger_name As ent_name,
-               'TR' AS ent_type, 
-               '' as param_type_list 
-        FROM information_schema.triggers t
-        GROUP BY 1, 2, 3, 4
-    ) existing_entities
-    WHERE existing_entities.ent_schema = ScriptCode.ent_schema 
-      AND existing_entities.ent_name = ScriptCode.ent_name 
-      AND existing_entities.param_type_list = ScriptCode.param_type_list
-);
-
---Entities only on DB (need to drop)
-INSERT INTO ScriptCode (ent_schema, ent_name, ent_type, param_type_list, codeStat)
-SELECT DB.ent_schema, DB.ent_name, DB.ent_type, DB.param_type_list, 2 
-FROM ScriptCode J 
-RIGHT JOIN (Select v.table_schema || '.' || v.table_name AS EntKey, v.table_schema as ent_schema, v.table_name as ent_name, 'View' as ent_type, '' as param_type_list 
-    From information_schema.views v
-    Where v.table_schema Not In ('information_schema', 'pg_catalog')
-    UNION
-    Select n.nspname || '.' || p.proname AS EntKey, n.nspname as ent_schema,
-    p.proname As ent_name,
-    CASE 
-        WHEN p.prokind ='p' THEN 'Procedure'
-        ELSE 'Function'
-    END enttype,
-    pg_get_function_arguments(p.oid) as param_type_list 
-    From pg_proc p 
-    Left Join pg_namespace n on p.pronamespace = n.oid
-    where n.nspname Not in ('pg_catalog', 'information_schema')
-    UNION
-    Select t.trigger_schema || '.' || t.trigger_name AS ent_type, t.trigger_schema As ent_schema,
-    t.trigger_name As ent_name,
-    'Trigger' as enttype, '' as param_type_list
-    From information_schema.triggers t
-    Group By 1, 2, 3, 4
-) DB ON LOWER(J.ent_schema) = LOWER(DB.ent_schema) 
-AND LOWER(J.ent_name) = LOWER(DB.ent_name) 
-AND LOWER(J.param_type_list) = LOWER(DB.param_type_list) 
-WHERE J.ent_name Is NULL; 
-
---Entities which are different
-UPDATE ScriptCode Set codeStat = 3
-FROM ScriptCode J INNER JOIN (
-Select v.table_schema || '.' || v.table_name AS "EntKey", v.table_schema as ent_schema, v.table_name as ent_name, 'V' as "enttype", 
-'CREATE OR REPLACE VIEW ' || v.table_schema || '.' || v.table_name || E'\nAS\n' || v.view_definition AS definition, 
-'' as param_type_list 
-From information_schema.views v
-Where v.table_schema Not In ('information_schema', 'pg_catalog')
-UNION
-Select n.nspname || '.' || p.proname  AS "EntKey", n.nspname as ent_schema,
-p.proname As ent_name,
-CAST(p.prokind As Char)  AS "enttype",
-case when l.lanname = 'internal' then p.prosrc
-else pg_get_functiondef(p.oid)
-end as definition, 
-pg_get_function_arguments(p.oid) as param_type_list 
-From pg_proc p 
-Left Join pg_namespace n on p.pronamespace = n.oid
-Left Join pg_language l on p.prolang = l.oid 
-Left Join pg_type t on t.oid = p.prorettype 
-where n.nspname Not in ('pg_catalog', 'information_schema')
-UNION
-Select t.trigger_schema || '.' || t.trigger_name AS "EntKey", t.trigger_schema As ent_schema,
-t.trigger_name As ent_name,
-'TR' as "enttype", t.action_statement As definition, '' as param_type_list 
-From information_schema.triggers t
-Group By 1, 2, 3, 4, 5
-) DB On LOWER(J.ent_schema) = LOWER(DB.ent_schema) And LOWER(J.ent_name )= LOWER(DB.ent_name ) And LOWER(J.param_type_list) = LOWER(DB.param_type_list )
-WHERE J.SQL_CREATE<>DB.definition 
-AND (ScriptCode.ent_schema = J.ent_schema AND ScriptCode.ent_name = J.ent_name); --PG wants an explicit join of the updated table to its alias  
-
---End DB State Temp Tables for Codes
-
-
-	--Adding Tables--------------------------------------------------------------------
-
---Dropping Tables that need to be dropped:
-declare temprow record;
-BEGIN
-	FOR temprow IN 
-		Select s.table_schema , s.table_name 
-		FROM ScriptTables s
-		WHERE tableStat = 2
-LOOP
-	IF (print=True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--Table ' || temprow.table_schema || '.' || temprow.table_name || ' is different. Drop and then add:');
-	END IF;
-	IF (printExec = True) THEN 
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name);
-	END IF;
-	IF (execCode = True) THEN
-		EXECUTE 'DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name;
-	END IF;
-	schemaChanged := True;
-	END LOOP;
-END; --of cursor 
-
-
-	--Dropping Extra Schemas----------------------------------------------------------------
-		DECLARE temprow record;
-		BEGIN
-			FOR temprow IN
-				SELECT  s.schema_name ,  
-				s.SQL_DROP 
-				FROM    ScriptSchemas s
-					WHERE SchemaStat = 2
-				LOOP
-				IF (print=True) THEN
-					INSERT INTO scriptoutput (SQLText)
-					VALUES ('--Dropping Schema ' || temprow.schema_name || ':');
-				END IF;
-				IF (printExec = True) THEN 
-					INSERT INTO scriptoutput (SQLText)
-					VALUES ('DROP SCHEMA ' || temprow.schema_name || ';');
-				END IF;
-				IF (execCode = True) THEN
-					EXECUTE 'DROP SCHEMA ' || temprow.schema_name || ';';
-				END IF;
-				schemaChanged := True;
-				END LOOP;
-			END; --FOR
 
 
 	--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------
@@ -1475,27 +1300,7 @@ END; --end of data section
 
 --Coded Entities---------------------------------------------------------------
 
-declare temprow record;
-BEGIN
-	FOR temprow IN 
-		Select s.ent_schema , s.ent_name, s.ent_type, s.param_type_list  
-		FROM ScriptCode s
-		WHERE codeStat = 2
-LOOP
-	IF (print=True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--' || temprow.ent_schema || '.' || temprow.ent_name || ' is extra. Drop this code:');
-	END IF;
-	IF (printExec = True) THEN 
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('DROP  ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || '(' || COALESCE(temprow.param_type_list,'') || ')');
-	END IF;
-	IF (execCode = True) THEN
-		EXECUTE 'DROP  ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || '(' || COALESCE(temprow.param_type_list,'') || ')';
-	END IF;
-	schemaChanged := True;
-	END LOOP;
-END; --of cursor 
+BEGIN --coded entities
 --Dropping Entities that need to be altered: (will then be added again. we don't do ALTER. just DROP-CREATE)
 	declare temprow record;
 	BEGIN
@@ -1540,7 +1345,7 @@ END; --of cursor
 	schemaChanged := True;
 		END LOOP;
 	END; --of cursor 
-END; --of coded entities
+END; --coded entities
 
 	--Dropping Tables-------------------------------------------------------------------------
 declare temprow record;
