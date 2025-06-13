@@ -2,7 +2,7 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
 
-def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool):
+def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool, got_specific_tables: bool):
 
     sql_buffer.write("\n")
     if db_type == DBType.PostgreSQL:
@@ -74,17 +74,18 @@ def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool
         sql_buffer.write("\n")
     
     elif db_type == DBType.PostgreSQL:
-        sql_buffer.write("\tdeclare temprow record;\n")
-        sql_buffer.write("\tBEGIN\n")
-        sql_buffer.write("\t\tFOR temprow IN\n")
-        sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.ent_type, S.param_type_list \n")
-        sql_buffer.write("\t\t\tFROM ScriptCode s\n")
-        sql_buffer.write("\t\t\tWHERE codeStat = 3 \n")
-        sql_buffer.write("\t\tLOOP\n")
-        utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_schema || '.' || temprow.ent_name || ' is different. Drop and then add:'")
-        utils.add_exec_sql(db_type, 1, sql_buffer, "'DROP ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || '(' || COALESCE(temprow.param_type_list,'') || ');'")
-        sql_buffer.write("\t\tEND LOOP;\n")
-        sql_buffer.write("\tEND; --of cursor \n")
+        if (remove_all_extra_ents and (not got_specific_tables)):
+            sql_buffer.write("\tdeclare temprow record;\n")
+            sql_buffer.write("\tBEGIN\n")
+            sql_buffer.write("\t\tFOR temprow IN\n")
+            sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.ent_type, S.param_type_list \n")
+            sql_buffer.write("\t\t\tFROM ScriptCode s\n")
+            sql_buffer.write("\t\t\tWHERE codeStat = 3 \n")
+            sql_buffer.write("\t\tLOOP\n")
+            utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_schema || '.' || temprow.ent_name || ' is different. Drop and then add:'")
+            utils.add_exec_sql(db_type, 1, sql_buffer, "'DROP ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || '(' || COALESCE(temprow.param_type_list,'') || ');'")
+            sql_buffer.write("\t\tEND LOOP;\n")
+            sql_buffer.write("\tEND; --of cursor \n")
     
     # Adding new or modified entities
     sql_buffer.write("--Adding new coded entities and ones that were modified\n")
@@ -113,17 +114,18 @@ def generate_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool
         sql_buffer.write("DEALLOCATE codedAdd\n")
     
     elif db_type == DBType.PostgreSQL:
-        sql_buffer.write("\tdeclare temprow record;\n")
-        sql_buffer.write("\tBEGIN\n")
-        sql_buffer.write("\t\tFOR temprow IN\n")
-        sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.sql_create, s.ent_type \n")
-        sql_buffer.write("\t\t\tFROM ScriptCode s\n")
-        sql_buffer.write("\t\t\tWHERE codeStat IN (1,3) \n")
-        sql_buffer.write("\t\tLOOP\n")
-        utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || ' will be added'")
-        utils.add_exec_sql(db_type, 1, sql_buffer, "temprow.SQL_CREATE")
-        sql_buffer.write("\t\tEND LOOP;\n")
-        sql_buffer.write("\tEND; --of cursor \n")
+        if not got_specific_tables: #if there's any sort of list of specific tables, not touching coded ents at all
+            sql_buffer.write("\tdeclare temprow record;\n")
+            sql_buffer.write("\tBEGIN\n")
+            sql_buffer.write("\t\tFOR temprow IN\n")
+            sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.sql_create, s.ent_type \n")
+            sql_buffer.write("\t\t\tFROM ScriptCode s\n")
+            sql_buffer.write("\t\t\tWHERE codeStat IN (1,3) \n")
+            sql_buffer.write("\t\tLOOP\n")
+            utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || ' will be added'")
+            utils.add_exec_sql(db_type, 1, sql_buffer, "temprow.SQL_CREATE")
+            sql_buffer.write("\t\tEND LOOP;\n")
+            sql_buffer.write("\tEND; --of cursor \n")
     
     # Wrap it up
     if db_type == DBType.PostgreSQL:

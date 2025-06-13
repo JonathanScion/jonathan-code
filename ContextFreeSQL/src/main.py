@@ -53,7 +53,7 @@ def main():
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops )
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1) )
 
     with open(r'C:\Users\yonis\source\repos\veteran-developer\ContextFreeSQL\tests\sample_out.sql', 'w') as f:
        f.write(script)
