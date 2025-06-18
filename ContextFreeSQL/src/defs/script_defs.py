@@ -122,8 +122,7 @@ class DBConnSettings:
 #everything that's gonna be in 
 
 @dataclass
-class ListTables:
-    all: bool = False
+class ListTables:    
     tables: List[str] = field(default_factory=list)
     
 @dataclass
