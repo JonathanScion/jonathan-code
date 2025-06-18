@@ -25,9 +25,6 @@ def main():
         # Load specific entities from config
         entities_to_load = config_vals.db_ents_to_load.tables
         tbl_ents = load_all_db_ents(config_vals.db_conn, entity_filter=entities_to_load)  # Assuming load_all_db_ents supports filtering
-    elif hasattr(config_vals.db_ents_to_load, 'all') and config_vals.db_ents_to_load.all:
-        # Load all entities
-        tbl_ents = load_all_db_ents(config_vals.db_conn)
     else:
         # Default: load all entities
         tbl_ents = load_all_db_ents(config_vals.db_conn)
@@ -45,7 +42,7 @@ def main():
         
         # Load data for these specific tables
         load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script)    
-    elif config_vals.tables_data.all: #just load all tables
+    else: #just load all tables
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
         # Set scriptdata to True for all tables

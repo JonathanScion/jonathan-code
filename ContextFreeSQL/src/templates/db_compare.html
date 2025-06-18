@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Schema Comparison</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .controls {
+            padding: 20px 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .status-filters {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .checkbox-group:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #667eea;
+        }
+
+        .checkbox-group label {
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .equal { color: #28a745; }
+        .left-only { color: #007bff; }
+        .right-only { color: #fd7e14; }
+        .different { color: #dc3545; }
+
+        .comparison-grid {
+            display: flex;
+            height: calc(100vh - 200px);
+            min-height: 400px;
+        }
+
+        .database-section {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+
+        .database-section:first-child {
+            flex: 1;
+            border-right: none;
+        }
+
+        .database-section:last-child {
+            flex: 1;
+        }
+
+        .resizer {
+            width: 6px;
+            background: #dee2e6;
+            cursor: col-resize;
+            position: relative;
+            transition: background-color 0.2s ease;
+        }
+
+        .resizer:hover {
+            background: #667eea;
+        }
+
+        .resizer::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 30px;
+            background: #6c757d;
+            border-radius: 1px;
+        }
+
+        .resizer:hover::after {
+            background: white;
+        }
+
+        .database-header {
+            background: #343a40;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .column-headers {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            background: #6c757d;
+            color: white;
+            font-weight: 600;
+            position: relative;
+        }
+
+        .column-header {
+            padding: 12px;
+            text-align: center;
+            border-right: 1px solid #495057;
+            position: relative;
+            user-select: none;
+        }
+
+        .column-header:last-child {
+            border-right: none;
+        }
+
+        .column-resizer {
+            position: absolute;
+            top: 0;
+            right: -3px;
+            width: 6px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            z-index: 10;
+        }
+
+        .column-resizer:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .column-header:last-child .column-resizer {
+            display: none;
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .filter-cell {
+            padding: 8px;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+        }
+
+        .filter-cell:last-child {
+            border-right: none;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        .filter-input::placeholder {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .data-rows {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        .data-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            border-bottom: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .data-row:hover {
+            background: #f8f9fa;
+        }
+
+        .data-cell {
+            padding: 12px;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+        }
+
+        .data-cell:last-child {
+            border-right: none;
+            justify-content: center;
+        }
+
+        .schema-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .status-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .status-equal { background: #28a745; }
+        .status-left-only { background: #007bff; }
+        .status-right-only { background: #fd7e14; }
+        .status-different { background: #dc3545; }
+
+        .footer {
+            padding: 20px;
+            text-align: center;
+            background: #f8f9fa;
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .comparison-grid {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .resizer {
+                display: none;
+            }
+            
+            .status-filters {
+                justify-content: center;
+            }
+        }
+
+        /* Resize functionality */
+        .resizing {
+            user-select: none;
+        }
+
+        .resizing .database-section {
+            pointer-events: none;
+        }
+
+        .column-resizing {
+            user-select: none;
+        }
+
+        .column-resizing * {
+            cursor: col-resize !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="reportTitle">Database Schema Comparison Report</h1>
+        </div>
+
+        <div class="controls">
+            <div class="status-filters">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="equal" checked onchange="filterByStatus()">
+                    <label for="equal" class="equal">● Equal</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="leftOnly" checked onchange="filterByStatus()">
+                    <label for="leftOnly" class="left-only">● Only on Left Side</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="rightOnly" checked onchange="filterByStatus()">
+                    <label for="rightOnly" class="right-only">● Only on Right Side</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="different" checked onchange="filterByStatus()">
+                    <label for="different" class="different">● Different</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="comparison-grid">
+            <div class="database-section" id="leftPanel">
+                <div class="database-header" id="leftPanelTitle">Database 1</div>
+                <div class="column-headers" id="leftHeaders">
+                    <div class="column-header">
+                        Schema
+                        <div class="column-resizer" data-column="0"></div>
+                    </div>
+                    <div class="column-header">
+                        Name
+                        <div class="column-resizer" data-column="1"></div>
+                    </div>
+                    <div class="column-header">
+                        Type
+                        <div class="column-resizer" data-column="2"></div>
+                    </div>
+                    <div class="column-header">
+                        Status
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter schema..." onkeyup="filterData()" id="schema1">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter name..." onkeyup="filterData()" id="name1">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter type..." onkeyup="filterData()" id="type1">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter status..." onkeyup="filterData()" id="status1">
+                    </div>
+                </div>
+                <div class="data-rows" id="database1-rows">
+                    <!-- Data will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="resizer" id="resizer"></div>
+
+            <div class="database-section" id="rightPanel">
+                <div class="database-header" id="rightPanelTitle">Database 2</div>
+                <div class="column-headers" id="rightHeaders">
+                    <div class="column-header">
+                        Schema
+                        <div class="column-resizer" data-column="0"></div>
+                    </div>
+                    <div class="column-header">
+                        Name
+                        <div class="column-resizer" data-column="1"></div>
+                    </div>
+                    <div class="column-header">
+                        Type
+                        <div class="column-resizer" data-column="2"></div>
+                    </div>
+                    <div class="column-header">
+                        Status
+                    </div>
+                </div>
+                <div class="filter-row">
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter schema..." onkeyup="filterData()" id="schema2">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter name..." onkeyup="filterData()" id="name2">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter type..." onkeyup="filterData()" id="type2">
+                    </div>
+                    <div class="filter-cell">
+                        <input type="text" class="filter-input" placeholder="Filter status..." onkeyup="filterData()" id="status2">
+                    </div>
+                </div>
+                <div class="data-rows" id="database2-rows">
+                    <!-- Data will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Database Schema Comparison Tool • Generated on <span id="currentDate"></span>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION VARIABLES - EDIT THESE
+        // ============================================
+        
+        // Report titles
+        const CONFIG = {
+            reportTitle: "Database Schema Comparison Report",
+            leftPanelTitle: "Database 1",
+            rightPanelTitle: "Database 2",
+            
+            // Column headers
+            columnHeaders: {
+                schema: "Schema",
+                name: "Name", 
+                type: "Type",
+                status: "Status"
+            },
+            
+            // Filter placeholders
+            filterPlaceholders: {
+                schema: "Filter schema...",
+                name: "Filter name...",
+                type: "Filter type...",
+                status: "Filter status..."
+            },
+            
+            // Status labels for checkboxes
+            statusLabels: {
+                equal: "● Equal",
+                leftOnly: "● Only on Left Side", 
+                rightOnly: "● Only on Right Side",
+                different: "● Different"
+            }
+        };
+
+        // Report data - replace this array with your actual data
+        const reportData = [
+            {
+                schema: "Giacomo Guilizzioni",
+                name: "Founder & CEO",
+                type: "Peldi",
+                age: 40,
+                status: "equal"
+            },
+            {
+                schema: "Marco Botton",
+                name: "Tuttofore",
+                type: "",
+                age: 38,
+                status: "equal"
+            },
+            {
+                schema: "Mariah Maclachlan",
+                name: "Better Half",
+                type: "Patata",
+                age: 41,
+                status: "different"
+            },
+            {
+                schema: "Valerie Liberty",
+                name: "Head Chef",
+                type: "Val",
+                age: null,
+                status: "equal"
+            },
+            {
+                schema: "Data Grid Docs",
+                name: "",
+                type: "",
+                age: null,
+                status: "different"
+            }
+        ];
+
+        // ============================================
+        // APPLICATION CODE - DON'T EDIT BELOW
+        // ============================================
+
+        let filteredData = [...reportData];
+
+        function getStatusIcon(status) {
+            const icons = {
+                'equal': '=',
+                'left-only': 'L',
+                'right-only': 'R',
+                'different': '≠'
+            };
+            return icons[status] || '?';
+        }
+
+        function getStatusClass(status) {
+            return `status-${status.replace('-', '-')}`;
+        }
+
+        function renderData() {
+            const db1Container = document.getElementById('database1-rows');
+            const db2Container = document.getElementById('database2-rows');
+            
+            db1Container.innerHTML = '';
+            db2Container.innerHTML = '';
+
+            filteredData.forEach(item => {
+                const row1 = createRow(item);
+                const row2 = createRow(item);
+                
+                db1Container.appendChild(row1);
+                db2Container.appendChild(row2);
+            });
+        }
+
+        function createRow(item) {
+            const row = document.createElement('div');
+            row.className = 'data-row';
+            
+            row.innerHTML = `
+                <div class="data-cell">
+                    <span class="schema-name">${item.schema}</span>
+                </div>
+                <div class="data-cell">${item.name}</div>
+                <div class="data-cell">${item.type}</div>
+                <div class="data-cell">
+                    <div class="status-icon ${getStatusClass(item.status)}">
+                        ${getStatusIcon(item.status)}
+                    </div>
+                </div>
+            `;
+            
+            return row;
+        }
+
+        function filterByStatus() {
+            const equalChecked = document.getElementById('equal').checked;
+            const leftOnlyChecked = document.getElementById('leftOnly').checked;
+            const rightOnlyChecked = document.getElementById('rightOnly').checked;
+            const differentChecked = document.getElementById('different').checked;
+
+            filteredData = reportData.filter(item => {
+                switch(item.status) {
+                    case 'equal': return equalChecked;
+                    case 'left-only': return leftOnlyChecked;
+                    case 'right-only': return rightOnlyChecked;
+                    case 'different': return differentChecked;
+                    default: return true;
+                }
+            });
+
+            applyTextFilters();
+        }
+
+        function filterData() {
+            applyTextFilters();
+        }
+
+        function applyTextFilters() {
+            const filters = {
+                schema1: document.getElementById('schema1').value.toLowerCase(),
+                name1: document.getElementById('name1').value.toLowerCase(),
+                type1: document.getElementById('type1').value.toLowerCase(),
+                schema2: document.getElementById('schema2').value.toLowerCase(),
+                name2: document.getElementById('name2').value.toLowerCase(),
+                type2: document.getElementById('type2').value.toLowerCase()
+            };
+
+            const statusFiltered = reportData.filter(item => {
+                const equalChecked = document.getElementById('equal').checked;
+                const leftOnlyChecked = document.getElementById('leftOnly').checked;
+                const rightOnlyChecked = document.getElementById('rightOnly').checked;
+                const differentChecked = document.getElementById('different').checked;
+
+                switch(item.status) {
+                    case 'equal': return equalChecked;
+                    case 'left-only': return leftOnlyChecked;
+                    case 'right-only': return rightOnlyChecked;
+                    case 'different': return differentChecked;
+                    default: return true;
+                }
+            });
+
+            filteredData = statusFiltered.filter(item => {
+                return (
+                    item.schema.toLowerCase().includes(filters.schema1) &&
+                    item.name.toLowerCase().includes(filters.name1) &&
+                    item.type.toLowerCase().includes(filters.type1) &&
+                    item.schema.toLowerCase().includes(filters.schema2) &&
+                    item.name.toLowerCase().includes(filters.name2) &&
+                    item.type.toLowerCase().includes(filters.type2)
+                );
+            });
+
+            renderData();
+        }
+
+        // Initialize
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString();
+        
+        // Apply configuration
+        document.getElementById('reportTitle').textContent = CONFIG.reportTitle;
+        document.getElementById('leftPanelTitle').textContent = CONFIG.leftPanelTitle;
+        document.getElementById('rightPanelTitle').textContent = CONFIG.rightPanelTitle;
+        
+        renderData();
+        initializeResizer();
+        initializeColumnResizers();
+
+        // Panel resizer functionality
+        function initializeResizer() {
+            const resizer = document.getElementById('resizer');
+            const leftPanel = document.getElementById('leftPanel');
+            const rightPanel = document.getElementById('rightPanel');
+            const container = document.querySelector('.comparison-grid');
+            
+            let isResizing = false;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                document.body.classList.add('resizing');
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+
+                const containerRect = container.getBoundingClientRect();
+                const containerWidth = containerRect.width - 6; // Subtract resizer width
+                const mouseX = e.clientX - containerRect.left;
+                
+                // Calculate percentages, ensuring minimum widths
+                const leftPercent = Math.max(20, Math.min(80, (mouseX / containerWidth) * 100));
+                const rightPercent = 100 - leftPercent;
+
+                leftPanel.style.flex = `0 0 ${leftPercent}%`;
+                rightPanel.style.flex = `0 0 ${rightPercent}%`;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.classList.remove('resizing');
+                }
+            });
+
+            // Handle mouse leave to stop resizing
+            document.addEventListener('mouseleave', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.classList.remove('resizing');
+                }
+            });
+        }
+
+        // Column resizer functionality
+        function initializeColumnResizers() {
+            const leftHeaders = document.getElementById('leftHeaders');
+            const rightHeaders = document.getElementById('rightHeaders');
+            
+            // Initial column widths (in fractions)
+            let leftColumnWidths = [2, 1, 1, 1]; // Schema is 2fr, others are 1fr
+            let rightColumnWidths = [2, 1, 1, 1];
+            
+            function updateGridColumns(panel, widths) {
+                const headers = panel === 'left' ? leftHeaders : rightHeaders;
+                const filterRow = panel === 'left' ? 
+                    leftHeaders.nextElementSibling : 
+                    rightHeaders.nextElementSibling;
+                const dataRows = panel === 'left' ? 
+                    document.getElementById('database1-rows') : 
+                    document.getElementById('database2-rows');
+                
+                const gridTemplate = widths.map(w => `${w}fr`).join(' ');
+                
+                headers.style.gridTemplateColumns = gridTemplate;
+                filterRow.style.gridTemplateColumns = gridTemplate;
+                
+                // Update all data rows
+                const rows = dataRows.querySelectorAll('.data-row');
+                rows.forEach(row => {
+                    row.style.gridTemplateColumns = gridTemplate;
+                });
+            }
+            
+            function setupColumnResizers(panel) {
+                const headers = panel === 'left' ? leftHeaders : rightHeaders;
+                const widths = panel === 'left' ? leftColumnWidths : rightColumnWidths;
+                const resizers = headers.querySelectorAll('.column-resizer');
+                
+                resizers.forEach((resizer, index) => {
+                    let isResizing = false;
+                    let startX = 0;
+                    let startWidths = [];
+                    
+                    resizer.addEventListener('mousedown', (e) => {
+                        isResizing = true;
+                        startX = e.clientX;
+                        startWidths = [...widths];
+                        document.body.classList.add('column-resizing');
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                    
+                    document.addEventListener('mousemove', (e) => {
+                        if (!isResizing) return;
+                        
+                        const deltaX = e.clientX - startX;
+                        const headerRect = headers.getBoundingClientRect();
+                        const totalWidth = headerRect.width;
+                        
+                        // Calculate the change in width as a fraction
+                        const deltaFraction = (deltaX / totalWidth) * widths.reduce((a, b) => a + b, 0);
+                        
+                        // Adjust current and next column
+                        const newCurrentWidth = Math.max(0.5, startWidths[index] + deltaFraction);
+                        const newNextWidth = Math.max(0.5, startWidths[index + 1] - deltaFraction);
+                        
+                        widths[index] = newCurrentWidth;
+                        widths[index + 1] = newNextWidth;
+                        
+                        updateGridColumns(panel, widths);
+                    });
+                    
+                    document.addEventListener('mouseup', () => {
+                        if (isResizing) {
+                            isResizing = false;
+                            document.body.classList.remove('column-resizing');
+                        }
+                    });
+                });
+            }
+            
+            setupColumnResizers('left');
+            setupColumnResizers('right');
+            
+            // Initial update
+            updateGridColumns('left', leftColumnWidths);
+            updateGridColumns('right', rightColumnWidths);
+        }
+    </script>
+</body>
+</html>
