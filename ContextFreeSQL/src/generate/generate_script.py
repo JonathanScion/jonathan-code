@@ -12,6 +12,7 @@ from src.generate.generate_final_tables import generate_add_tables, generate_dro
 from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
 from src.generate.generate_final_coded_ents import generate_coded_ents
+from src.generate.generate_final_html_report  import generate_html_report
 
 #core proc for this whole app
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, got_specific_tables: bool) -> str:
@@ -89,15 +90,17 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     drop_tables = StringIO()
     add_tables = StringIO()
     coded_ents = StringIO()
+    html_report = StringIO()
 
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
     if scrpt_ops.remove_all_extra_ents:
-        generate_drop_tables(db_type=db_type, sql_buffer=add_tables)
-    generate_add_tables(db_type=db_type, sql_buffer=drop_tables)
+        generate_drop_tables(db_type=db_type, sql_buffer=drop_tables)
+    generate_add_tables(db_type=db_type, sql_buffer=add_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
     generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
+    generate_html_report(db_type=db_type, sql_buffer=coded_ents)
 
   
     # Bad data check StringBuilders
@@ -242,6 +245,12 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("--Coded Entities---------------------------------------------------------------\n")
         buffer.write(coded_ents.getvalue())
         buffer.write("\n")
+
+    # Write coded entities if needed    
+    if html_report.getvalue():
+        buffer.write("--HTML Report---------------------------------------------------------------\n")
+        buffer.write(html_report.getvalue())
+        buffer.write("\n")
     
     # Write enable/disable entities if needed
     #!reactivate
@@ -306,6 +315,7 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, filena
     header.write("--            @execCode: EXECUTE the script on the database\n")
     header.write("\n")
     header.write("--feel free to change these flags\n")
+    header.write("\n")
     
     # Write variable declarations
     header.write(f"\tDECLARE {db_syntax.var_prefix}print {db_syntax.boolean_type} ")
@@ -313,6 +323,8 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, filena
     header.write(f"\t\t{db_syntax.var_prefix}printExec {db_syntax.boolean_type} ")
     header.write(f"\t{db_syntax.set_operator} 1{db_syntax.declare_separator} \n")
     header.write(f"\t\t{db_syntax.var_prefix}execCode {db_syntax.boolean_type} ")
+    header.write(f"\t{db_syntax.set_operator} 1;\n")
+    header.write(f"\t\t{db_syntax.var_prefix}htmlReport {db_syntax.boolean_type} ")
     header.write(f"\t{db_syntax.set_operator} 1;\n")
     header.write("-------------------------------------------------------------------------------------\n")
     header.write("\n")

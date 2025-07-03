@@ -5,9 +5,11 @@ DO $$
 --            @execCode: EXECUTE the script on the database
 
 --feel free to change these flags
+
 	DECLARE print boolean 	:= 1; 
 		printExec boolean 	:= 1; 
 		execCode boolean 	:= 1;
+		htmlReport boolean 	:= 1;
 -------------------------------------------------------------------------------------
 
 DECLARE table_schema character varying (128);
@@ -789,6 +791,30 @@ UPDATE scriptfks
 
 
 
+	--Adding Tables--------------------------------------------------------------------
+declare temprow record;
+BEGIN
+	FOR temprow IN 
+		Select s.table_schema , s.table_name, s.SQL_CREATE 
+		FROM ScriptTables s
+		WHERE tableStat = 1
+LOOP
+	IF (print=True) THEN
+		INSERT INTO scriptoutput (SQLText)
+		VALUES ('--Adding table ' || temprow.table_schema || '.' || temprow.table_name);
+	END IF;
+	IF (printExec = True) THEN 
+		INSERT INTO scriptoutput (SQLText)
+		VALUES (temprow.SQL_CREATE);
+	END IF;
+	IF (execCode = True) THEN
+		EXECUTE temprow.SQL_CREATE;
+	END IF;
+	schemaChanged := True;
+	END LOOP;
+END; --of cursor 
+
+
 	--Pre-Dropping Foreign keys (some might be added later)---------------------------------------------------------------
 --Dropping foreign keys that are different or their columns are different
 	declare temprow record;
@@ -1305,28 +1331,32 @@ BEGIN --coded entities
 --Adding new coded entities and ones that were modified
 END; --coded entities
 
-	--Dropping Tables-------------------------------------------------------------------------
-declare temprow record;
-BEGIN
-	FOR temprow IN 
-		Select s.table_schema , s.table_name, s.SQL_CREATE 
-		FROM ScriptTables s
-		WHERE tableStat = 1
-LOOP
-	IF (print=True) THEN
-		INSERT INTO scriptoutput (SQLText)
-		VALUES ('--Adding table ' || temprow.table_schema || '.' || temprow.table_name);
-	END IF;
-	IF (printExec = True) THEN 
-		INSERT INTO scriptoutput (SQLText)
-		VALUES (temprow.SQL_CREATE);
-	END IF;
-	IF (execCode = True) THEN
-		EXECUTE temprow.SQL_CREATE;
-	END IF;
-	schemaChanged := True;
-	END LOOP;
-END; --of cursor 
+IF (htmlReport = True) THEN
+	DECLARE 
+		result_string text;
+	BEGIN
+		SELECT 'const reportData = [' || 
+			   string_agg(
+				   '{
+						schema: ''' || ST.table_schema || ''',
+						name: ''' || ST.table_name || ''',
+						type: ''Table'',
+						status: ''' || 
+							CASE ST.tablestat
+								WHEN 0 THEN 'equal'
+								WHEN 1 THEN 'left-only'
+								WHEN 2 THEN 'right-only'
+								WHEN 3 THEN 'different'
+								ELSE 'equal'
+							END || '''
+					}', ',
+				') || 
+			   '];'
+		INTO result_string
+		FROM ScriptTables ST;
+		RAISE NOTICE '%', result_string; --replace this with replacing code in html file
+	END;
+END IF; --htmlReport
 
 
 END; --overall code

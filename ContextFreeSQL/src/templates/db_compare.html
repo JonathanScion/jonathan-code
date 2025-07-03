@@ -464,43 +464,46 @@
         };
 
         // Report data - replace this array with your actual data
-        const reportData = [
+       const reportData = [{
+                    schema: 'public',
+                    name: 'students',
+                    type: 'Table',
+                    status: 'equal'
+                },
             {
-                schema: "Giacomo Guilizzioni",
-                name: "Founder & CEO",
-                type: "Peldi",
-                age: 40,
-                status: "equal"
-            },
+                    schema: 'public',
+                    name: 'studentgrades',
+                    type: 'Table',
+                    status: 'right-only'
+                },
             {
-                schema: "Marco Botton",
-                name: "Tuttofore",
-                type: "",
-                age: 38,
-                status: "equal"
-            },
-            {
-                schema: "Mariah Maclachlan",
-                name: "Better Half",
-                type: "Patata",
-                age: 41,
-                status: "different"
-            },
-            {
-                schema: "Valerie Liberty",
-                name: "Head Chef",
-                type: "Val",
-                age: null,
-                status: "equal"
-            },
-            {
-                schema: "Data Grid Docs",
-                name: "",
-                type: "",
-                age: null,
-                status: "different"
-            }
-        ];
+                    schema: 'public',
+                    name: 'studentgrades1',
+                    type: 'Table',
+                    status: 'right-only'
+                }];
+
+      
+
+        /*
+        declare temprow record;
+BEGIN
+	FOR temprow IN 
+		Select s.table_schema , s.table_name, s.SQL_CREATE , tablestat
+		FROM ScriptTables s
+LOOP
+
+					
+						INSERT INTO scriptoutput (SQLText)
+		VALUES ( ' {
+                schema: ' || temprow.table_schema || ',' ||
+                'name:' || temprow.table_name || ',' ||
+                'type: ''Table'',                
+                status: ''equal''
+            }');
+	END LOOP;
+END; --of cursor 	
+*/
 
         // ============================================
         // APPLICATION CODE - DON'T EDIT BELOW
