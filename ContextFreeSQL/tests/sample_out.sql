@@ -150,16 +150,16 @@ studentlastname  character varying  (100)  NOT NULL,
 studentdob  timestamp without time zone  NULL,
 sideoneonly  integer  NULL
 );
+ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+;
 CREATE UNIQUE INDEX students_idx
 ON public.students
 (
 studentfirstname,
 studentlastname
-)
-;
-ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
 )
 ;
 ALTER TABLE public.students ALTER COLUMN studentlastname SET DEFAULT ''Scion''::character varying;',
@@ -435,6 +435,31 @@ FROM ScriptTables T INNER JOIN ScriptCols C ON LOWER(T.table_schema) = LOWER(C.t
 		);
 		
 		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
+		VALUES ('public','students','students_pkey',True,
+		False,
+		NULL,
+		True,
+		False,
+		NULL,
+		NULL,
+		NULL,
+		NULL,
+		'studentid',
+		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
+(
+studentid
+)
+');
+		
+		--Insert Index Columns
+		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
+		VALUES ('public','students','students_pkey','studentid',
+		'1',
+		'1',
+		False,
+		'False');
+		
+		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
 		VALUES ('public','students','students_idx',True,
 		False,
 		NULL,
@@ -465,31 +490,6 @@ studentlastname
 		VALUES ('public','students','students_idx','studentlastname',
 		'2',
 		'2',
-		False,
-		'False');
-		
-		INSERT INTO ScriptIndexes (table_schema,table_name,index_name,is_unique,is_clustered,ignore_dup_key,is_primary_key,is_unique_constraint,allow_row_locks,allow_page_locks,has_filter,filter_definition,index_columns,SQL_CREATE)
-		VALUES ('public','students','students_pkey',True,
-		False,
-		NULL,
-		True,
-		False,
-		NULL,
-		NULL,
-		NULL,
-		NULL,
-		'studentid',
-		'ALTER TABLE public.students ADD CONSTRAINT students_pkey PRIMARY KEY
-(
-studentid
-)
-');
-		
-		--Insert Index Columns
-		INSERT INTO ScriptIndexesCols (table_schema,table_name,index_name,col_name,index_column_id,key_ordinal,is_descending_key,is_included_column)
-		VALUES ('public','students','students_pkey','studentid',
-		'1',
-		'1',
 		False,
 		'False');
 		
@@ -1334,27 +1334,55 @@ END; --coded entities
 IF (htmlReport = True) THEN
 	DECLARE 
 		result_string text;
+		html_content text;
+		new_content text;
+		input_file text := 'C:/temp/template.html';
+		output_file text := 'C:/temp/database_report.html';
 	BEGIN
-		SELECT 'const reportData = [' || 
-			   string_agg(
-				   '{
-						schema: ''' || ST.table_schema || ''',
-						name: ''' || ST.table_name || ''',
-						type: ''Table'',
-						status: ''' || 
-							CASE ST.tablestat
+		-- Generate ONLY the array data
+		SELECT COALESCE(
+				   json_agg(
+					   json_build_object(
+						   'schema', ST.table_schema,
+						   'name', ST.table_name,
+						   'type', 'Table',
+						   'status', CASE ST.tablestat
 								WHEN 0 THEN 'equal'
 								WHEN 1 THEN 'left-only'
 								WHEN 2 THEN 'right-only'
 								WHEN 3 THEN 'different'
 								ELSE 'equal'
-							END || '''
-					}', ',
-				') || 
-			   '];'
+							END
+					   )
+				   )::text,
+				   '[]'
+			   )
 		INTO result_string
 		FROM ScriptTables ST;
-		RAISE NOTICE '%', result_string; --replace this with replacing code in html file
+		
+		-- Read the HTML template file
+		SELECT pg_read_file(input_file) INTO html_content;
+		
+		-- Replace the placeholder with actual data
+		new_content := replace(html_content, '[[reportInfo]]', result_string);
+		
+		RAISE NOTICE 'Replacement done. Writing file...';
+		
+		-- Create a table and use COPY TO with proper encoding
+		DROP TABLE IF EXISTS temp_html_file;
+		CREATE TEMP TABLE temp_html_file (html_content text);
+		INSERT INTO temp_html_file VALUES (new_content);
+		
+		-- Copy with CSV format to avoid text formatting issues
+		EXECUTE format('COPY temp_html_file TO %L WITH (FORMAT CSV, QUOTE E''\x01'', DELIMITER E''\x02'')', output_file);
+		
+		DROP TABLE temp_html_file;
+		
+		RAISE NOTICE 'HTML report successfully created: %', output_file;
+		
+	EXCEPTION
+		WHEN OTHERS THEN
+			RAISE NOTICE 'Error creating HTML report: %', SQLERRM;
 	END;
 END IF; --htmlReport
 
