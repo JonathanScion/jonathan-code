@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 import site; print(site.getsitepackages())  # Show where Python looks for packages
-from dotenv import load_dotenv
 from dataclasses import dataclass
 import os
 
@@ -11,8 +10,6 @@ from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 
 def main():
-    load_dotenv()
-    
     # Load configuration
     config_path = sys.argv[1] if len(sys.argv) > 1 else None
     config_vals: ConfigVals = load_config(config_path)
@@ -50,9 +47,9 @@ def main():
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1) )
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1) )
 
-    with open(r'C:\Users\yonis\source\repos\veteran-developer\ContextFreeSQL\tests\sample_out.sql', 'w') as f:
+    with open(config_vals.input_output.output_sql, 'w') as f:
        f.write(script)
        
 print(sys.executable)  # Shows which Python is running

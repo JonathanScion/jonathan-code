@@ -1,20 +1,20 @@
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
+from src.defs.script_defs import DBType, DBSyntax, InputOutput
 from src.utils import funcs as utils
 
 
-def generate_html_report(db_type: DBType, sql_buffer):
+def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput):
     """Generate HTML report code for database schema comparison"""
-    
+
     sql_buffer.write("\n")
-    
+
     if db_type == DBType.PostgreSQL:
         sql_buffer.write("IF (htmlReport = True) THEN\n")
         sql_buffer.write("\tDECLARE \n")
         sql_buffer.write("\t\tresult_string text;\n")
         sql_buffer.write("\t\thtml_content text;\n")
         sql_buffer.write("\t\tnew_content text;\n")
-        sql_buffer.write("\t\tinput_file text := 'C:/temp/template.html';\n")
-        sql_buffer.write("\t\toutput_file text := 'C:/temp/database_report.html';\n")
+        sql_buffer.write(f"\t\tinput_file text := '{input_output.html_template_path}';\n")
+        sql_buffer.write(f"\t\toutput_file text := '{input_output.html_output_path}';\n")
         sql_buffer.write("\tBEGIN\n")
         sql_buffer.write("\t\t-- Generate ONLY the array data\n")
         sql_buffer.write("\t\tSELECT COALESCE(\n")
