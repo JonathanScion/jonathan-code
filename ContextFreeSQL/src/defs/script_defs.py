@@ -69,10 +69,16 @@ class DBSyntax:
     
     
 @dataclass
+class InputOutput:
+   html_template_path: str = "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html"
+   html_output_path: str = "C:/temp/database_report.html"
+   output_sql: str = "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/sample_out.sql"
+
+@dataclass
 class ScriptingOptions:
    # General scripting options
    remove_all_extra_ents: bool = True
-   column_collation: bool = True 
+   column_collation: bool = True
    code_compare_no_white_space: bool = True
    as_transaction: bool = False
    pre_add_constraints_data_checks: bool = False
@@ -132,4 +138,5 @@ class ConfigVals:
     table_script_ops: ScriptTableOptions
     db_ents_to_load: ListTables
     tables_data: ListTables
+    input_output: InputOutput
 

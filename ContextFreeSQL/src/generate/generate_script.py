@@ -1,11 +1,11 @@
 from io import StringIO
 import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
-from src.utils import code_funcs 
+from src.utils import code_funcs
 
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
 from src.generate.generate_final_tables import generate_add_tables, generate_drop_tables
@@ -15,7 +15,7 @@ from src.generate.generate_final_coded_ents import generate_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, got_specific_tables: bool) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -100,7 +100,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_add_tables(db_type=db_type, sql_buffer=add_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
     generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
-    generate_html_report(db_type=db_type, sql_buffer=coded_ents)
+    generate_html_report(db_type=db_type, sql_buffer=coded_ents, input_output=input_output)
 
   
     # Bad data check StringBuilders

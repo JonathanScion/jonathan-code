@@ -33,8 +33,13 @@
     "db_ents_to_load":  {      
       "tables": ["public.students"]
     },
-    "tables_data": {      
+    "tables_data": {
       "tables": ["public.students"]
+    },
+    "input_output": {
+      "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html",
+      "html_output_path": "C:/temp/database_report.html",
+      "output_sql": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/sample_out.sql"
     }
   }
   
