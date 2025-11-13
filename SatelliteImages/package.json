@@ -1,0 +1,32 @@
+{
+  "name": "satellite-imagery-platform",
+  "version": "1.0.0",
+  "description": "EOI Space - Satellite Imagery Management Platform Demo",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../shared && npm install",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "test": "npm run test --workspaces",
+    "deploy": "cd terraform && terraform apply"
+  },
+  "keywords": [
+    "satellite",
+    "imagery",
+    "geospatial",
+    "aws",
+    "serverless"
+  ],
+  "author": "EOI Space",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

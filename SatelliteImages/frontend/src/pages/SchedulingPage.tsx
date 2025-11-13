@@ -1,0 +1,497 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Calendar, MapPin, Plus, Clock, AlertCircle, CheckCircle, XCircle, Loader, Eye } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { SearchBar } from '@/components/SearchBar';
+import { RequestFilterPanel } from '@/components/RequestFilterPanel';
+import { requestsApi } from '@/lib/api';
+import type { RequestStatus, RequestPriority, ImagingRequest } from '@shared/types';
+import { RequestDetailModal } from '@/components/RequestDetailModal';
+
+export function SchedulingPage() {
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'ALL'>('ALL');
+  const [selectedRequest, setSelectedRequest] = useState<ImagingRequest | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<RequestPriority | 'ALL'>('ALL');
+
+  const queryClient = useQueryClient();
+
+  // Fetch all requests
+  const { data: requests, isLoading } = useQuery({
+    queryKey: ['imaging-requests', searchQuery, statusFilter, priorityFilter],
+    queryFn: async () => {
+      const filters: any = {};
+      if (searchQuery) filters.query = searchQuery;
+      if (statusFilter !== 'ALL') filters.status = statusFilter;
+      if (priorityFilter !== 'ALL') filters.priority = priorityFilter;
+      return await requestsApi.list(filters);
+    },
+  });
+
+  // Create request mutation
+  const createMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return await requestsApi.create(data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['imaging-requests'] });
+      setShowForm(false);
+    },
+  });
+
+  // Cancel request mutation
+  const cancelMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      return await requestsApi.cancel(requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['imaging-requests'] });
+    },
+  });
+
+  // Delete request mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      return await requestsApi.delete(requestId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['imaging-requests'] });
+      setSelectedRequest(null);
+    },
+  });
+
+  const getStatusIcon = (status: RequestStatus) => {
+    switch (status) {
+      case 'PENDING':
+        return <Clock className="w-4 h-4 text-yellow-600" />;
+      case 'SCHEDULED':
+        return <Calendar className="w-4 h-4 text-blue-600" />;
+      case 'IN_PROGRESS':
+        return <Loader className="w-4 h-4 text-blue-600 animate-spin" />;
+      case 'COMPLETED':
+        return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'FAILED':
+        return <AlertCircle className="w-4 h-4 text-red-600" />;
+      case 'CANCELLED':
+        return <XCircle className="w-4 h-4 text-gray-600" />;
+    }
+  };
+
+  const getStatusColor = (status: RequestStatus) => {
+    switch (status) {
+      case 'PENDING':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'SCHEDULED':
+        return 'bg-blue-100 text-blue-800';
+      case 'IN_PROGRESS':
+        return 'bg-blue-100 text-blue-800';
+      case 'COMPLETED':
+        return 'bg-green-100 text-green-800';
+      case 'FAILED':
+        return 'bg-red-100 text-red-800';
+      case 'CANCELLED':
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPriorityColor = (priority: RequestPriority) => {
+    switch (priority) {
+      case 'LOW':
+        return 'bg-gray-100 text-gray-800';
+      case 'MEDIUM':
+        return 'bg-blue-100 text-blue-800';
+      case 'HIGH':
+        return 'bg-orange-100 text-orange-800';
+      case 'URGENT':
+        return 'bg-red-100 text-red-800';
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-dark mb-2">Imaging Request Scheduling</h1>
+            <p className="text-dark-light">
+              Schedule satellite imaging requests for specific locations and time windows
+            </p>
+          </div>
+          <Button
+            onClick={() => setShowForm(!showForm)}
+            size="lg"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            New Request
+          </Button>
+        </div>
+
+        {/* New Request Form */}
+        {showForm && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>New Imaging Request</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RequestForm
+                onSubmit={(data) => createMutation.mutate(data)}
+                onCancel={() => setShowForm(false)}
+                isSubmitting={createMutation.isPending}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Search and Filters */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <SearchBar
+              onSearch={setSearchQuery}
+              placeholder="Search by location name, GPS coordinates, requested window, priority..."
+            />
+          </div>
+          <RequestFilterPanel
+            statusFilter={statusFilter}
+            priorityFilter={priorityFilter}
+            onStatusChange={setStatusFilter}
+            onPriorityChange={setPriorityFilter}
+          />
+        </div>
+
+        {/* Requests List */}
+        {isLoading ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : requests && requests.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4">
+            {requests.map((request) => (
+              <Card key={request.id}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="text-lg font-semibold text-dark">{request.title}</h3>
+                        <span
+                          className={`inline-flex items-center space-x-1 px-2 py-1 rounded-eoi text-xs font-medium ${getStatusColor(
+                            request.status
+                          )}`}
+                        >
+                          {getStatusIcon(request.status)}
+                          <span>{request.status}</span>
+                        </span>
+                        <span
+                          className={`inline-flex px-2 py-1 rounded-eoi text-xs font-medium ${getPriorityColor(
+                            request.priority
+                          )}`}
+                        >
+                          {request.priority}
+                        </span>
+                      </div>
+
+                      {request.description && (
+                        <p className="text-dark-light text-sm mb-3">{request.description}</p>
+                      )}
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <div className="text-dark-light flex items-center">
+                            <MapPin className="w-4 h-4 mr-1" />
+                            Location
+                          </div>
+                          <div className="text-dark font-medium">
+                            {request.locationName ||
+                              `${request.targetLocation.lat.toFixed(2)}, ${request.targetLocation.lon.toFixed(
+                                2
+                              )}`}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-dark-light flex items-center">
+                            <Calendar className="w-4 h-4 mr-1" />
+                            Requested Window
+                          </div>
+                          <div className="text-dark font-medium">
+                            {new Date(request.requestedStartDate).toLocaleDateString()} -{' '}
+                            {new Date(request.requestedEndDate).toLocaleDateString()}
+                          </div>
+                        </div>
+                        {request.scheduledDate && (
+                          <div>
+                            <div className="text-dark-light flex items-center">
+                              <Calendar className="w-4 h-4 mr-1" />
+                              Scheduled
+                            </div>
+                            <div className="text-dark font-medium">
+                              {new Date(request.scheduledDate).toLocaleString()}
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-dark-light">Created</div>
+                          <div className="text-dark font-medium">
+                            {new Date(request.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ml-4 flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedRequest(request)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Details
+                      </Button>
+                      {request.status === 'PENDING' || request.status === 'SCHEDULED' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => cancelMutation.mutate(request.id)}
+                          disabled={cancelMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="text-center py-12">
+              <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-dark mb-2">No imaging requests yet</h3>
+              <p className="text-dark-light mb-4">
+                Create your first imaging request to schedule satellite captures
+              </p>
+              <Button onClick={() => setShowForm(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                Create Request
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+        {/* Detail Modal */}
+        {selectedRequest && (
+          <RequestDetailModal
+            request={selectedRequest}
+            onClose={() => setSelectedRequest(null)}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            isDeleting={deleteMutation.isPending}
+          />
+        )}
+    </div>
+  );
+}
+
+// Request Form Component
+interface RequestFormProps {
+  onSubmit: (data: any) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}
+
+function RequestForm({ onSubmit, onCancel, isSubmitting }: RequestFormProps) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    locationName: '',
+    latitude: '',
+    longitude: '',
+    startDate: '',
+    endDate: '',
+    priority: 'MEDIUM' as RequestPriority,
+    maxCloudCoverage: '',
+    minResolution: '',
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const data = {
+      title: formData.title,
+      description: formData.description || undefined,
+      locationName: formData.locationName || undefined,
+      targetLocation: {
+        lat: parseFloat(formData.latitude),
+        lon: parseFloat(formData.longitude),
+      },
+      requestedStartDate: formData.startDate,
+      requestedEndDate: formData.endDate,
+      priority: formData.priority,
+      maxCloudCoverage: formData.maxCloudCoverage ? parseInt(formData.maxCloudCoverage) : undefined,
+      minResolution: formData.minResolution ? parseFloat(formData.minResolution) : undefined,
+    };
+
+    onSubmit(data);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Title */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-dark mb-2">
+            Title <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            required
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., Construction Site Monitoring"
+          />
+        </div>
+
+        {/* Description */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-dark mb-2">Description</label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            rows={3}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="Additional details about this imaging request..."
+          />
+        </div>
+
+        {/* Location Name */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">Location Name</label>
+          <input
+            type="text"
+            value={formData.locationName}
+            onChange={(e) => setFormData({ ...formData, locationName: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., Downtown Construction Site"
+          />
+        </div>
+
+        {/* Priority */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">
+            Priority <span className="text-red-500">*</span>
+          </label>
+          <select
+            required
+            value={formData.priority}
+            onChange={(e) => setFormData({ ...formData, priority: e.target.value as RequestPriority })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+            <option value="URGENT">Urgent</option>
+          </select>
+        </div>
+
+        {/* Latitude */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">
+            Latitude <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            step="any"
+            required
+            value={formData.latitude}
+            onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., 34.77"
+          />
+        </div>
+
+        {/* Longitude */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">
+            Longitude <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="number"
+            step="any"
+            required
+            value={formData.longitude}
+            onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., 32.87"
+          />
+        </div>
+
+        {/* Start Date */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">
+            Start Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            required
+            value={formData.startDate}
+            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        {/* End Date */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">
+            End Date <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="date"
+            required
+            value={formData.endDate}
+            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        {/* Max Cloud Coverage */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">Max Cloud Coverage (%)</label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={formData.maxCloudCoverage}
+            onChange={(e) => setFormData({ ...formData, maxCloudCoverage: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., 20"
+          />
+        </div>
+
+        {/* Min Resolution */}
+        <div>
+          <label className="block text-sm font-medium text-dark mb-2">Min Resolution (m/pixel)</label>
+          <input
+            type="number"
+            step="0.1"
+            value={formData.minResolution}
+            onChange={(e) => setFormData({ ...formData, minResolution: e.target.value })}
+            className="w-full px-3 py-2 border border-light-border rounded-eoi focus:outline-none focus:ring-2 focus:ring-primary"
+            placeholder="e.g., 10"
+          />
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end space-x-3">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Creating...' : 'Create Request'}
+        </Button>
+      </div>
+    </form>
+  );
+}
