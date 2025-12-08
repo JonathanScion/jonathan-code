@@ -14,7 +14,10 @@
       "Bash(NUL)",
       "WebFetch(domain:cdn.jsdelivr.net)",
       "Bash(curl:*)",
-      "Bash(del \"src\\templates\\papaparse.min.js\")"
+      "Bash(del \"src\\templates\\papaparse.min.js\")",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__list_directory",
+      "Bash(python -m src.main:*)"
     ],
     "deny": [],
     "ask": []

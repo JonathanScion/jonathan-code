@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
-from src.defs.script_defs import ConfigVals, DBConnSettings, ScriptingOptions, ScriptTableOptions, ListTables
+from src.defs.script_defs import ConfigVals, DBConnSettings, ScriptingOptions, ScriptTableOptions, ListTables, InputOutput
 
 def override_with_env_vars(data: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
     """
@@ -71,6 +71,7 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
     table_script_ops = ScriptTableOptions(**data['table_script_ops'])
     db_ents_to_load = ListTables(**data['db_ents_to_load'])
     tables_data = ListTables(**data['tables_data'])
+    input_output = InputOutput(**data['input_output'])
 
     # Create and return ConfigVals
     return ConfigVals(
@@ -78,7 +79,8 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
         script_ops=script_ops,
         table_script_ops=table_script_ops,
         db_ents_to_load=db_ents_to_load,
-        tables_data=tables_data
+        tables_data=tables_data,
+        input_output=input_output
     )
 
 def print_env_var_examples():

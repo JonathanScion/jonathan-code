@@ -38,7 +38,7 @@
     },
     "input_output": {
       "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html",
-      "html_output_path": "C:/temp/database_report.html",
+      "html_output_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/database_report.html",
       "output_sql": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/sample_out.sql"
     }
   }
