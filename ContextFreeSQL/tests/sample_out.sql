@@ -1264,6 +1264,25 @@ IF NumNonEqualRecs>0 THEN
 		VALUES ('----SELECT * FROM public_students --to get the full state of the data comparison (column _cmprstate_: 1=Added, 2=Removed, 3=Updated). There were ' || NumNonEqualRecs || ' records that were different');
 	END IF;
 END IF;
+
+--CSV Export of comparison data (both sides)----------------------------------
+IF (htmlReport = True) THEN
+	-- Side 1: Source data for public.students
+	COPY (
+		SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly
+		FROM public_students
+	) TO 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/data/public.students_1.csv' WITH (FORMAT CSV, HEADER);
+
+	-- Side 2: Existing DB data for public.students
+	COPY (
+		SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly
+		FROM public.students
+	) TO 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/data/public.students_2.csv' WITH (FORMAT CSV, HEADER);
+
+	RAISE NOTICE 'CSV files created for public.students';
+
+END IF;
+--End CSV Export--------------------------------------------------------------
 END; --end of data section
 	--Post-Adding Indexes (some might have been dropped before)---------------------------------------------------------------
 --Add indexes: new, or ones dropped before because they were different or underlying columns where different
@@ -1337,7 +1356,7 @@ IF (htmlReport = True) THEN
 		html_content text;
 		new_content text;
 		input_file text := 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html';
-		output_file text := 'C:/temp/database_report.html';
+		output_file text := 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/database_report.html';
 	BEGIN
 		-- Generate ONLY the array data
 		SELECT COALESCE(

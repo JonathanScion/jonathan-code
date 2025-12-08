@@ -1,13 +1,14 @@
 import pandas as pd
 from io import StringIO
 import re
+import os
 from enum import Enum
 from typing import Optional, Dict, List
 import datetime
 
 
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, InputOutput
 from src.utils import funcs as utils
 from src.utils import code_funcs 
 from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
@@ -29,7 +30,7 @@ DATA_WINDOW_COL_USED = "_dataWindowcolused_"
 FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
-def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO):
+def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput):
             
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
@@ -67,7 +68,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
     # Need two rounds: one for insertions and one for deletes/updates
     ar_tables_empty = []
     ar_tables_identity = []
-    
+
+    # Track columns per table for CSV export
+    table_columns_map = {}  # key: s_ent_full_name, value: list of column names
+
     # Start with INSERTs
     out_buffer.write("BEGIN --Data Code\n")
     
@@ -246,7 +250,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             if s_col_name in ar_key_cols:
                 continue
             ar_no_key_cols.append(s_col_name)
-            
+
+        # Store columns for CSV export
+        table_columns_map[s_ent_full_name] = ar_cols.copy()
+
         # Check for identity columns
         if db_type == DBType.MSSQL:
             i_num_cols_identity = len(schema_tables.columns[
@@ -1687,8 +1694,46 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
             comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
             utils.add_print(db_type, 1, out_buffer, f"'{comment_prefix}SELECT * FROM {s_temp_table_name} --to get the full state of the data comparison (column {FLD_COMPARE_STATE}: {RowState.EXTRA1.value}=Added, {RowState.EXTRA2.value}=Removed, {RowState.DIFF.value}=Updated). There were ' || NumNonEqualRecs || ' records that were different'")
-            out_buffer.write("END IF;\n")     
-    
+            out_buffer.write("END IF;\n")
+
+    # CSV Export of both sides data for comparison
+    if db_type == DBType.PostgreSQL and table_columns_map:
+        # Derive CSV output path from html_output_path (e.g., C:/temp/database_report.html -> C:/temp/data/)
+        html_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
+        csv_data_path = f"{html_dir}/data"
+
+        out_buffer.write("\n--CSV Export of comparison data (both sides)----------------------------------\n")
+        out_buffer.write("IF (htmlReport = True) THEN\n")
+
+        for drow_ent in drows_ents:
+            s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
+
+            if s_ent_full_name not in table_columns_map:
+                continue  # Skip tables that weren't processed (empty or no key)
+
+            s_temp_table_name = re.sub(r"[ \\/\\$#:,\.]", "_", s_ent_full_name)
+            s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
+            col_names = ", ".join(table_columns_map[s_ent_full_name])
+
+            # Side 1: Source data (from temp table - what we want to apply)
+            out_buffer.write(f"\t-- Side 1: Source data for {s_ent_full_name}\n")
+            out_buffer.write(f"\tCOPY (\n")
+            out_buffer.write(f"\t\tSELECT {col_names}\n")
+            out_buffer.write(f"\t\tFROM {s_temp_table_name}\n")
+            out_buffer.write(f"\t) TO '{csv_data_path}/{drow_ent['entschema']}.{drow_ent['entname']}_1.csv' WITH (FORMAT CSV, HEADER);\n\n")
+
+            # Side 2: Existing database data
+            out_buffer.write(f"\t-- Side 2: Existing DB data for {s_ent_full_name}\n")
+            out_buffer.write(f"\tCOPY (\n")
+            out_buffer.write(f"\t\tSELECT {col_names}\n")
+            out_buffer.write(f"\t\tFROM {s_ent_full_name_sql}\n")
+            out_buffer.write(f"\t) TO '{csv_data_path}/{drow_ent['entschema']}.{drow_ent['entname']}_2.csv' WITH (FORMAT CSV, HEADER);\n\n")
+
+            out_buffer.write(f"\tRAISE NOTICE 'CSV files created for {s_ent_full_name}';\n\n")
+
+        out_buffer.write("END IF;\n")
+        out_buffer.write("--End CSV Export--------------------------------------------------------------\n")
+
     out_buffer.write("END; --end of data section\n")
 
 

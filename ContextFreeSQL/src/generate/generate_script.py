@@ -191,9 +191,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write(j2_cols_add_alter_drop.getvalue())
         buffer.write("\n\n")
     
-    scrpt_ops.data_scripting_generate_dml_statements = True #! test, remove    
-    #scrpt_ops.data_scripting_leave_report_fields_updated_save_old_value = True #! test, remove    
-    script_data(schema_tables = schema_tables, db_type=db_type, tbl_ents=tbl_ents, script_ops=scrpt_ops, out_buffer=buffer, db_syntax=db_syntax)
+    scrpt_ops.data_scripting_generate_dml_statements = True #! test, remove
+    #scrpt_ops.data_scripting_leave_report_fields_updated_save_old_value = True #! test, remove
+    script_data(schema_tables = schema_tables, db_type=db_type, tbl_ents=tbl_ents, script_ops=scrpt_ops, out_buffer=buffer, db_syntax=db_syntax, input_output=input_output)
     
     # Write not null alter columns if needed (after getting data)
     got_data = True  # This should be set based on the script_data function result
