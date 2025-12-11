@@ -3,6 +3,7 @@ from pathlib import Path
 import site; print(site.getsitepackages())  # Show where Python looks for packages
 from dataclasses import dataclass
 import os
+import shutil
 
 from src.utils.load_config import load_config
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
@@ -14,6 +15,21 @@ def main():
     config_path = sys.argv[1] if len(sys.argv) > 1 else None
     config_vals: ConfigVals = load_config(config_path)
 
+    # Copy HTML template to output directory so pg_read_file can access it
+    if config_vals.input_output.html_template_path:
+        output_dir = os.path.dirname(config_vals.input_output.output_sql)
+        template_filename = os.path.basename(config_vals.input_output.html_template_path)
+        new_template_path = os.path.join(output_dir, template_filename).replace("\\", "/")
+
+        # Ensure output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Copy the template file
+        shutil.copy2(config_vals.input_output.html_template_path, new_template_path)
+        print(f"Copied template to: {new_template_path}")
+
+        # Update the path so SQL will reference the copied file
+        config_vals.input_output.html_template_path = new_template_path
 
     schema = load_all_schema(config_vals.db_conn)
 
@@ -47,7 +63,7 @@ def main():
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1) )
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1), tables_data=config_vals.tables_data)
 
     with open(config_vals.input_output.output_sql, 'w') as f:
        f.write(script)

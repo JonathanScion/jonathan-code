@@ -2,13 +2,14 @@ import pandas as pd
 from io import StringIO
 import re
 import os
+import csv
 from enum import Enum
 from typing import Optional, Dict, List
 import datetime
 
 
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, InputOutput
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, InputOutput, ListTables
 from src.utils import funcs as utils
 from src.utils import code_funcs 
 from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
@@ -30,7 +31,7 @@ DATA_WINDOW_COL_USED = "_dataWindowcolused_"
 FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
-def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput):
+def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables = None):
             
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
@@ -117,6 +118,20 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Skip empty tables
         if len(schema_tables.tables_data[s_ent_full_name_sql]) == 0:
             ar_tables_empty.append(s_ent_full_name_sql)
+            # Create empty CSV with headers if from_file is enabled
+            if tables_data and tables_data.from_file and db_type == DBType.PostgreSQL:
+                csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
+                csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+                os.makedirs(csv_output_dir, exist_ok=True)
+                # Get column names from schema for empty table
+                empty_tbl_cols = schema_tables.columns[
+                    (schema_tables.columns["object_id"] == drow_ent["entkey"]) &
+                    ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull()))
+                ].sort_values("column_id")["col_name"].tolist()
+                # Write CSV with just headers
+                with open(csv_file_path, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(empty_tbl_cols)
             continue
             
         s_flag_ent_created = s_ent_var_name + FLAG_CREATED
@@ -337,44 +352,54 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 
             elif db_type == DBType.PostgreSQL:
                 out_buffer.write(f"IF (printExec=True AND execCode=False AND {s_flag_ent_created}=True) THEN --Table was just created, but we want to print and not execute (so its not really created, can't really compare against existing data, table is not there\n")
-                out_buffer.write("\t--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements\n")
-                
-                # Generate INSERT statements for PostgreSQL
-                i_count = 0
-                i_col_count = len(ar_cols)
-                
-                for index, row in tbl_data.iterrows():
-                    s_insert_into = []
-                    s_insert_into.append(f"INSERT INTO {s_ent_full_name_sql} (")
-                    i_count = 1
-                    for s_col_name in ar_cols:
-                        s_insert_into.append(s_col_name)
-                        if i_count < i_col_count:
-                            s_insert_into.append(",")
-                        i_count += 1
-                    s_insert_into.append(")\n")
-                    s_insert_into.append(" VALUES (")
-                    i_count = 1
-                    for s_col_name in ar_cols:
-                        o_val = row.get(s_col_name)
-                        if pd.isna(o_val):  # Equivalent to IsDBNull
-                            s_insert_into.append("NULL")
-                        else:
-                            s_insert_into.append("''")
-                            if isinstance(o_val, (datetime.datetime, datetime.date)):
-                                s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
-                            else:
-                                s_insert_into.append(str(o_val).replace("'", "''"))
-                            s_insert_into.append("''")
-                        if i_count < i_col_count:
-                            s_insert_into.append(",")
-                        i_count += 1
-                    s_insert_into.append(");'")
-                    
-                    full_insert = "".join(s_insert_into)
+                out_buffer.write("\t\t--we are in PRINT mode here. Table needs to be created but wasn't (because we're printing, not executing) so just spew out the full INSERT statements\n")
+
+                if tables_data and tables_data.from_file:
+                    # Print the COPY command user can execute to load from CSV
+                    csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
+                    csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+                    col_names = ", ".join(ar_cols)
+                    copy_cmd = f"COPY {s_ent_full_name_sql} ({col_names}) FROM ''{csv_file_path}'' WITH (FORMAT CSV, HEADER);"
                     out_buffer.write(f"\t\tINSERT INTO scriptoutput (SQLText)\n")
-                    out_buffer.write(f"\t\tVALUES ('--{full_insert});\n")
-                    
+                    out_buffer.write(f"\t\t\tVALUES ('{copy_cmd}');\n")
+                else:
+                    # Generate INSERT statements for PostgreSQL
+                    i_count = 0
+                    i_col_count = len(ar_cols)
+                    s_overriding = " OVERRIDING SYSTEM VALUE" if s_ent_full_name_sql in ar_tables_identity else ""
+
+                    for index, row in tbl_data.iterrows():
+                        s_insert_into = []
+                        s_insert_into.append(f"INSERT INTO {s_ent_full_name_sql} (")
+                        i_count = 1
+                        for s_col_name in ar_cols:
+                            s_insert_into.append(s_col_name)
+                            if i_count < i_col_count:
+                                s_insert_into.append(",")
+                            i_count += 1
+                        s_insert_into.append(f"){s_overriding}\n")
+                        s_insert_into.append("\t\tVALUES (")
+                        i_count = 1
+                        for s_col_name in ar_cols:
+                            o_val = row.get(s_col_name)
+                            if pd.isna(o_val):  # Equivalent to IsDBNull
+                                s_insert_into.append("NULL")
+                            else:
+                                s_insert_into.append("''")
+                                if isinstance(o_val, (datetime.datetime, datetime.date)):
+                                    s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                                else:
+                                    s_insert_into.append(str(o_val).replace("'", "''"))
+                                s_insert_into.append("''")
+                            if i_count < i_col_count:
+                                s_insert_into.append(",")
+                            i_count += 1
+                        s_insert_into.append(");'")
+
+                        full_insert = "".join(s_insert_into)
+                        out_buffer.write(f"\t\tINSERT INTO scriptoutput (SQLText)\n")
+                        out_buffer.write(f"\t\t\tVALUES ('--{full_insert});\n")
+
                 out_buffer.write("\n")
                 out_buffer.write(f"--END IF;--of Batch INSERT of all the data into {s_ent_full_name}\n")
                 out_buffer.write("ELSE --and this begins the INSERT as against potentially existing data\n")
@@ -425,54 +450,70 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             b_got_specific_data_cells = FLD_COLS_CELLS_EXCLUDE_FOR_ROW in tbl_data.columns
 
         # Insert data into temp table
-        for index, row in tbl_data.iterrows():
-            out_buffer.write(f"INSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
-            i_count = 1
-            for s_col_name in ar_cols:
-                if db_type == DBType.MSSQL:
-                    out_buffer.write(f"[{s_col_name}]")
-                else:  # PostgreSQL
-                    out_buffer.write(s_col_name)
-                if i_count < i_col_count:
-                    out_buffer.write(",")
-                i_count += 1
-            
-            # Add specific cells columns if needed
-            s_cells = None
-            if b_got_specific_data_cells:
-                exclude_val = row.get(FLD_COLS_CELLS_EXCLUDE_FOR_ROW)
-                if not pd.isna(exclude_val):
-                    s_cells = str(exclude_val).split("|")
-                    for s_cell_col_name in s_cells:
-                        if db_type == DBType.MSSQL:
-                            out_buffer.write(f", [{NO_UPDATE_FLD}{s_cell_col_name}]")
-                        else:  # PostgreSQL
-                            out_buffer.write(f", {NO_UPDATE_FLD}{s_cell_col_name}")
-            
-            out_buffer.write(")\n")
-            out_buffer.write(" VALUES (")
-            i_count = 1
-            for s_col_name in ar_cols:
-                o_val = row.get(s_col_name)
-                if pd.isna(o_val):
-                    out_buffer.write("NULL")
-                else:
-                    out_buffer.write("'")
-                    if isinstance(o_val, (datetime.datetime, datetime.date)):
-                        out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+        if tables_data and tables_data.from_file and db_type == DBType.PostgreSQL:
+            # Write CSV file from Python and use COPY FROM to load it
+            csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
+            csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+
+            # Create directory if it doesn't exist
+            os.makedirs(csv_output_dir, exist_ok=True)
+
+            # Write CSV file with only the columns we need
+            tbl_data[ar_cols].to_csv(csv_file_path, index=False)
+
+            col_names = ", ".join(ar_cols)
+            out_buffer.write(f"-- Loading data from CSV file: {csv_file_path}\n")
+            out_buffer.write(f"EXECUTE format('COPY {s_temp_table_name} ({col_names}) FROM %L WITH (FORMAT CSV, HEADER)', '{csv_file_path}');\n")
+        else:
+            # Generate INSERT statements
+            for index, row in tbl_data.iterrows():
+                out_buffer.write(f"INSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
+                i_count = 1
+                for s_col_name in ar_cols:
+                    if db_type == DBType.MSSQL:
+                        out_buffer.write(f"[{s_col_name}]")
+                    else:  # PostgreSQL
+                        out_buffer.write(s_col_name)
+                    if i_count < i_col_count:
+                        out_buffer.write(",")
+                    i_count += 1
+
+                # Add specific cells columns if needed
+                s_cells = None
+                if b_got_specific_data_cells:
+                    exclude_val = row.get(FLD_COLS_CELLS_EXCLUDE_FOR_ROW)
+                    if not pd.isna(exclude_val):
+                        s_cells = str(exclude_val).split("|")
+                        for s_cell_col_name in s_cells:
+                            if db_type == DBType.MSSQL:
+                                out_buffer.write(f", [{NO_UPDATE_FLD}{s_cell_col_name}]")
+                            else:  # PostgreSQL
+                                out_buffer.write(f", {NO_UPDATE_FLD}{s_cell_col_name}")
+
+                out_buffer.write(")\n")
+                out_buffer.write(" VALUES (")
+                i_count = 1
+                for s_col_name in ar_cols:
+                    o_val = row.get(s_col_name)
+                    if pd.isna(o_val):
+                        out_buffer.write("NULL")
                     else:
-                        out_buffer.write(str(o_val).replace("'", "''"))
-                    out_buffer.write("'")
-                if i_count < i_col_count:
-                    out_buffer.write(",")
-                i_count += 1
-            
-            # Add values for specific cells columns
-            if b_got_specific_data_cells and s_cells is not None:
-                for _ in s_cells:
-                    out_buffer.write(",1")  # Mark as true
-            
-            out_buffer.write(");\n")
+                        out_buffer.write("'")
+                        if isinstance(o_val, (datetime.datetime, datetime.date)):
+                            out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                        else:
+                            out_buffer.write(str(o_val).replace("'", "''"))
+                        out_buffer.write("'")
+                    if i_count < i_col_count:
+                        out_buffer.write(",")
+                    i_count += 1
+
+                # Add values for specific cells columns
+                if b_got_specific_data_cells and s_cells is not None:
+                    for _ in s_cells:
+                        out_buffer.write(",1")  # Mark as true
+
+                out_buffer.write(");\n")
 
         out_buffer.write("\n")
         out_buffer.write("--add status field, and update it:\n")
@@ -588,6 +629,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"IF ({db_syntax.var_prefix}execCode=True) THEN\n")
             
             # Generate insert statement
+            s_overriding = " OVERRIDING SYSTEM VALUE" if s_ent_full_name_sql in ar_tables_identity else ""
             out_buffer.write(f"\tsqlCode := 'INSERT INTO {s_ent_full_name_sql}(")
             i_count = 1
             i_col_count = len(ar_cols)
@@ -596,8 +638,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 if i_count < i_col_count:
                     out_buffer.write(", ")
                 i_count += 1
-            
-            out_buffer.write(")\n")
+
+            out_buffer.write(f"){s_overriding}\n")
             out_buffer.write(" SELECT ")
             i_count = 1
             i_col_count = len(ar_cols)
@@ -750,7 +792,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 
                 out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}={RowState.EXTRA1.value}\n")
                 out_buffer.write("\t\tLOOP\n")
-                out_buffer.write(f"\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}) VALUES (';\n")
+                s_overriding = " OVERRIDING SYSTEM VALUE" if s_ent_full_name_sql in ar_tables_identity else ""
+                out_buffer.write(f"\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}){s_overriding} VALUES (';\n")
                 
                 out_buffer.writelines(fields_var_names_value_list)
                 
@@ -762,11 +805,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("\t\tEND LOOP;\n")
                 out_buffer.write("\tEND; --of loop block \n")
             
-            # Handle identity tables
-            if s_ent_full_name_sql in ar_tables_identity:
+            # Handle identity tables (MSSQL only - PostgreSQL uses OVERRIDING SYSTEM VALUE in INSERT)
+            if db_type == DBType.MSSQL and s_ent_full_name_sql in ar_tables_identity:
                 out_buffer.write(f"\t\tSET @sqlCode='SET IDENTITY_INSERT {s_ent_full_name_sql} OFF'\n")
                 utils.add_exec_sql(db_type, 2, out_buffer)
-            
+
             # Close the statements based on database type
             if db_type == DBType.MSSQL:
                 out_buffer.write("END --of iterating cursor of data to insert\n")
@@ -1698,12 +1741,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
     # CSV Export of both sides data for comparison
     if db_type == DBType.PostgreSQL and table_columns_map:
-        # Derive CSV output path from html_output_path (e.g., C:/temp/database_report.html -> C:/temp/data/)
-        html_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
-        csv_data_path = f"{html_dir}/data"
+        # CSV files go in same directory as html_output_path
+        csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
 
         out_buffer.write("\n--CSV Export of comparison data (both sides)----------------------------------\n")
-        out_buffer.write("IF (htmlReport = True) THEN\n")
+        out_buffer.write("IF (exportCsv = True) THEN\n")
 
         for drow_ent in drows_ents:
             s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
@@ -1714,22 +1756,21 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             s_temp_table_name = re.sub(r"[ \\/\\$#:,\.]", "_", s_ent_full_name)
             s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
             col_names = ", ".join(table_columns_map[s_ent_full_name])
+            csv_file = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
 
             # Side 1: Source data (from temp table - what we want to apply)
             out_buffer.write(f"\t-- Side 1: Source data for {s_ent_full_name}\n")
-            out_buffer.write(f"\tCOPY (\n")
-            out_buffer.write(f"\t\tSELECT {col_names}\n")
-            out_buffer.write(f"\t\tFROM {s_temp_table_name}\n")
-            out_buffer.write(f"\t) TO '{csv_data_path}/{drow_ent['entschema']}.{drow_ent['entname']}_1.csv' WITH (FORMAT CSV, HEADER);\n\n")
+            out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_temp_table_name};\n")
+            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file}');\n")
+            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n\n")
 
-            # Side 2: Existing database data
-            out_buffer.write(f"\t-- Side 2: Existing DB data for {s_ent_full_name}\n")
-            out_buffer.write(f"\tCOPY (\n")
-            out_buffer.write(f"\t\tSELECT {col_names}\n")
-            out_buffer.write(f"\t\tFROM {s_ent_full_name_sql}\n")
-            out_buffer.write(f"\t) TO '{csv_data_path}/{drow_ent['entschema']}.{drow_ent['entname']}_2.csv' WITH (FORMAT CSV, HEADER);\n\n")
+            # Side 2: Existing database data (overwrites Side 1)
+            out_buffer.write(f"\t-- Side 2: Existing DB data for {s_ent_full_name} (overwrites Side 1)\n")
+            out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_ent_full_name_sql};\n")
+            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file}');\n")
+            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n\n")
 
-            out_buffer.write(f"\tRAISE NOTICE 'CSV files created for {s_ent_full_name}';\n\n")
+            out_buffer.write(f"\tRAISE NOTICE 'CSV file created for {s_ent_full_name}';\n\n")
 
         out_buffer.write("END IF;\n")
         out_buffer.write("--End CSV Export--------------------------------------------------------------\n")
