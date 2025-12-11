@@ -235,32 +235,33 @@ def create_db_state_tables(
           );\n"""
         )
 
-    # Add tables that need to be dropped
-    script_builder.write(f"\n{align}--table only on DB (need to drop)")
-    if db_type == DBType.MSSQL:
-        script_builder.write(
-            f"""INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
-            SELECT  DB.table_schema ,DB.table_name,2 ",
-            FROM    #ScriptTables J ",
-            RIGHT JOIN ( SELECT SCHEMA_NAME(o.schema_id) AS table_schema , ",
-            o.name AS table_name ",
-            FROM   sys.tables O WHERE is_ms_shipped=0 ",
-            ) DB ON J.table_schema = DB.table_schema ",
-            AND J.table_name = DB.table_name ",
-            WHERE J.table_name Is NULL """
-        )
-    else:
-        script_builder.write(
-            f"""\n{align}INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
-        SELECT  DB.table_schema ,DB.table_name,2
-        FROM    ScriptTables J
-        RIGHT JOIN ( SELECT t.table_schema ,
-        t.table_name
-        FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%'
-        ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
-        AND LOWER(J.table_name) = LOWER(DB.table_name)
-        WHERE J.table_name Is NULL; """
-        )
+    # Add tables that need to be dropped (only when not scripting specific tables)
+    if not got_specific_tables:
+        script_builder.write(f"\n{align}--table only on DB (need to drop)")
+        if db_type == DBType.MSSQL:
+            script_builder.write(
+                f"""INSERT  INTO #ScriptTables ( table_schema ,table_name,tableStat)",
+                SELECT  DB.table_schema ,DB.table_name,2 ",
+                FROM    #ScriptTables J ",
+                RIGHT JOIN ( SELECT SCHEMA_NAME(o.schema_id) AS table_schema , ",
+                o.name AS table_name ",
+                FROM   sys.tables O WHERE is_ms_shipped=0 ",
+                ) DB ON J.table_schema = DB.table_schema ",
+                AND J.table_name = DB.table_name ",
+                WHERE J.table_name Is NULL """
+            )
+        else:
+            script_builder.write(
+                f"""\n{align}INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
+            SELECT  DB.table_schema ,DB.table_name,2
+            FROM    ScriptTables J
+            RIGHT JOIN ( SELECT t.table_schema ,
+            t.table_name
+            FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%'
+            ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
+            AND LOWER(J.table_name) = LOWER(DB.table_name)
+            WHERE J.table_name Is NULL; """
+            )
 
     script_builder.write("\n")
 

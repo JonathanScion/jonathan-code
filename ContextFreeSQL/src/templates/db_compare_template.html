@@ -159,6 +159,10 @@
             border-right: 1px solid #495057;
             position: relative;
             user-select: none;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
 
         .column-header:last-child {
@@ -196,6 +200,8 @@
             border-right: 1px solid #e9ecef;
             display: flex;
             align-items: center;
+            overflow: hidden;
+            min-width: 0;
         }
 
         .filter-cell:last-child {
@@ -245,6 +251,10 @@
             border-right: 1px solid #e9ecef;
             display: flex;
             align-items: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
         }
 
         .data-cell:last-child {
