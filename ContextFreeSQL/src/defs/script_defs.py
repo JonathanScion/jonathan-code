@@ -128,9 +128,10 @@ class DBConnSettings:
 #everything that's gonna be in 
 
 @dataclass
-class ListTables:    
+class ListTables:
     tables: List[str] = field(default_factory=list)
-    
+    from_file: bool = False
+
 @dataclass
 class ConfigVals:
     db_conn: DBConnSettings

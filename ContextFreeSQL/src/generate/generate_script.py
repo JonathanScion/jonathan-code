@@ -1,7 +1,7 @@
 from io import StringIO
 import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
@@ -15,7 +15,7 @@ from src.generate.generate_final_coded_ents import generate_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables = None) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -53,7 +53,8 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
             db_type = db_type,
             tbl_ents = tbl_ents,
             script_ops = scrpt_ops,
-            schema_tables = schema_tables
+            schema_tables = schema_tables,
+            got_specific_tables = got_specific_tables
         )
 
     
@@ -193,7 +194,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     
     scrpt_ops.data_scripting_generate_dml_statements = True #! test, remove
     #scrpt_ops.data_scripting_leave_report_fields_updated_save_old_value = True #! test, remove
-    script_data(schema_tables = schema_tables, db_type=db_type, tbl_ents=tbl_ents, script_ops=scrpt_ops, out_buffer=buffer, db_syntax=db_syntax, input_output=input_output)
+    script_data(schema_tables = schema_tables, db_type=db_type, tbl_ents=tbl_ents, script_ops=scrpt_ops, out_buffer=buffer, db_syntax=db_syntax, input_output=input_output, tables_data=tables_data)
     
     # Write not null alter columns if needed (after getting data)
     got_data = True  # This should be set based on the script_data function result
@@ -326,6 +327,8 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, filena
     header.write(f"\t{db_syntax.set_operator} 1;\n")
     header.write(f"\t\t{db_syntax.var_prefix}htmlReport {db_syntax.boolean_type} ")
     header.write(f"\t{db_syntax.set_operator} 1;\n")
+    header.write(f"\t\t{db_syntax.var_prefix}exportCsv {db_syntax.boolean_type} ")
+    header.write(f"\t{db_syntax.set_operator} 0;\n")
     header.write("-------------------------------------------------------------------------------------\n")
     header.write("\n")
 

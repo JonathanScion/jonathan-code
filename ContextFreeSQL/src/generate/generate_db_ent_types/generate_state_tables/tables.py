@@ -17,10 +17,11 @@ def create_db_state_temp_tables_for_tables(
     tbl_ents: pd.DataFrame,
     script_ops: ScriptingOptions,
     schema_tables: DBSchema,
-    #tbl_db_check_cnstrnts: pd.DataFrame, #!tbd    
+    #tbl_db_check_cnstrnts: pd.DataFrame, #!tbd
     scripting_data: Optional[bool] = False,
     script_table_ops: Optional[ScriptTableOptions] = None,
-    pre_add_constraints_data_checks: bool = False
+    pre_add_constraints_data_checks: bool = False,
+    got_specific_tables: bool = False
 ) -> StringIO:
     
     script_db_state_tables = StringIO()
@@ -61,8 +62,9 @@ def create_db_state_temp_tables_for_tables(
     create_state_tables = create_db_state_tables(
         num_tabs = 2,
         tbl_ents_to_script = tables_to_script,
-        db_type = db_type,        
+        db_type = db_type,
         schema_tables = schema_tables,
+        got_specific_tables = got_specific_tables
     )
     script_db_state_tables.write(create_state_tables.getvalue())
     
@@ -108,11 +110,11 @@ def create_db_state_temp_tables_for_tables(
 
 #within creation of temp tables for TABLES, this creates for the table entry itself. then there's the same for columns, indexes, defaults...
 def create_db_state_tables(
-    schema_tables: DBSchema, 
+    schema_tables: DBSchema,
     tbl_ents_to_script: pd.DataFrame,
     num_tabs: int,
     db_type: DBType, #that's the destination db type
-    
+    got_specific_tables: bool = False
 ) -> StringIO:
 
     db_syntax = DBSyntax.get_syntax(db_type)
@@ -250,16 +252,16 @@ def create_db_state_tables(
     else:
         script_builder.write(
             f"""\n{align}INSERT  INTO ScriptTables ( table_schema ,table_name,tableStat)
-        SELECT  DB.table_schema ,DB.table_name,2 
-        FROM    ScriptTables J 
-        RIGHT JOIN ( SELECT t.table_schema , 
-        t.table_name 
-        FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%' 
-        ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema) 
-        AND LOWER(J.table_name) = LOWER(DB.table_name) 
+        SELECT  DB.table_schema ,DB.table_name,2
+        FROM    ScriptTables J
+        RIGHT JOIN ( SELECT t.table_schema ,
+        t.table_name
+        FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%'
+        ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
+        AND LOWER(J.table_name) = LOWER(DB.table_name)
         WHERE J.table_name Is NULL; """
         )
-    
+
     script_builder.write("\n")
 
     return script_builder

@@ -1268,16 +1268,14 @@ END IF;
 --CSV Export of comparison data (both sides)----------------------------------
 IF (htmlReport = True) THEN
 	-- Side 1: Source data for public.students
-	COPY (
-		SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly
-		FROM public_students
-	) TO 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/data/public.students_1.csv' WITH (FORMAT CSV, HEADER);
+	CREATE TEMP TABLE temp_csv_export AS SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public_students;
+	EXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/public_students_1.csv');
+	DROP TABLE temp_csv_export;
 
 	-- Side 2: Existing DB data for public.students
-	COPY (
-		SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly
-		FROM public.students
-	) TO 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/data/public.students_2.csv' WITH (FORMAT CSV, HEADER);
+	CREATE TEMP TABLE temp_csv_export AS SELECT studentid, studentfirstname, studentlastname, studentdob, sideoneonly FROM public.students;
+	EXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/public_students_2.csv');
+	DROP TABLE temp_csv_export;
 
 	RAISE NOTICE 'CSV files created for public.students';
 
@@ -1356,7 +1354,7 @@ IF (htmlReport = True) THEN
 		html_content text;
 		new_content text;
 		input_file text := 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html';
-		output_file text := 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/database_report.html';
+		output_file text := 'C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/database_report.html';
 	BEGIN
 		-- Generate ONLY the array data
 		SELECT COALESCE(
