@@ -1509,10 +1509,16 @@ License: MIT
                 }
             });
 
+            // Filter out equal rows if includeEqualRows is false (from autoLoadData config)
+            let filteredRows = rows;
+            if (window.autoLoadData && window.autoLoadData.includeEqualRows === false) {
+                filteredRows = rows.filter(row => row.status !== 'equal');
+            }
+
             // Create comparison result
             comparisonResult = {
                 columns: allColumns,
-                rows: rows
+                rows: filteredRows
             };
 
             // Initialize and show comparison UI
