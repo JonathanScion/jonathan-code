@@ -17,8 +17,8 @@
       "script_security": false,
       "code_compare_no_whitespace": false,
       "data_scripting_leave_report_fields_updated": false,
-      "data_scripting_leave_report_fields_updated_save_old_value": true,
-      "data_scripting_generate_dml_statements": true,
+      "data_scripting_leave_report_fields_updated_save_old_value": false,
+      "data_scripting_generate_dml_statements": false,
       "data_comparison_include_equal_rows": false,
       "data_window_only": false,
       "data_window_got_specific_cells": false
@@ -42,6 +42,13 @@
       "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare_template.html",
       "html_output_path": "C:/Temp/ContextFreeSQL/database_report.html",
       "output_sql": "C:/Temp/ContextFreeSQL/sample_out.sql"
+    },
+    "sql_script_params": {
+      "print": true,
+      "print_exec": true,
+      "exec_code": false,
+      "html_report": true,
+      "export_csv": false
     }
   }
   

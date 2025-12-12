@@ -134,6 +134,15 @@ class ListTables:
     from_file: bool = False
 
 @dataclass
+class SQLScriptParams:
+    """Default values for SQL script runtime parameters (can be changed by user in generated SQL)"""
+    print: bool = True  # Print descriptions of what the script is doing
+    print_exec: bool = True  # Print the SQL statements the script generates
+    exec_code: bool = True  # Execute the SQL statements on the database
+    html_report: bool = True  # Generate HTML comparison report for data differences
+    export_csv: bool = False  # Export source/target data to CSV files
+
+@dataclass
 class ConfigVals:
     db_conn: DBConnSettings
     script_ops: ScriptingOptions
@@ -141,4 +150,5 @@ class ConfigVals:
     db_ents_to_load: ListTables
     tables_data: ListTables
     input_output: InputOutput
+    sql_script_params: SQLScriptParams = field(default_factory=SQLScriptParams)
 

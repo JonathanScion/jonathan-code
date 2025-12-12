@@ -17,7 +17,8 @@
       "Bash(del \"src\\templates\\papaparse.min.js\")",
       "mcp__filesystem__read_text_file",
       "mcp__filesystem__list_directory",
-      "Bash(python -m src.main:*)"
+      "Bash(python -m src.main:*)",
+      "Bash(powershell -Command:*)"
     ],
     "deny": [],
     "ask": []

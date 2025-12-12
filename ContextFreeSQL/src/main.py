@@ -71,7 +71,7 @@ def main():
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
   
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1), tables_data=config_vals.tables_data)
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params)
 
     with open(config_vals.input_output.output_sql, 'w') as f:
        f.write(script)

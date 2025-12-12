@@ -5,6 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV Comparison Tool</title>
     <style>
+        :root {
+            --bg-body: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-container: white;
+            --text-main: #2c3e50;
+            --text-muted: #6c757d;
+            --border-color: #dee2e6;
+            --bg-panel: #f8f9fa;
+            --header-bg: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            --shadow: 0 20px 40px rgba(0,0,0,0.1);
+            --input-bg: white;
+            --highlight-changed: #fff3cd;
+            --highlight-changed-text: #856404;
+            --highlight-changed-border: #ffeeba;
+        }
+
+        body.dark-mode {
+            --bg-body: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            --bg-container: #1a1a2e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #2d3436;
+            --bg-panel: #16213e;
+            --header-bg: linear-gradient(135deg, #0f0c29 0%, #302b63 100%);
+            --shadow: 0 20px 40px rgba(0,0,0,0.4);
+            --input-bg: #1a1a2e;
+            --highlight-changed: #4a4015;
+            --highlight-changed-text: #ffd700;
+            --highlight-changed-border: #665c25;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,25 +43,29 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-body);
             min-height: 100vh;
             padding: 20px;
+            color: var(--text-main);
+            transition: background 0.3s ease;
         }
 
         .container {
             max-width: 1800px;
             margin: 0 auto;
-            background: white;
+            background: var(--bg-container);
             border-radius: 12px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow);
             overflow: hidden;
+            transition: background 0.3s ease;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: var(--header-bg);
             color: white;
             padding: 25px;
             text-align: center;
+            position: relative;
         }
 
         .header h1 {
@@ -46,11 +80,29 @@
             opacity: 0.9;
         }
 
+        .theme-toggle {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
         /* Data Loading Section */
         .data-loading-section {
             padding: 25px;
-            background: #f8f9fa;
-            border-bottom: 2px solid #dee2e6;
+            background: var(--bg-panel);
+            border-bottom: 2px solid var(--border-color);
         }
 
         .data-loading-section.hidden {
@@ -65,17 +117,18 @@
         }
 
         .loading-panel {
-            background: white;
+            background: var(--bg-container);
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
         }
 
         .loading-panel h3 {
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 15px;
-            color: #495057;
+            color: var(--text-main);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -117,12 +170,14 @@
             width: 100%;
             min-height: 120px;
             padding: 12px;
-            border: 2px dashed #ced4da;
+            border: 2px dashed var(--border-color);
             border-radius: 6px;
             font-family: 'Courier New', monospace;
             font-size: 12px;
             resize: vertical;
             transition: border-color 0.3s ease;
+            background: var(--input-bg);
+            color: var(--text-main);
         }
 
         .paste-area:focus {
@@ -184,8 +239,8 @@
         /* Key Selection Section */
         .key-selection-section {
             padding: 20px 25px;
-            background: white;
-            border-bottom: 2px solid #dee2e6;
+            background: var(--bg-container);
+            border-bottom: 2px solid var(--border-color);
             display: none;
         }
 
@@ -196,7 +251,7 @@
         .key-selection-title {
             font-size: 14px;
             font-weight: 600;
-            color: #495057;
+            color: var(--text-muted);
             margin-bottom: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -215,14 +270,15 @@
             gap: 6px;
             padding: 8px 14px;
             border-radius: 20px;
-            background: #f8f9fa;
-            border: 2px solid #e9ecef;
+            background: var(--bg-panel);
+            border: 2px solid var(--border-color);
             cursor: pointer;
             transition: all 0.3s ease;
+            color: var(--text-main);
         }
 
         .key-column-checkbox:hover {
-            background: #e9ecef;
+            background: var(--border-color);
             transform: translateY(-1px);
         }
 
@@ -282,8 +338,8 @@
 
         .controls {
             padding: 20px 25px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .filter-sections {
@@ -303,7 +359,7 @@
         .filter-section-title {
             font-size: 12px;
             font-weight: 600;
-            color: #6c757d;
+            color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -320,9 +376,10 @@
             gap: 8px;
             padding: 8px 16px;
             border-radius: 20px;
-            background: white;
+            background: var(--bg-container);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
+            color: var(--text-main);
         }
 
         .checkbox-group:hover {
@@ -354,7 +411,7 @@
             width: 100%;
             margin-bottom: 15px;
             padding-bottom: 15px;
-            border-bottom: 2px solid #dee2e6;
+            border-bottom: 2px solid var(--border-color);
             display: flex;
             gap: 15px;
             align-items: center;
@@ -368,9 +425,10 @@
             width: 100%;
             padding: 12px 20px;
             font-size: 15px;
-            border: 2px solid #ced4da;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
-            background: white;
+            background: var(--input-bg);
+            color: var(--text-main);
             transition: all 0.3s ease;
         }
 
@@ -381,7 +439,7 @@
         }
 
         .global-search-input::placeholder {
-            color: #adb5bd;
+            color: var(--text-muted);
             font-style: italic;
         }
 
@@ -397,7 +455,7 @@
             gap: 6px;
             padding: 8px 14px;
             border-radius: 20px;
-            background: white;
+            background: var(--bg-container);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
         }
@@ -558,12 +616,14 @@
             overflow-x: auto;
             max-height: calc(100vh - 350px);
             min-height: 400px;
+            background: var(--bg-container);
         }
 
         .comparison-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            color: var(--text-main);
         }
 
         .comparison-table thead {
@@ -628,21 +688,22 @@
         }
 
         .comparison-table .filter-row {
-            background: #f8f9fa;
+            background: var(--bg-panel);
         }
 
         .comparison-table .filter-row th {
             padding: 8px;
-            background: #f8f9fa;
-            border-right: 1px solid #dee2e6;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
         }
 
         .filter-input {
             width: 100%;
             padding: 6px 8px;
-            border: 1px solid #ced4da;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
-            background: white;
+            background: var(--input-bg);
+            color: var(--text-main);
             font-size: 12px;
             transition: all 0.3s ease;
         }
@@ -654,17 +715,17 @@
         }
 
         .comparison-table tbody tr {
-            border-bottom: 1px solid #e9ecef;
+            border-bottom: 1px solid var(--border-color);
             transition: background 0.2s ease;
         }
 
         .comparison-table tbody tr:hover {
-            background: #f8f9fa;
+            background: var(--bg-panel);
         }
 
         .comparison-table td {
             padding: 10px 8px;
-            border-right: 1px solid #e9ecef;
+            border-right: 1px solid var(--border-color);
             word-break: break-word;
         }
 
@@ -681,19 +742,21 @@
         }
 
         .comparison-table td.changed {
-            background: #fff3cd !important;
+            background: var(--highlight-changed) !important;
+            color: var(--highlight-changed-text);
             font-weight: 600;
+            border: 1px solid var(--highlight-changed-border);
         }
 
         .comparison-table td.null-value {
-            color: #6c757d;
+            color: var(--text-muted);
             font-style: italic;
         }
 
         .comparison-table td.empty-cell {
-            background: #f8f9fa;
+            background: var(--bg-panel);
             text-align: center;
-            color: #adb5bd;
+            color: var(--text-muted);
         }
 
         .comparison-table td.status-cell {
@@ -742,6 +805,38 @@
         .reset-button:hover {
             background: #5a6268;
             transform: translateY(-1px);
+        }
+
+        /* Action Buttons */
+        .action-button {
+            padding: 8px 16px;
+            background: var(--bg-container);
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            color: #667eea;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+
+        .action-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .action-button.primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .action-button.primary:hover {
+            background: #5a68d3;
+            border-color: #5a68d3;
         }
 
         /* Selection Mode Styles */
@@ -852,6 +947,7 @@
         <div class="header">
             <h1>CSV Comparison Tool</h1>
             <div class="subtitle">Compare two CSV files or pasted data • Standalone HTML App</div>
+            <button class="theme-toggle" onclick="toggleTheme()">Dark Mode</button>
         </div>
 
         <!-- Data Loading Section -->
@@ -966,6 +1062,9 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- Action Buttons -->
+                        <button class="action-button" onclick="quickFilterDiffs()">Show Diffs Only</button>
+                        <button class="action-button primary" onclick="downloadReport()">Download Report</button>
                     </div>
                 </div>
 
@@ -1085,6 +1184,64 @@ License: MIT
         // Selection state
         let selectionMode = false;
         let selectedRows = new Set();
+
+        // ============================================
+        // THEME TOGGLE
+        // ============================================
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const btn = document.querySelector('.theme-toggle');
+            btn.textContent = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
+        }
+
+        // ============================================
+        // QUICK ACTIONS
+        // ============================================
+
+        function quickFilterDiffs() {
+            // Uncheck Equal, check others
+            document.getElementById('showEqual').checked = false;
+            document.getElementById('showLeftOnly').checked = true;
+            document.getElementById('showRightOnly').checked = true;
+            document.getElementById('showDifferent').checked = true;
+            // Clear search
+            const globalSearch = document.getElementById('globalSearch');
+            if (globalSearch) globalSearch.value = '';
+            // Apply filters
+            applyTextFilters();
+        }
+
+        function downloadReport() {
+            if (!comparisonResult || !comparisonResult.rows.length) {
+                alert('No comparison data to export');
+                return;
+            }
+
+            // Build export data with all rows (respecting current filters)
+            const exportData = filteredRows.map(row => {
+                const flat = { comparison_status: row.status };
+
+                comparisonResult.columns.forEach(col => {
+                    flat[`SOURCE_${col}`] = row.leftValues ? row.leftValues[col] : '';
+                    flat[`TARGET_${col}`] = row.rightValues ? row.rightValues[col] : '';
+                });
+
+                return flat;
+            });
+
+            // Use Papa to unparse
+            const csv = Papa.unparse(exportData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'comparison_report.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
 
         // ============================================
         // FILE/PASTE HANDLING
