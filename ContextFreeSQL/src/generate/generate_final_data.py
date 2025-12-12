@@ -1815,8 +1815,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tSELECT pg_read_file('{csv_output_dir}/{table_file_prefix}_indb.csv') INTO target_csv;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Create JavaScript to inject data (including primary key columns for auto-comparison)\n")
+            include_equal_rows_sql = "true" if script_ops.data_comparison_include_equal_rows else "false"
             out_buffer.write(f"\t\t\tinjected_script := '<script>window.autoLoadData = ' || \n")
-            out_buffer.write(f"\t\t\t\tjson_build_object('source', source_csv, 'target', target_csv, 'keys', {key_cols_sql_array})::text || \n")
+            out_buffer.write(f"\t\t\t\tjson_build_object('source', source_csv, 'target', target_csv, 'keys', {key_cols_sql_array}, 'includeEqualRows', {include_equal_rows_sql})::text || \n")
             out_buffer.write(f"\t\t\t\t';</script>';\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Inject script before </head>\n")

@@ -92,6 +92,7 @@ class ScriptingOptions:
    data_scripting_leave_report_fields_updated: bool = False
    data_scripting_leave_report_fields_updated_save_old_value: bool = False
    data_scripting_generate_dml_statements: bool = False
+   data_comparison_include_equal_rows: bool = True  # if false, equal rows excluded from CSV/HTML comparison reports
    data_window_only: bool = False  # 3/31/15
    data_window_got_specific_cells: bool = False  # in case the user wants specific cells not to be included
 
