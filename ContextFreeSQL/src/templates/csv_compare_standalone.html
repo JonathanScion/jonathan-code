@@ -1234,6 +1234,86 @@ License: MIT
         // Initialize drag-and-drop when page loads
         window.addEventListener('DOMContentLoaded', setupDragAndDrop);
 
+        // Check for embedded data (window.autoLoadData) or URL parameters
+        window.addEventListener('DOMContentLoaded', function() {
+            // First check for embedded data (generated comparison HTML files)
+            if (window.autoLoadData) {
+                const sourceText = window.autoLoadData.source;
+                const targetText = window.autoLoadData.target;
+
+                // Parse source CSV
+                Papa.parse(sourceText, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        sourceData = results;
+                        document.getElementById('sourcePasteArea').value = sourceText.split('\n').slice(0, 21).join('\n');
+                        updateStatus('source', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (scripted data)`);
+
+                        // Parse target CSV
+                        Papa.parse(targetText, {
+                            header: true,
+                            dynamicTyping: true,
+                            skipEmptyLines: true,
+                            complete: function(results) {
+                                targetData = results;
+                                document.getElementById('targetPasteArea').value = targetText.split('\n').slice(0, 21).join('\n');
+                                updateStatus('target', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (database data)`);
+                                checkBothLoaded();
+                            }
+                        });
+                    }
+                });
+                return; // Don't check URL params if embedded data exists
+            }
+
+            // Fall back to URL parameters (for HTTP served files)
+            const urlParams = new URLSearchParams(window.location.search);
+            const tableName = urlParams.get('table');
+
+            if (tableName) {
+                // Load both CSV files: {table}.csv (source) and {table}_indb.csv (target)
+                const sourceFile = `${tableName}.csv`;
+                const targetFile = `${tableName}_indb.csv`;
+
+                Promise.all([
+                    fetch(sourceFile).then(r => r.ok ? r.text() : Promise.reject(`Failed to load ${sourceFile}`)),
+                    fetch(targetFile).then(r => r.ok ? r.text() : Promise.reject(`Failed to load ${targetFile}`))
+                ])
+                .then(([sourceText, targetText]) => {
+                    // Parse source CSV
+                    Papa.parse(sourceText, {
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true,
+                        complete: function(results) {
+                            sourceData = results;
+                            document.getElementById('sourcePasteArea').value = sourceText.split('\n').slice(0, 21).join('\n');
+                            updateStatus('source', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns from ${sourceFile}`);
+
+                            // Parse target CSV
+                            Papa.parse(targetText, {
+                                header: true,
+                                dynamicTyping: true,
+                                skipEmptyLines: true,
+                                complete: function(results) {
+                                    targetData = results;
+                                    document.getElementById('targetPasteArea').value = targetText.split('\n').slice(0, 21).join('\n');
+                                    updateStatus('target', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns from ${targetFile}`);
+                                    checkBothLoaded();
+                                }
+                            });
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading CSV files:', error);
+                    updateStatus('source', 'error', `Error: ${error}`);
+                });
+            }
+        });
+
         function updateStatus(side, status, message) {
             const statusEl = document.getElementById(`${side}Status`);
             statusEl.className = `data-status ${status}`;
@@ -1242,9 +1322,16 @@ License: MIT
 
         function checkBothLoaded() {
             if (sourceData && targetData) {
-                // Both loaded - show key selection
-                buildKeySelection();
-                document.getElementById('keySelectionSection').classList.add('visible');
+                // Check if keys were provided in autoLoadData (from generated comparison files)
+                if (window.autoLoadData && window.autoLoadData.keys && window.autoLoadData.keys.length > 0) {
+                    // Auto-select provided keys and run comparison immediately
+                    selectedKeyColumns = new Set(window.autoLoadData.keys);
+                    performComparison();
+                } else {
+                    // No keys provided - show manual key selection UI
+                    buildKeySelection();
+                    document.getElementById('keySelectionSection').classList.add('visible');
+                }
             }
         }
 
@@ -1315,6 +1402,37 @@ License: MIT
         // COMPARISON LOGIC
         // ============================================
 
+        // Helper function to compare values with normalization
+        function valuesAreEqual(val1, val2) {
+            // Handle null/undefined/empty string equivalence
+            const isEmpty = (v) => v === null || v === undefined || v === '';
+            if (isEmpty(val1) && isEmpty(val2)) return true;
+
+            // If exactly equal, return true
+            if (val1 === val2) return true;
+
+            // Convert to strings for comparison
+            const str1 = String(val1 ?? '');
+            const str2 = String(val2 ?? '');
+
+            // If strings are equal, return true
+            if (str1 === str2) return true;
+
+            // Normalize dates: remove time portion if it's 00:00:00
+            const dateTimeRegex = /^(\d{4}-\d{2}-\d{2})\s+00:00:00$/;
+            const normalized1 = str1.replace(dateTimeRegex, '$1');
+            const normalized2 = str2.replace(dateTimeRegex, '$1');
+
+            if (normalized1 === normalized2) return true;
+
+            // Try parsing as dates and compare
+            const date1 = Date.parse(str1);
+            const date2 = Date.parse(str2);
+            if (!isNaN(date1) && !isNaN(date2) && date1 === date2) return true;
+
+            return false;
+        }
+
         function performComparison() {
             if (selectedKeyColumns.size === 0) return;
 
@@ -1365,7 +1483,7 @@ License: MIT
                     allColumns.forEach(col => {
                         const leftVal = sourceRow[col];
                         const rightVal = targetRow[col];
-                        if (leftVal !== rightVal) {
+                        if (!valuesAreEqual(leftVal, rightVal)) {
                             changedColumns.push(col);
                         }
                     });

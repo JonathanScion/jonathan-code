@@ -50,7 +50,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write(f"DECLARE {db_syntax.var_prefix}{FLD_COMPARE_STATE} smallint;\n")
     
     out_buffer.write(f"DECLARE {db_syntax.var_prefix}NumNonEqualRecs INT;\n")
-    
+
     # Flag for table creates
     for drow_ent in drows_ents: 
         s_ent_full_name = drow_ent["entschema"] + "." + drow_ent["entname"].replace("'", "''")
@@ -72,10 +72,16 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
     # Track columns per table for CSV export
     table_columns_map = {}  # key: s_ent_full_name, value: list of column names
+    table_key_columns_map = {}  # key: s_ent_full_name, value: list of primary key column names
 
     # Start with INSERTs
     out_buffer.write("BEGIN --Data Code\n")
-    
+
+    # Initialize dataStat = 0 for all tables being scripted for data
+    if db_type == DBType.PostgreSQL:
+        for drow_ent in drows_ents:
+            out_buffer.write(f"UPDATE ScriptTables SET dataStat = 0 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
+
     if len(drows_ents) > 0:
         if db_type == DBType.MSSQL:
             out_buffer.write(f"IF ({db_syntax.var_prefix}schemaChanged=1 and {db_syntax.var_prefix}execCode=0)\n")
@@ -268,6 +274,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
         # Store columns for CSV export
         table_columns_map[s_ent_full_name] = ar_cols.copy()
+        table_key_columns_map[s_ent_full_name] = ar_key_cols.copy()
 
         # Check for identity columns
         if db_type == DBType.MSSQL:
@@ -1737,6 +1744,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
             comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
             utils.add_print(db_type, 1, out_buffer, f"'{comment_prefix}SELECT * FROM {s_temp_table_name} --to get the full state of the data comparison (column {FLD_COMPARE_STATE}: {RowState.EXTRA1.value}=Added, {RowState.EXTRA2.value}=Removed, {RowState.DIFF.value}=Updated). There were ' || NumNonEqualRecs || ' records that were different'")
+            # Update ScriptTables to mark data as different
+            out_buffer.write(f"\tUPDATE ScriptTables SET dataStat = 3 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
             out_buffer.write("END IF;\n")
 
     # CSV Export of both sides data for comparison
@@ -1744,8 +1753,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # CSV files go in same directory as html_output_path
         csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
 
-        out_buffer.write("\n--CSV Export of comparison data (both sides)----------------------------------\n")
-        out_buffer.write("IF (exportCsv = True) THEN\n")
+        out_buffer.write("\n--CSV Export of comparison data----------------------------------\n")
+        out_buffer.write("-- Export when: exportCsv=True, OR (htmlReport=True AND table has data differences)\n")
 
         for drow_ent in drows_ents:
             s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
@@ -1753,27 +1762,79 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             if s_ent_full_name not in table_columns_map:
                 continue  # Skip tables that weren't processed (empty or no key)
 
-            s_temp_table_name = re.sub(r"[ \\/\\$#:,\.]", "_", s_ent_full_name)
             s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
             col_names = ", ".join(table_columns_map[s_ent_full_name])
-            csv_file = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+            csv_file_indb = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}_indb.csv"
 
-            # Side 1: Source data (from temp table - what we want to apply)
-            out_buffer.write(f"\t-- Side 1: Source data for {s_ent_full_name}\n")
-            out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_temp_table_name};\n")
-            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file}');\n")
-            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n\n")
-
-            # Side 2: Existing database data (overwrites Side 1)
-            out_buffer.write(f"\t-- Side 2: Existing DB data for {s_ent_full_name} (overwrites Side 1)\n")
+            # Export if exportCsv=True OR (htmlReport=True AND this table has data differences)
+            out_buffer.write(f"IF (exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3))) THEN\n")
+            out_buffer.write(f"\t-- Database data for {s_ent_full_name} (current state in DB)\n")
             out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_ent_full_name_sql};\n")
-            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file}');\n")
-            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n\n")
+            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file_indb}');\n")
+            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n")
+            out_buffer.write(f"\tRAISE NOTICE 'CSV file created: {csv_file_indb}';\n")
+            out_buffer.write("END IF;\n\n")
 
-            out_buffer.write(f"\tRAISE NOTICE 'CSV file created for {s_ent_full_name}';\n\n")
-
-        out_buffer.write("END IF;\n")
         out_buffer.write("--End CSV Export--------------------------------------------------------------\n")
+
+        # Generate self-contained HTML comparison files for tables with data differences
+        # This avoids CORS issues when opening local files
+        out_buffer.write("\n--Generate HTML comparison files for tables with data differences------------\n")
+        out_buffer.write("IF (htmlReport = True) THEN\n")
+
+        csv_compare_template = f"{csv_output_dir}/csv_compare_standalone.html"
+
+        for drow_ent in drows_ents:
+            s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
+
+            if s_ent_full_name not in table_columns_map:
+                continue
+
+            table_file_prefix = f"{drow_ent['entschema']}_{drow_ent['entname']}"
+            source_csv_file = f"{csv_output_dir}/{table_file_prefix}.csv"
+            compare_html_file = f"{csv_output_dir}/compare_{table_file_prefix}.html"
+            col_names = ", ".join(table_columns_map[s_ent_full_name])
+            key_cols = table_key_columns_map.get(s_ent_full_name, [])
+            key_cols_sql_array = "ARRAY[" + ", ".join([f"'{k}'" for k in key_cols]) + "]::text[]"
+            s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
+
+            out_buffer.write(f"\n\t-- Generate comparison HTML for {s_ent_full_name} if data differs\n")
+            out_buffer.write(f"\tIF EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3) THEN\n")
+            out_buffer.write("\t\tDECLARE\n")
+            out_buffer.write("\t\t\ttemplate_content text;\n")
+            out_buffer.write("\t\t\tsource_csv text;\n")
+            out_buffer.write("\t\t\ttarget_csv text;\n")
+            out_buffer.write("\t\t\tfinal_html text;\n")
+            out_buffer.write("\t\t\tinjected_script text;\n")
+            out_buffer.write("\t\tBEGIN\n")
+            out_buffer.write(f"\t\t\t-- Read template and source CSV\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file('{csv_compare_template}') INTO template_content;\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file('{source_csv_file}') INTO source_csv;\n")
+            out_buffer.write(f"\t\t\t\n")
+            out_buffer.write(f"\t\t\t-- Read target CSV from the _indb file we already exported\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file('{csv_output_dir}/{table_file_prefix}_indb.csv') INTO target_csv;\n")
+            out_buffer.write(f"\t\t\t\n")
+            out_buffer.write(f"\t\t\t-- Create JavaScript to inject data (including primary key columns for auto-comparison)\n")
+            out_buffer.write(f"\t\t\tinjected_script := '<script>window.autoLoadData = ' || \n")
+            out_buffer.write(f"\t\t\t\tjson_build_object('source', source_csv, 'target', target_csv, 'keys', {key_cols_sql_array})::text || \n")
+            out_buffer.write(f"\t\t\t\t';</script>';\n")
+            out_buffer.write(f"\t\t\t\n")
+            out_buffer.write(f"\t\t\t-- Inject script before </head>\n")
+            out_buffer.write(f"\t\t\tfinal_html := replace(template_content, '</head>', injected_script || '</head>');\n")
+            out_buffer.write(f"\t\t\t\n")
+            out_buffer.write(f"\t\t\t-- Write the comparison HTML file\n")
+            out_buffer.write(f"\t\t\tDROP TABLE IF EXISTS temp_compare_html;\n")
+            out_buffer.write(f"\t\t\tCREATE TEMP TABLE temp_compare_html (content text);\n")
+            out_buffer.write(f"\t\t\tINSERT INTO temp_compare_html VALUES (final_html);\n")
+            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_compare_html TO %L WITH (FORMAT CSV, QUOTE E''\\x01'', DELIMITER E''\\x02'')', '{compare_html_file}');\n")
+            out_buffer.write(f"\t\t\tDROP TABLE temp_compare_html;\n")
+            out_buffer.write(f"\t\t\t\n")
+            out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: {compare_html_file}';\n")
+            out_buffer.write("\t\tEND;\n")
+            out_buffer.write("\tEND IF;\n")
+
+        out_buffer.write("END IF; --htmlReport\n")
+        out_buffer.write("--End HTML comparison files---------------------------------------------------\n")
 
     out_buffer.write("END; --end of data section\n")
 

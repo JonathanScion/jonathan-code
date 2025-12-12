@@ -153,7 +153,8 @@ def create_db_state_tables(
             col_diff {db_syntax.boolean_type} NULL,
             index_diff {db_syntax.boolean_type} NULL,
             fk_diff {db_syntax.boolean_type} NULL,
-            tableStat smallint null
+            tableStat smallint null,
+            dataStat smallint null
         );\n"""
     )
 
