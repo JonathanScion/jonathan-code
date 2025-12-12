@@ -16,13 +16,12 @@ def main():
     config_vals: ConfigVals = load_config(config_path)
 
     # Copy HTML template to output directory so pg_read_file can access it
+    output_dir = os.path.dirname(config_vals.input_output.output_sql)
+    os.makedirs(output_dir, exist_ok=True)
+
     if config_vals.input_output.html_template_path:
-        output_dir = os.path.dirname(config_vals.input_output.output_sql)
         template_filename = os.path.basename(config_vals.input_output.html_template_path)
         new_template_path = os.path.join(output_dir, template_filename).replace("\\", "/")
-
-        # Ensure output directory exists
-        os.makedirs(output_dir, exist_ok=True)
 
         # Copy the template file
         shutil.copy2(config_vals.input_output.html_template_path, new_template_path)
@@ -30,6 +29,15 @@ def main():
 
         # Update the path so SQL will reference the copied file
         config_vals.input_output.html_template_path = new_template_path
+
+    # Copy CSV compare template if we have data tables to script
+    if len(config_vals.tables_data.tables) >= 1:
+        src_dir = os.path.dirname(os.path.abspath(__file__))
+        csv_compare_template = os.path.join(src_dir, "templates", "csv_compare_standalone.html")
+        if os.path.exists(csv_compare_template):
+            new_csv_template_path = os.path.join(output_dir, "csv_compare_standalone.html").replace("\\", "/")
+            shutil.copy2(csv_compare_template, new_csv_template_path)
+            print(f"Copied CSV compare template to: {new_csv_template_path}")
 
     schema = load_all_schema(config_vals.db_conn)
 

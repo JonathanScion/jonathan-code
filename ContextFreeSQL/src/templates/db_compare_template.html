@@ -537,12 +537,21 @@ END; --of cursor
         function createRow(item) {
             const row = document.createElement('div');
             row.className = 'data-row';
-            
+
+            // For Data entries with differences, make name a clickable link to comparison HTML
+            let nameCell;
+            if (item.type === 'Data' && item.status === 'different') {
+                const compareHtmlUrl = `compare_${item.schema}_${item.name}.html`;
+                nameCell = `<a href="${compareHtmlUrl}" style="color: #dc3545; text-decoration: underline; cursor: pointer;">${item.name}</a>`;
+            } else {
+                nameCell = item.name;
+            }
+
             row.innerHTML = `
                 <div class="data-cell">
                     <span class="schema-name">${item.schema}</span>
                 </div>
-                <div class="data-cell">${item.name}</div>
+                <div class="data-cell">${nameCell}</div>
                 <div class="data-cell">${item.type}</div>
                 <div class="data-cell">
                     <div class="status-icon ${getStatusClass(item.status)}">
@@ -550,7 +559,7 @@ END; --of cursor
                     </div>
                 </div>
             `;
-            
+
             return row;
         }
 
