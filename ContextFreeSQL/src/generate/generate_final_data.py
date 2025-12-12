@@ -1743,7 +1743,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"NumNonEqualRecs := COUNT(*) FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}<>1;\n")
             out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
             comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
-            utils.add_print(db_type, 1, out_buffer, f"'{comment_prefix}SELECT * FROM {s_temp_table_name} --to get the full state of the data comparison (column {FLD_COMPARE_STATE}: {RowState.EXTRA1.value}=Added, {RowState.EXTRA2.value}=Removed, {RowState.DIFF.value}=Updated). There were ' || NumNonEqualRecs || ' records that were different'")
+            utils.add_print(db_type, 1, out_buffer, f"'There were ' || NumNonEqualRecs || ' records that were different. {comment_prefix}SELECT * FROM {s_temp_table_name}; --to get the full state of the data comparison. for summary do: SELECT CASE _cmprstate_ WHEN 1 THEN ''Added'' WHEN 2 THEN ''Removed'' WHEN 3 THEN ''Updated'' ELSE ''Unknown'' END AS state, count(*) AS count FROM {s_temp_table_name} GROUP BY _cmprstate_;'")
             # Update ScriptTables to mark data as different
             out_buffer.write(f"\tUPDATE ScriptTables SET dataStat = 3 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
             out_buffer.write("END IF;\n")

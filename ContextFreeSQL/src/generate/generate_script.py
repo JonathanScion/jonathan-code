@@ -1,7 +1,7 @@
 from io import StringIO
 import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables
+from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables, SQLScriptParams
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
@@ -15,15 +15,19 @@ from src.generate.generate_final_coded_ents import generate_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables = None) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables = None, sql_script_params: SQLScriptParams = None) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
+    # Use default SQLScriptParams if not provided
+    if sql_script_params is None:
+        sql_script_params = SQLScriptParams()
+
     if db_type == DBType.PostgreSQL:
         buffer.write("DO $$\n")
-        
+
     # 1. Add header
-    header = build_script_header(db_syntax = db_syntax, scrpt_ops = scrpt_ops, filename = 'theSome.sql')
+    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename='theSome.sql')
     buffer.write(header)
 
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
@@ -306,29 +310,32 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     return result
 
 
-def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, filename: str) -> str:   
+def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_script_params: SQLScriptParams, filename: str) -> str:
     header = StringIO()
-    
-    # Write header lines
+
+    # Helper to convert Python bool to SQL boolean value
+    def bool_to_sql(val: bool) -> str:
+        if db_syntax.boolean_true_value == "1":
+            return "1" if val else "0"
+        else:
+            return "true" if val else "false"
+
+    # Write header line
     header.write("------------------------Context Free Script------------------------------------------\n")
-    header.write("--Parameters: @print: PRINT english description of what the script is doing\n")
-    header.write("--            @printExec: PRINT the SQL statements the script generates\n")
-    header.write("--            @execCode: EXECUTE the script on the database\n")
+    header.write("--feel free to change these parameter flags to control script behavior\n")
     header.write("\n")
-    header.write("--feel free to change these flags\n")
-    header.write("\n")
-    
-    # Write variable declarations
+
+    # Write variable declarations with inline comments
     header.write(f"\tDECLARE {db_syntax.var_prefix}print {db_syntax.boolean_type} ")
-    header.write(f"\t{db_syntax.set_operator} 1{db_syntax.declare_separator} \n")
+    header.write(f"\t{db_syntax.set_operator} {bool_to_sql(sql_script_params.print)}{db_syntax.declare_separator} -- Print descriptions of what the script is doing\n")
     header.write(f"\t\t{db_syntax.var_prefix}printExec {db_syntax.boolean_type} ")
-    header.write(f"\t{db_syntax.set_operator} 1{db_syntax.declare_separator} \n")
+    header.write(f"\t{db_syntax.set_operator} {bool_to_sql(sql_script_params.print_exec)}{db_syntax.declare_separator} -- Print the SQL statements the script generates\n")
     header.write(f"\t\t{db_syntax.var_prefix}execCode {db_syntax.boolean_type} ")
-    header.write(f"\t{db_syntax.set_operator} 1;\n")
+    header.write(f"\t{db_syntax.set_operator} {bool_to_sql(sql_script_params.exec_code)}; -- Execute the SQL statements on the database\n")
     header.write(f"\t\t{db_syntax.var_prefix}htmlReport {db_syntax.boolean_type} ")
-    header.write(f"\t{db_syntax.set_operator} 1;\n")
+    header.write(f"\t{db_syntax.set_operator} {bool_to_sql(sql_script_params.html_report)}; -- Generate HTML comparison report for data differences\n")
     header.write(f"\t\t{db_syntax.var_prefix}exportCsv {db_syntax.boolean_type} ")
-    header.write(f"\t{db_syntax.set_operator} 0;\n")
+    header.write(f"\t{db_syntax.set_operator} {bool_to_sql(sql_script_params.export_csv)}; -- Export source/target data to CSV files\n")
     header.write("-------------------------------------------------------------------------------------\n")
     header.write("\n")
 
