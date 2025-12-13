@@ -39,7 +39,7 @@ def main():
             shutil.copy2(csv_compare_template, new_csv_template_path)
             print(f"Copied CSV compare template to: {new_csv_template_path}")
 
-    schema = load_all_schema(config_vals.db_conn)
+    schema = load_all_schema(config_vals.db_conn, load_security=config_vals.script_ops.script_security)
 
      # Determine which entities to load
     if len(config_vals.db_ents_to_load.tables) >= 1:

@@ -14,7 +14,7 @@
       "pre_add_constraints_data_checks": false,
       "script_schemas": true,
       "all_schemas": true,
-      "script_security": false,
+      "script_security": true,
       "code_compare_no_whitespace": false,
       "data_scripting_leave_report_fields_updated": true,
       "data_scripting_leave_report_fields_updated_save_old_value": true,
