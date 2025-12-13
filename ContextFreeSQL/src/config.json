@@ -7,7 +7,7 @@
       "port": "5432"
     },
     "scripting_options": {
-      "remove_all_extra_ents": false,
+      "remove_all_extra_ents": true,
       "column_collation": true,
       "code_compare_no_white_space": true,
       "as_transaction": false,

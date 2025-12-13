@@ -14,29 +14,31 @@ def create_db_state_temp_tables_for_coded(
     script_ops: ScriptingOptions,
     schema_tables: DBSchema,
 ) -> StringIO:
-  
+
     # Initialize script builder
     script_builder = StringIO()
-    
+
     # Prepare lists of entities we're working with
     coded_schema_name_in = []
-    
+
     # Filter entities for scripting (non-Table types)
     coded_script_rows = tbl_ents[
-            (tbl_ents['scriptschema'] == True) & 
+            (tbl_ents['scriptschema'] == True) &
             (tbl_ents['enttype'] != 'Table')
     ]
-    
+
     # Build schema.name list for SQL IN clause
     for _, row in coded_script_rows.iterrows():
         coded_schema_name_in.append(f"'{row['entschema']}.{row['entname']}'")
-    
-    
+
+
     # Combine both lists for output
     output_coded_schema_name_in = ','.join(coded_schema_name_in)
-    
+
     # Exit if nothing to do and not removing all extra entities
-    if len(coded_schema_name_in) == 0:
+    # Note: We still need to create the table if remove_all_extra_ents is true,
+    # because generate_coded_ents will query it to find extras to drop
+    if len(coded_schema_name_in) == 0 and not script_ops.remove_all_extra_ents:
         return script_builder
     
     # Start building script
