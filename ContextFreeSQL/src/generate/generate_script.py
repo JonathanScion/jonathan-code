@@ -13,6 +13,11 @@ from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
 from src.generate.generate_final_coded_ents import generate_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
+from src.generate.generate_final_security import (
+    generate_security_state_tables, generate_security_inserts, generate_security_state_updates,
+    generate_create_roles, generate_grant_table_permissions,
+    generate_grant_function_permissions, generate_revoke_and_drop_extra_security
+)
 
 #core proc for this whole app
 def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables = None, sql_script_params: SQLScriptParams = None) -> str:
@@ -140,19 +145,48 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write(create_schemas.getvalue())
         buffer.write("\n\n")
 
-    
     # Write DB state tables: for tables, for coded, for security. all state tables
     buffer.write(script_db_state_tables.getvalue())
     buffer.write("\n\n")
     buffer.write(script_db_state_coded.getvalue())
     buffer.write("\n\n")
-    
+
+    # Security state tables (if security scripting is enabled)
+    if scrpt_ops.script_security:
+        security_buffer = StringIO()
+        generate_security_state_tables(db_type, security_buffer, schema_tables)
+        # Get list of scripted tables for filtering permissions
+        scripted_tables = None
+        if got_specific_tables:
+            scripted_tables = [f"{row['entschema']}.{row['entname']}" for _, row in tbl_ents[tbl_ents['enttype'] == 'Table'].iterrows()]
+        generate_security_inserts(db_type, security_buffer, schema_tables, scripted_tables)
+        generate_security_state_updates(db_type, security_buffer)
+        buffer.write(security_buffer.getvalue())
+        buffer.write("\n\n")
+
+    # PHASE 1: Create roles (after security state tables, before tables)
+    # Roles must exist before we can grant permissions to them
+    if scrpt_ops.script_security:
+        roles_buffer = StringIO()
+        generate_create_roles(db_type, roles_buffer)
+        if roles_buffer.getvalue():
+            buffer.write(roles_buffer.getvalue())
+            buffer.write("\n\n")
+
     # Write add tables if needed
     if add_tables.getvalue():
         buffer.write("\t--Adding Tables--------------------------------------------------------------------\n")
         buffer.write(add_tables.getvalue())
         buffer.write("\n\n")
-    
+
+    # PHASE 2: Grant table/column permissions (after tables exist)
+    if scrpt_ops.script_security:
+        table_perms_buffer = StringIO()
+        generate_grant_table_permissions(db_type, table_perms_buffer)
+        if table_perms_buffer.getvalue():
+            buffer.write(table_perms_buffer.getvalue())
+            buffer.write("\n\n")
+
     # Write post-data column alters if needed
     col_alters_post_data: StringIO = StringIO() #! there was a comment in .net: "some of the ALTER i do only after i got the data in. like changing to NULL... anything else?". but i dont see it used anywhere. remove.
     if col_alters_post_data.getvalue():
@@ -245,13 +279,21 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Skip to label
     # Label: SkipTillGotFullTablesData in VB.NET
     
-    # Write coded entities if needed    
+    # Write coded entities if needed
     if coded_ents.getvalue():
         buffer.write("--Coded Entities---------------------------------------------------------------\n")
         buffer.write(coded_ents.getvalue())
         buffer.write("\n")
 
-    # Write coded entities if needed    
+    # PHASE 3: Grant function permissions (after coded entities exist)
+    if scrpt_ops.script_security:
+        func_perms_buffer = StringIO()
+        generate_grant_function_permissions(db_type, func_perms_buffer)
+        if func_perms_buffer.getvalue():
+            buffer.write(func_perms_buffer.getvalue())
+            buffer.write("\n\n")
+
+    # Write HTML report if needed
     if html_report.getvalue():
         buffer.write("--HTML Report---------------------------------------------------------------\n")
         buffer.write(html_report.getvalue())
@@ -269,7 +311,16 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\t--Dropping Tables-------------------------------------------------------------------------\n")
         buffer.write(drop_tables.getvalue())
         buffer.write("\n\n")
-    
+
+    # PHASE 4: Revoke extra permissions and drop extra roles (at the very end)
+    # Must run after all objects are potentially dropped so roles can be safely removed
+    if scrpt_ops.script_security:
+        drop_security_buffer = StringIO()
+        generate_revoke_and_drop_extra_security(db_type, drop_security_buffer, scrpt_ops.remove_all_extra_ents)
+        if drop_security_buffer.getvalue():
+            buffer.write(drop_security_buffer.getvalue())
+            buffer.write("\n\n")
+
     # Write drop role members if needed
     #!reactivate
     """if drop_role_members.getvalue():

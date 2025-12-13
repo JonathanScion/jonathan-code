@@ -11,7 +11,7 @@ from pydantic import Field
 import networkx as nx
 
 class DBSchema(BaseModel):
-    schemas: pd.DataFrame 
+    schemas: pd.DataFrame
     tables: pd.DataFrame
     columns: pd.DataFrame
     defaults: pd.DataFrame
@@ -22,14 +22,23 @@ class DBSchema(BaseModel):
     #check_constraints: Optional[pd.DataFrame] = None #!TBD
     tables_data: Dict[str, pd.DataFrame] = Field(default_factory=dict)
     coded_ents: pd.DataFrame
-    
+    # Security-related DataFrames
+    roles: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    role_memberships: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    schema_permissions: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    table_permissions: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    column_permissions: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    function_permissions: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    default_privileges: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    rls_policies: pd.DataFrame = Field(default_factory=pd.DataFrame)
+
 
     class Config:
         arbitrary_types_allowed = True  # Needed for pd.DataFrame
 
 
-def load_all_schema(conn_settings: DBConnSettings) -> DBSchema:
-    
+def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -> DBSchema:
+
     schemas = _load_schemas(conn_settings)
     tables = _load_tables(conn_settings)
     columns = _load_tables_columns(conn_settings)
@@ -39,8 +48,28 @@ def load_all_schema(conn_settings: DBConnSettings) -> DBSchema:
     fks = _load_tables_foreign_keys(conn_settings)
     fk_cols = _process_fk_cols_pg(columns, fks)
     coded_ents = _load_coded_ents(conn_settings)
-    #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format. 
+    #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format.
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
+
+    # Load security if enabled
+    if load_security:
+        roles = _load_roles(conn_settings)
+        role_memberships = _load_role_memberships(conn_settings)
+        schema_permissions = _load_schema_permissions(conn_settings)
+        table_permissions = _load_table_permissions(conn_settings)
+        column_permissions = _load_column_permissions(conn_settings)
+        function_permissions = _load_function_permissions(conn_settings)
+        default_privileges = _load_default_privileges(conn_settings)
+        rls_policies = _load_rls_policies(conn_settings)
+    else:
+        roles = pd.DataFrame()
+        role_memberships = pd.DataFrame()
+        schema_permissions = pd.DataFrame()
+        table_permissions = pd.DataFrame()
+        column_permissions = pd.DataFrame()
+        function_permissions = pd.DataFrame()
+        default_privileges = pd.DataFrame()
+        rls_policies = pd.DataFrame()
 
     return DBSchema(
         schemas = schemas,
@@ -51,7 +80,15 @@ def load_all_schema(conn_settings: DBConnSettings) -> DBSchema:
         index_cols = index_cols,
         fks = fks,
         fk_cols = fk_cols,
-        coded_ents = coded_ents
+        coded_ents = coded_ents,
+        roles = roles,
+        role_memberships = role_memberships,
+        schema_permissions = schema_permissions,
+        table_permissions = table_permissions,
+        column_permissions = column_permissions,
+        function_permissions = function_permissions,
+        default_privileges = default_privileges,
+        rls_policies = rls_policies
     )
 
 def _load_schemas(conn_settings: DBConnSettings) -> pd.DataFrame:
@@ -661,10 +698,336 @@ def load_all_tables_data(conn_settings: DBConnSettings,db_all: DBSchema, table_n
                 print(f"Error loading table {table_name}: {table_error}")
                 # Continue with other tables even if one fails
                 continue
-    
+
     except Exception as e:
         print(f"Database connection error: {e}")
-    
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+# ============================================
+# SECURITY LOADING FUNCTIONS
+# ============================================
+
+def _load_roles(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load all database roles (users and groups) from pg_authid.
+    Note: Requires superuser to read password hashes from pg_authid.
+    Falls back to pg_roles if not superuser (without passwords).
+    """
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Try pg_authid first (requires superuser for password hashes)
+        # If that fails, fall back to pg_roles (no passwords)
+        try:
+            sql = """SELECT
+                        rolname,
+                        rolsuper,
+                        rolinherit,
+                        rolcreaterole,
+                        rolcreatedb,
+                        rolcanlogin,
+                        rolreplication,
+                        rolconnlimit,
+                        rolpassword,
+                        rolvaliduntil,
+                        rolbypassrls
+                    FROM pg_authid
+                    WHERE rolname NOT LIKE 'pg_%'
+                      AND rolname NOT IN ('postgres')
+                    ORDER BY rolname"""
+            cur.execute(sql)
+        except Exception:
+            # Fall back to pg_roles (accessible to all, but no password hashes)
+            sql = """SELECT
+                        rolname,
+                        rolsuper,
+                        rolinherit,
+                        rolcreaterole,
+                        rolcreatedb,
+                        rolcanlogin,
+                        rolreplication,
+                        rolconnlimit,
+                        NULL as rolpassword,
+                        rolvaliduntil,
+                        rolbypassrls
+                    FROM pg_roles
+                    WHERE rolname NOT LIKE 'pg_%'
+                      AND rolname NOT IN ('postgres')
+                    ORDER BY rolname"""
+            cur.execute(sql)
+
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading roles: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_role_memberships(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load role memberships (GRANT role TO role)."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    r.rolname as role_name,
+                    m.rolname as member_name,
+                    am.admin_option,
+                    g.rolname as grantor_name
+                FROM pg_auth_members am
+                JOIN pg_roles r ON am.roleid = r.oid
+                JOIN pg_roles m ON am.member = m.oid
+                LEFT JOIN pg_roles g ON am.grantor = g.oid
+                WHERE r.rolname NOT LIKE 'pg_%'
+                  AND m.rolname NOT LIKE 'pg_%'
+                ORDER BY r.rolname, m.rolname"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading role memberships: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_schema_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load schema-level permissions (USAGE, CREATE on schemas)."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    grantor,
+                    grantee,
+                    object_schema as schema_name,
+                    privilege_type,
+                    is_grantable
+                FROM information_schema.usage_privileges
+                WHERE object_type = 'SCHEMA'
+                  AND grantee NOT IN ('PUBLIC', 'postgres')
+                  AND grantee NOT LIKE 'pg_%'
+                  AND object_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND object_schema NOT LIKE 'pg_temp%'
+                  AND object_schema NOT LIKE 'pg_toast%'
+                ORDER BY object_schema, grantee, privilege_type"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading schema permissions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_table_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load table-level permissions (SELECT, INSERT, UPDATE, DELETE, etc.)."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    grantor,
+                    grantee,
+                    table_schema,
+                    table_name,
+                    privilege_type,
+                    is_grantable,
+                    with_hierarchy
+                FROM information_schema.table_privileges
+                WHERE grantee NOT IN ('PUBLIC', 'postgres')
+                  AND grantee NOT LIKE 'pg_%'
+                  AND table_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND table_schema NOT LIKE 'pg_temp%'
+                  AND table_schema NOT LIKE 'pg_toast%'
+                ORDER BY table_schema, table_name, grantee, privilege_type"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading table permissions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_column_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load column-level permissions."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    grantor,
+                    grantee,
+                    table_schema,
+                    table_name,
+                    column_name,
+                    privilege_type,
+                    is_grantable
+                FROM information_schema.column_privileges
+                WHERE grantee NOT IN ('PUBLIC', 'postgres')
+                  AND grantee NOT LIKE 'pg_%'
+                  AND table_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND table_schema NOT LIKE 'pg_temp%'
+                  AND table_schema NOT LIKE 'pg_toast%'
+                ORDER BY table_schema, table_name, column_name, grantee, privilege_type"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading column permissions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_function_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load function/procedure permissions (EXECUTE)."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    grantor,
+                    grantee,
+                    specific_schema,
+                    specific_name,
+                    routine_schema,
+                    routine_name,
+                    privilege_type,
+                    is_grantable
+                FROM information_schema.routine_privileges
+                WHERE grantee NOT IN ('PUBLIC', 'postgres')
+                  AND grantee NOT LIKE 'pg_%'
+                  AND specific_schema NOT IN ('pg_catalog', 'information_schema')
+                ORDER BY routine_schema, routine_name, grantee, privilege_type"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading function permissions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_default_privileges(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load default privileges (ALTER DEFAULT PRIVILEGES)."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    pg_get_userbyid(d.defaclrole) as role_name,
+                    CASE WHEN d.defaclnamespace = 0 THEN NULL
+                         ELSE n.nspname
+                    END as schema_name,
+                    d.defaclobjtype as object_type,
+                    pg_catalog.array_to_string(d.defaclacl, ',') as acl_string
+                FROM pg_default_acl d
+                LEFT JOIN pg_namespace n ON d.defaclnamespace = n.oid
+                WHERE pg_get_userbyid(d.defaclrole) NOT LIKE 'pg_%'
+                  AND pg_get_userbyid(d.defaclrole) NOT IN ('postgres')
+                ORDER BY role_name, schema_name, object_type"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading default privileges: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def _load_rls_policies(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load Row Level Security (RLS) policies."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        sql = """SELECT
+                    schemaname as table_schema,
+                    tablename as table_name,
+                    policyname as policy_name,
+                    permissive,
+                    roles,
+                    cmd as command,
+                    qual as using_expression,
+                    with_check as with_check_expression
+                FROM pg_policies
+                WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+                  AND schemaname NOT LIKE 'pg_temp%'
+                  AND schemaname NOT LIKE 'pg_toast%'
+                ORDER BY schemaname, tablename, policyname"""
+        cur.execute(sql)
+        results = cur.fetchall()
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading RLS policies: {e}")
+        return pd.DataFrame()
+
     finally:
         if cur:
             cur.close()

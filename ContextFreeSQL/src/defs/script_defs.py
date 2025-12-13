@@ -84,7 +84,7 @@ class ScriptingOptions:
    pre_add_constraints_data_checks: bool = False
    script_schemas: bool = True  # turning it off from MA, when doing only data. for now, its always on other wise 07-17-14
    all_schemas: bool = True  # if off, will only script schemas that we are using in entities we chose to script
-   script_security: bool = False
+   script_security: bool = True  # Script roles, permissions, RLS policies
    #code comparison
    code_compare_no_whitespace : bool = False
 
