@@ -18,7 +18,10 @@
       "mcp__filesystem__read_text_file",
       "mcp__filesystem__list_directory",
       "Bash(python -m src.main:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
