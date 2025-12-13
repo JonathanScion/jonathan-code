@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ContextFreeSQL is a Python database scripting tool that extracts complete schema and data from PostgreSQL/MSSQL databases and generates standalone SQL scripts that can recreate the entire database from scratch. The generated scripts are "context-free" - they contain all necessary DDL (schema) and DML (data) statements with proper dependency ordering.
 
-**Current Focus:** The project currently targets PostgreSQL (primary) with MSSQL support. Recent development has focused on HTML report generation for database comparisons.
+**Current Focus:** The project currently targets PostgreSQL (primary) with MSSQL support. Recent development has focused on HTML report generation for database comparisons and **security scripting** (roles, permissions, RLS policies).
 
 ## Development Commands
 
@@ -99,18 +99,34 @@ Generation modules (called in order):
 1. **Schemas:** `create_db_state_schemas()` - ADD/DROP schemas
 2. **State Tables:** `create_db_state_temp_tables_for_tables()` - Track table states
 3. **Coded Entities State:** `create_db_state_temp_tables_for_coded()` - Track functions/procedures
-4. **Indexes/FKs:** `generate_pre_drop_post_add_indexes_fks()` - Drop before changes, add after
-5. **Tables:** `generate_drop_tables()` + `generate_add_tables()` - Handle table lifecycle
-6. **Columns:** `generate_add_alter_drop_cols()` - Column definitions and ALTERs
-7. **Data:** `script_data()` - Generate INSERT statements with proper quoting
-8. **Coded Entities:** `generate_coded_ents()` - Functions, procedures, triggers
-9. **HTML Report:** `generate_html_report()` - Comparison visualization
+4. **Security State Tables:** `generate_security_state_tables()` - Track roles/permissions state
+5. **Security Inserts:** `generate_security_inserts()` - Populate security desired state
+6. **Security State Updates:** `generate_security_state_updates()` - Mark ADD/ALTER/DROP
+7. **Security Phase 1:** `generate_create_roles()` - CREATE/ALTER roles (before tables)
+8. **Indexes/FKs:** `generate_pre_drop_post_add_indexes_fks()` - Drop before changes, add after
+9. **Tables:** `generate_drop_tables()` + `generate_add_tables()` - Handle table lifecycle
+10. **Columns:** `generate_add_alter_drop_cols()` - Column definitions and ALTERs
+11. **Security Phase 2:** `generate_grant_table_permissions()` - Table/column perms + RLS (after tables)
+12. **Data:** `script_data()` - Generate INSERT statements with proper quoting
+13. **Coded Entities:** `generate_coded_ents()` - Functions, procedures, triggers
+14. **Security Phase 3:** `generate_grant_function_permissions()` - Function perms (after coded entities)
+15. **Security Phase 4:** `generate_revoke_and_drop_extra_security()` - Cleanup extras (at end)
+16. **HTML Report:** `generate_html_report()` - Comparison visualization
 
 **Utilities (`src/utils/`)**
 - `load_config.py`: Configuration loading with environment variable override support
   - Environment variables use format: `SECTION__KEY` (e.g., `DATABASE__HOST` overrides `database.host`)
-- `funcs.py`: SQL formatting utilities (`quote_str_or_null()`, `bool_to_sql_bit_boolean_val()`)
+- `funcs.py`: SQL formatting utilities and code generation helpers:
+  - `quote_str_or_null()`: Escape string values for SQL
+  - `bool_to_sql_bit_boolean_val()`: Convert booleans to SQL format
+  - `add_print()`: Add print statement to output (for descriptions)
+  - `add_exec_sql()`: Add SQL execution with optional print (for DDL statements)
 - `code_funcs.py`: Code generation helpers
+
+**Security Generation (`src/generate/generate_final_security.py`)**
+- Phased security operations respecting dependencies
+- State tables: ScriptRoles, ScriptRoleMemberships, ScriptTablePermissions, ScriptColumnPermissions, ScriptFunctionPermissions, ScriptRLSPolicies
+- Each state table tracks `stat` column: 0=equal, 1=add, 2=drop, 3=alter
 
 ## Configuration System
 
@@ -129,6 +145,7 @@ Generation modules (called in order):
     "remove_all_extra_ents": false,           // Drop entities not in source
     "as_transaction": false,                   // Wrap in transaction
     "script_schemas": true,                    // Include schema DDL
+    "script_security": true,                   // Include security (roles, permissions, RLS)
     "all_schemas": true,                       // Script all schemas or only used ones
     "data_scripting_leave_report_fields_updated_save_old_value": true,  // Track old values
     "data_scripting_generate_dml_statements": true  // Generate INSERT statements
@@ -150,6 +167,13 @@ Generation modules (called in order):
     "html_template_path": "C:/path/to/template.html",     // HTML template for reports
     "html_output_path": "C:/temp/database_report.html",   // HTML report output location
     "output_sql": "C:/path/to/output.sql"                 // Generated SQL script output path
+  },
+  "sql_script_params": {
+    "print": true,           // Print descriptions (e.g., "--Creating role: x")
+    "print_exec": true,      // Print DDL statements before execution
+    "exec_code": false,      // Actually execute DDL (false = dry run)
+    "html_report": true,     // Generate HTML comparison report
+    "export_csv": false      // Export data to CSV files
   }
 }
 ```
@@ -183,8 +207,19 @@ This is handled by `src/utils/load_config.py` but is optional - all configuratio
 - `pg_indexes` - Index definitions
 - `pg_constraint` - Foreign keys and check constraints
 
+**Security Queries:** Reads from PostgreSQL system catalogs:
+- `pg_roles` / `pg_authid` - Role definitions and attributes
+- `pg_auth_members` - Role memberships (GRANT role TO role)
+- `information_schema.table_privileges` - Table-level permissions
+- `information_schema.column_privileges` - Column-level permissions (filtered to exclude those covered by table-level)
+- `information_schema.routine_privileges` - Function/procedure permissions
+- `pg_policies` - Row-Level Security (RLS) policy definitions
+
 **System Schema Filtering:** Automatically excludes PostgreSQL system schemas:
 - `pg_catalog`, `information_schema`, `pg_temp%`, `pg_toast%`
+
+**System Role Filtering:** Excludes system roles:
+- `pg_%` prefixed roles, `postgres` superuser, `PUBLIC`
 
 ## Important Implementation Details
 
@@ -195,12 +230,16 @@ This is handled by `src/utils/load_config.py` but is optional - all configuratio
 
 ### Dependency Ordering
 The script generation order is critical:
-1. Drop indexes/FKs first (prevent constraint violations)
-2. Drop/Add/Alter tables
-3. Add/Alter columns
-4. Insert data
-5. Re-add indexes/FKs
-6. Add coded entities (functions/procedures depend on tables)
+1. Create/Alter roles (must exist before granting permissions)
+2. Drop indexes/FKs first (prevent constraint violations)
+3. Drop/Add/Alter tables
+4. Add/Alter columns
+5. Grant table/column permissions + RLS (tables must exist)
+6. Insert data
+7. Re-add indexes/FKs
+8. Add coded entities (functions/procedures depend on tables)
+9. Grant function permissions (functions must exist)
+10. Revoke extra permissions and drop extra roles (cleanup at end)
 
 ### Quote Handling
 - String values: Single-quote escaped via `quote_str_or_null()` in `src/utils/funcs.py`
@@ -211,6 +250,36 @@ The script generation order is critical:
 - When `as_transaction: true`, wraps script in BEGIN/COMMIT block
 - PostgreSQL scripts always wrapped in `DO $$ BEGIN...END $$` procedural block
 - Individual operations not transactional unless explicitly enabled
+
+### Code Generation Conventions
+
+**Print Statements (`add_print`):**
+- Used for descriptions/comments in output
+- Quoting convention: Use `'Text '` for strings starting with text, `''` prefix for expressions like CASE WHEN
+- Example: `add_print(db_type, 2, sql_buffer, "'Creating role: ' || temprow.rolname")`
+- Example: `add_print(db_type, 2, sql_buffer, "'' || CASE WHEN x THEN 'A' ELSE 'B' END")`
+
+**SQL Execution (`add_exec_sql`):**
+- Used for DDL statements that should be printed (printExec) and optionally executed (execCode)
+- Pattern: Build SQL into `v_sql` variable, then call `add_exec_sql(db_type, indent, sql_buffer, "v_sql")`
+- Always print DDL statements before executing them
+
+**Drop-If-Exists Pattern for Temp Tables:**
+```sql
+perform n.nspname, c.relname
+FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname like 'pg_temp_%' AND c.relname='tablename' AND pg_catalog.pg_table_is_visible(c.oid);
+IF FOUND THEN
+    DROP TABLE TableName;
+END IF;
+```
+This pattern ensures scripts can be run repeatedly without errors.
+
+**State Table Pattern:**
+- Create temp tables to hold "desired state" from script
+- INSERT rows for each entity in desired state
+- UPDATE to mark status: 1=add (missing in DB), 2=drop (extra in DB), 3=alter (different)
+- Loop through marked rows and execute appropriate DDL
 
 ## Common Development Scenarios
 
@@ -242,6 +311,12 @@ Contains pandas DataFrames:
 - `foreign_keys`: FK relationships with columns
 - `defaults`: Column default constraints
 - `coded_ents`: Stored procedures, functions, triggers (code as string)
+- `roles`: Role definitions (rolname, rolsuper, rolinherit, rolcreatedb, rolcanlogin, etc.)
+- `role_memberships`: Role-to-role grants (role_name, member_name, admin_option)
+- `table_permissions`: Table-level GRANT permissions
+- `column_permissions`: Column-level GRANT permissions (excludes those covered by table-level)
+- `function_permissions`: Function/procedure EXECUTE permissions
+- `rls_policies`: Row-Level Security policy definitions
 
 ### Table Entity DataFrame (tbl_ents)
 Tracks entities to script with columns:
@@ -259,9 +334,37 @@ Tracks entities to script with columns:
 4. **Large Dataset Performance:** Loading all table data can be slow for large databases
 5. **MySQL Support:** Defined but not fully implemented
 
+## Security Scripting
+
+### Supported Security Features (PostgreSQL)
+- **Roles:** CREATE, ALTER, DROP roles with all attributes (LOGIN, SUPERUSER, CREATEDB, etc.)
+- **Role Memberships:** GRANT role TO role (with ADMIN OPTION)
+- **Table Permissions:** GRANT SELECT, INSERT, UPDATE, DELETE, etc. on tables
+- **Column Permissions:** GRANT on specific columns (only when not covered by table-level)
+- **Function Permissions:** GRANT EXECUTE on functions/procedures
+- **RLS Policies:** CREATE/ALTER/DROP Row-Level Security policies
+
+### Security Operation Phases
+Security operations are split into phases based on dependencies:
+1. **Phase 1 (Early):** CREATE/ALTER roles - must exist before granting permissions
+2. **Phase 2 (After Tables):** Table/column permissions + RLS policies
+3. **Phase 3 (After Coded Entities):** Function/procedure permissions
+4. **Phase 4 (End):** REVOKE extra permissions, DROP extra roles
+
+### Column Permissions Filtering
+Column-level permissions that are already covered by table-level permissions are automatically excluded. For example, if a role has `SELECT` on a table, the individual column `SELECT` grants are not scripted (they're redundant).
+
+### Testing Security Scripts
+1. Generate script (captures current state as "desired")
+2. Make changes to database (add/remove roles, grant/revoke)
+3. Run script - should detect and fix differences
+4. With `exec_code: false`, script shows what WOULD be done without executing
+
 ## Recent Development Areas (from git history)
 
+- **Security scripting:** Roles, permissions, RLS policies (phased operations)
 - HTML report generation for database comparisons
 - Filtering specific tables and entities (db_ents_to_load)
 - Data scripting with historical value preservation (save_old_value option)
 - Coded entities handling (functions/procedures/triggers)
+- Column permissions filtering (exclude redundant grants)

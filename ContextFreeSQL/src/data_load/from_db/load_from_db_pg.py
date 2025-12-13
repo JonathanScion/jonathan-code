@@ -897,20 +897,28 @@ def _load_column_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         sql = """SELECT
-                    grantor,
-                    grantee,
-                    table_schema,
-                    table_name,
-                    column_name,
-                    privilege_type,
-                    is_grantable
-                FROM information_schema.column_privileges
-                WHERE grantee NOT IN ('PUBLIC', 'postgres')
-                  AND grantee NOT LIKE 'pg_%'
-                  AND table_schema NOT IN ('pg_catalog', 'information_schema')
-                  AND table_schema NOT LIKE 'pg_temp%'
-                  AND table_schema NOT LIKE 'pg_toast%'
-                ORDER BY table_schema, table_name, column_name, grantee, privilege_type"""
+                    cp.grantor,
+                    cp.grantee,
+                    cp.table_schema,
+                    cp.table_name,
+                    cp.column_name,
+                    cp.privilege_type,
+                    cp.is_grantable
+                FROM information_schema.column_privileges cp
+                WHERE cp.grantee NOT IN ('PUBLIC', 'postgres')
+                  AND cp.grantee NOT LIKE 'pg_%'
+                  AND cp.table_schema NOT IN ('pg_catalog', 'information_schema')
+                  AND cp.table_schema NOT LIKE 'pg_temp%'
+                  AND cp.table_schema NOT LIKE 'pg_toast%'
+                  -- Exclude column permissions that are already covered by table-level permissions
+                  AND NOT EXISTS (
+                      SELECT 1 FROM information_schema.table_privileges tp
+                      WHERE tp.grantee = cp.grantee
+                        AND tp.table_schema = cp.table_schema
+                        AND tp.table_name = cp.table_name
+                        AND tp.privilege_type = cp.privilege_type
+                  )
+                ORDER BY cp.table_schema, cp.table_name, cp.column_name, cp.grantee, cp.privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
         return pd.DataFrame(results)
