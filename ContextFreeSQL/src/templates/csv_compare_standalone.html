@@ -918,6 +918,62 @@
             box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
         }
 
+        /* SQL Generation Controls */
+        .sql-generation-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 20px;
+            padding-left: 20px;
+            border-left: 2px solid #dee2e6;
+        }
+
+        .sql-direction-select {
+            padding: 10px 15px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            background: white;
+            color: #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sql-direction-select:hover {
+            background: #f8f9fa;
+        }
+
+        .sql-direction-select:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        .generate-sql-button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(111, 66, 193, 0.3);
+        }
+
+        .generate-sql-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(111, 66, 193, 0.4);
+        }
+
+        .generate-sql-button:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
         .checkbox-column {
             width: 50px;
             text-align: center;
@@ -1140,6 +1196,17 @@
                     <button class="copy-csv-button right-side" id="copyRightButton" onclick="copySideAsCSV('right')" disabled>
                         📋 Copy Right Side CSV
                     </button>
+
+                    <!-- SQL Generation Controls -->
+                    <div class="sql-generation-controls" id="sqlGenerationControls">
+                        <select id="sqlDirection" class="sql-direction-select">
+                            <option value="source-to-target">Source → Target</option>
+                            <option value="target-to-source">Target → Source</option>
+                        </select>
+                        <button class="generate-sql-button" id="generateSqlButton" onclick="generateSQL()" disabled>
+                            📝 Generate SQL
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1185,6 +1252,10 @@ License: MIT
         let selectionMode = false;
         let selectedRows = new Set();
 
+        // Customizable labels (can be overridden via autoLoadData)
+        let sourceLabel = 'Source';
+        let targetLabel = 'Target';
+
         // ============================================
         // THEME TOGGLE
         // ============================================
@@ -1193,6 +1264,51 @@ License: MIT
             document.body.classList.toggle('dark-mode');
             const btn = document.querySelector('.theme-toggle');
             btn.textContent = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
+        }
+
+        // ============================================
+        // CUSTOMIZABLE LABELS
+        // ============================================
+
+        function updateLabels() {
+            // Update all UI elements that display Source/Target labels
+
+            // Loading panels
+            const sourcePanelTitle = document.querySelector('.loading-panel.source h3');
+            const targetPanelTitle = document.querySelector('.loading-panel.target h3');
+            if (sourcePanelTitle) sourcePanelTitle.innerHTML = `📊 ${sourceLabel} (Left)`;
+            if (targetPanelTitle) targetPanelTitle.innerHTML = `📊 ${targetLabel} (Right)`;
+
+            // Status filter labels
+            const leftOnlyLabel = document.querySelector('label[for="leftOnly"]');
+            const rightOnlyLabel = document.querySelector('label[for="rightOnly"]');
+            if (leftOnlyLabel) leftOnlyLabel.innerHTML = `● Only ${sourceLabel}`;
+            if (rightOnlyLabel) rightOnlyLabel.innerHTML = `● Only ${targetLabel}`;
+
+            // Side toggle labels
+            const showSourceLabel = document.querySelector('label[for="showSource"]');
+            const showTargetLabel = document.querySelector('label[for="showTarget"]');
+            if (showSourceLabel) showSourceLabel.innerHTML = `● ${sourceLabel}`;
+            if (showTargetLabel) showTargetLabel.innerHTML = `● ${targetLabel}`;
+
+            // Search scope labels
+            const searchSourceLabel = document.querySelector('label[for="searchSource"]');
+            const searchTargetLabel = document.querySelector('label[for="searchTarget"]');
+            if (searchSourceLabel) searchSourceLabel.textContent = sourceLabel;
+            if (searchTargetLabel) searchTargetLabel.textContent = targetLabel;
+
+            // SQL direction dropdown
+            const sqlDirection = document.getElementById('sqlDirection');
+            if (sqlDirection) {
+                sqlDirection.options[0].text = `${sourceLabel} → ${targetLabel}`;
+                sqlDirection.options[1].text = `${targetLabel} → ${sourceLabel}`;
+            }
+
+            // Copy CSV buttons
+            const copyLeftBtn = document.getElementById('copyLeftButton');
+            const copyRightBtn = document.getElementById('copyRightButton');
+            if (copyLeftBtn) copyLeftBtn.innerHTML = `📋 Copy ${sourceLabel} CSV`;
+            if (copyRightBtn) copyRightBtn.innerHTML = `📋 Copy ${targetLabel} CSV`;
         }
 
         // ============================================
@@ -1398,6 +1514,15 @@ License: MIT
                 const sourceText = window.autoLoadData.source;
                 const targetText = window.autoLoadData.target;
 
+                // Set custom labels if provided
+                if (window.autoLoadData.sourceLabel) {
+                    sourceLabel = window.autoLoadData.sourceLabel;
+                }
+                if (window.autoLoadData.targetLabel) {
+                    targetLabel = window.autoLoadData.targetLabel;
+                }
+                updateLabels();
+
                 // Parse source CSV
                 Papa.parse(sourceText, {
                     header: true,
@@ -1406,7 +1531,7 @@ License: MIT
                     complete: function(results) {
                         sourceData = results;
                         document.getElementById('sourcePasteArea').value = sourceText.split('\n').slice(0, 21).join('\n');
-                        updateStatus('source', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (scripted data)`);
+                        updateStatus('source', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (${sourceLabel.toLowerCase()} data)`);
 
                         // Parse target CSV
                         Papa.parse(targetText, {
@@ -1416,7 +1541,7 @@ License: MIT
                             complete: function(results) {
                                 targetData = results;
                                 document.getElementById('targetPasteArea').value = targetText.split('\n').slice(0, 21).join('\n');
-                                updateStatus('target', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (database data)`);
+                                updateStatus('target', 'loaded', `Loaded ${results.data.length} rows, ${results.meta.fields.length} columns (${targetLabel.toLowerCase()} data)`);
                                 checkBothLoaded();
                             }
                         });
@@ -1760,6 +1885,172 @@ License: MIT
             const hasSelection = selectedRows.size > 0;
             document.getElementById('copyLeftButton').disabled = !hasSelection;
             document.getElementById('copyRightButton').disabled = !hasSelection;
+            document.getElementById('generateSqlButton').disabled = !hasSelection;
+        }
+
+        // ============================================
+        // SQL GENERATION
+        // ============================================
+
+        function escapeSQL(value) {
+            if (value === null || value === undefined) {
+                return 'NULL';
+            }
+            if (typeof value === 'number') {
+                return String(value);
+            }
+            if (typeof value === 'boolean') {
+                return value ? 'TRUE' : 'FALSE';
+            }
+            // Escape single quotes by doubling them
+            return "'" + String(value).replace(/'/g, "''") + "'";
+        }
+
+        function generateSQL() {
+            if (selectedRows.size === 0) {
+                alert('Please select at least one row to generate SQL.');
+                return;
+            }
+
+            // Get table name from autoLoadData or prompt user
+            let tableName = window.autoLoadData?.tableName || '';
+            if (!tableName) {
+                tableName = prompt('Enter the target table name (e.g., schema.tablename):', 'public.tablename');
+                if (!tableName) {
+                    return; // User cancelled
+                }
+            }
+
+            // Get direction
+            const direction = document.getElementById('sqlDirection').value;
+            const sourceToTarget = direction === 'source-to-target';
+
+            // Get visible columns only
+            const visibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
+
+            if (visibleCols.length === 0) {
+                alert('Please make at least one column visible to generate SQL.');
+                return;
+            }
+
+            // Get key columns for WHERE clauses
+            const keyColumns = Array.from(selectedKeyColumns);
+            if (keyColumns.length === 0) {
+                alert('No key columns defined. Cannot generate UPDATE/DELETE statements.');
+                return;
+            }
+
+            const sqlStatements = [];
+            const selectedRowsData = filteredRows.filter((row, index) => selectedRows.has(index));
+
+            selectedRowsData.forEach(row => {
+                const status = row.status;
+                let sql = null;
+
+                if (sourceToTarget) {
+                    // Make TARGET look like SOURCE
+                    // left-only: row exists in source but not target -> INSERT into target
+                    // right-only: row exists in target but not source -> DELETE from target
+                    // different: row exists in both but differs -> UPDATE target
+
+                    if (status === 'left-only' && row.leftValues !== null) {
+                        // INSERT - row needs to be added to target
+                        const cols = visibleCols.filter(col => row.leftValues[col] !== undefined);
+                        const values = cols.map(col => escapeSQL(row.leftValues[col]));
+                        sql = `INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});`;
+                    } else if (status === 'right-only' && row.rightValues !== null) {
+                        // DELETE - row needs to be removed from target
+                        const whereClauses = keyColumns.map(col => {
+                            const val = row.rightValues[col];
+                            return val === null || val === undefined
+                                ? `${col} IS NULL`
+                                : `${col} = ${escapeSQL(val)}`;
+                        });
+                        sql = `DELETE FROM ${tableName} WHERE ${whereClauses.join(' AND ')};`;
+                    } else if (status === 'different' && row.leftValues !== null && row.rightValues !== null) {
+                        // UPDATE - row needs to be updated in target to match source
+                        const setClauses = visibleCols
+                            .filter(col => !keyColumns.includes(col)) // Don't update key columns
+                            .filter(col => row.changedColumns.includes(col) ||
+                                          row.leftValues[col] !== row.rightValues[col])
+                            .map(col => `${col} = ${escapeSQL(row.leftValues[col])}`);
+
+                        if (setClauses.length > 0) {
+                            const whereClauses = keyColumns.map(col => {
+                                const val = row.rightValues[col];
+                                return val === null || val === undefined
+                                    ? `${col} IS NULL`
+                                    : `${col} = ${escapeSQL(val)}`;
+                            });
+                            sql = `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')};`;
+                        }
+                    }
+                } else {
+                    // Make SOURCE look like TARGET (reverse direction)
+                    // left-only: row exists in source but not target -> DELETE from source
+                    // right-only: row exists in target but not source -> INSERT into source
+                    // different: row exists in both but differs -> UPDATE source
+
+                    if (status === 'left-only' && row.leftValues !== null) {
+                        // DELETE - row needs to be removed from source
+                        const whereClauses = keyColumns.map(col => {
+                            const val = row.leftValues[col];
+                            return val === null || val === undefined
+                                ? `${col} IS NULL`
+                                : `${col} = ${escapeSQL(val)}`;
+                        });
+                        sql = `DELETE FROM ${tableName} WHERE ${whereClauses.join(' AND ')};`;
+                    } else if (status === 'right-only' && row.rightValues !== null) {
+                        // INSERT - row needs to be added to source
+                        const cols = visibleCols.filter(col => row.rightValues[col] !== undefined);
+                        const values = cols.map(col => escapeSQL(row.rightValues[col]));
+                        sql = `INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});`;
+                    } else if (status === 'different' && row.leftValues !== null && row.rightValues !== null) {
+                        // UPDATE - row needs to be updated in source to match target
+                        const setClauses = visibleCols
+                            .filter(col => !keyColumns.includes(col)) // Don't update key columns
+                            .filter(col => row.changedColumns.includes(col) ||
+                                          row.leftValues[col] !== row.rightValues[col])
+                            .map(col => `${col} = ${escapeSQL(row.rightValues[col])}`);
+
+                        if (setClauses.length > 0) {
+                            const whereClauses = keyColumns.map(col => {
+                                const val = row.leftValues[col];
+                                return val === null || val === undefined
+                                    ? `${col} IS NULL`
+                                    : `${col} = ${escapeSQL(val)}`;
+                            });
+                            sql = `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE ${whereClauses.join(' AND ')};`;
+                        }
+                    }
+                }
+
+                if (sql) {
+                    sqlStatements.push(sql);
+                }
+            });
+
+            if (sqlStatements.length === 0) {
+                alert('No SQL statements generated. Selected rows may be equal or have no applicable changes.');
+                return;
+            }
+
+            // Add header comment
+            const header = `-- SQL generated to make ${sourceToTarget ? targetLabel : sourceLabel} match ${sourceToTarget ? sourceLabel : targetLabel}\n-- Table: ${tableName}\n-- Generated: ${new Date().toISOString()}\n-- Rows: ${sqlStatements.length}\n\n`;
+            const fullSQL = header + sqlStatements.join('\n');
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(fullSQL).then(() => {
+                const button = document.getElementById('generateSqlButton');
+                const originalText = button.textContent;
+                button.textContent = `✓ ${sqlStatements.length} statements copied!`;
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 3000);
+            }).catch(err => {
+                // Fallback: show in alert for manual copy
+                alert('Could not copy to clipboard. SQL:\n\n' + fullSQL);
+            });
         }
 
         function copySideAsCSV(side) {
@@ -1799,7 +2090,7 @@ License: MIT
             });
 
             if (csvData.length === 0) {
-                alert(`No data available on the ${side} side for the selected rows.`);
+                alert(`No data available on the ${side === 'left' ? sourceLabel : targetLabel} side for the selected rows.`);
                 return;
             }
 
@@ -1970,7 +2261,7 @@ License: MIT
                     }
 
                     th.appendChild(sortIndicator);
-                    th.title = `Click to sort by Source: ${col}`;
+                    th.title = `Click to sort by ${sourceLabel}: ${col}`;
                     th.onclick = () => sortByColumn(col, 'source');
                     headerRow.appendChild(th);
                 }
@@ -1994,7 +2285,7 @@ License: MIT
                     }
 
                     th.appendChild(sortIndicator);
-                    th.title = `Click to sort by Target: ${col}`;
+                    th.title = `Click to sort by ${targetLabel}: ${col}`;
                     th.onclick = () => sortByColumn(col, 'target');
                     headerRow.appendChild(th);
                 }
