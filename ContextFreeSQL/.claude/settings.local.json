@@ -28,7 +28,8 @@
       "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" diff)",
       "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" log --oneline -5)",
       "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" add -A)",
-      "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" commit -m \"$(cat <<''EOF''\nFix coded entity state table creation when remove_all_extra_ents is true\n\nThe state table for coded entities was not being created when there were\nno coded entities to script but remove_all_extra_ents was enabled. This\ncaused issues when generate_coded_ents tried to query the table to find\nextras to drop.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" commit -m \"$(cat <<''EOF''\nFix coded entity state table creation when remove_all_extra_ents is true\n\nThe state table for coded entities was not being created when there were\nno coded entities to script but remove_all_extra_ents was enabled. This\ncaused issues when generate_coded_ents tried to query the table to find\nextras to drop.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" push)"
     ],
     "deny": [],
     "ask": []
