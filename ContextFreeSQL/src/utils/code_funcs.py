@@ -81,46 +81,6 @@ def get_code_check_fk_data(db_type: DBType, row_fk, rows_fk_cols):
     return ''.join(sql_check)
 
 
-def append_commit_changes(buffer: StringIO):    
-    # Commit transaction block
-    buffer.write("COMMIT TRANSACTION;\n")
-    buffer.write("END TRY\n")
-    buffer.write("BEGIN CATCH\n")
-    buffer.write("SELECT \n")
-    buffer.write("ERROR_NUMBER() AS ErrorNumber,\n")
-    buffer.write("ERROR_SEVERITY() AS ErrorSeverity,\n")
-    buffer.write("ERROR_STATE() as ErrorState,\n")
-    buffer.write("--ERROR_PROCEDURE() as ErrorProcedure,\n")
-    buffer.write("ERROR_LINE() as ErrorLine,\n")
-    buffer.write("ERROR_MESSAGE() as ErrorMessage;\n")
-    buffer.write("\n")
-    
-    # Transaction state checking
-    buffer.write("-- Test XACT_STATE for 1 or -1.\n")
-    buffer.write("-- XACT_STATE = 0 means there is no transaction and\n")
-    buffer.write("-- a commit or rollback operation would generate an error.\n")
-    buffer.write("\n")
-    
-    # Check uncommittable state
-    buffer.write("-- Test whether the transaction is uncommittable.\n")
-    buffer.write("If (XACT_STATE()) = -1\n")
-    buffer.write("BEGIN\n")
-    buffer.write("\tPrint N'The transaction is in an uncommittable state. '\n")
-    buffer.write("\t+ 'Rolling back transaction. No Changes were made to the database'\n")
-    buffer.write("\tROLLBACK TRANSACTION;\n")
-    buffer.write("END;\n")
-    
-    # Check committable state
-    buffer.write("-- Test whether the transaction is active and valid.\n")
-    buffer.write("If (XACT_STATE()) = 1\n")
-    buffer.write("BEGIN\n")
-    buffer.write("\tPrint N'The transaction is committable. '\n")
-    buffer.write("\t+ 'Committing transaction. Only changes mentioned above were committed'\n")
-    buffer.write("\tCOMMIT TRANSACTION;   \n")
-    buffer.write("END;\n")
-    buffer.write("END CATCH\n")
-    buffer.write("\n")
-
 def add_size_precision_scale(row_col):
         type_name_field = "user_type_name"
         length_field = "max_length"

@@ -80,7 +80,6 @@ class ScriptingOptions:
    remove_all_extra_ents: bool = True
    column_collation: bool = True
    code_compare_no_white_space: bool = True
-   as_transaction: bool = False
    pre_add_constraints_data_checks: bool = False
    script_schemas: bool = True  # turning it off from MA, when doing only data. for now, its always on other wise 07-17-14
    all_schemas: bool = True  # if off, will only script schemas that we are using in entities we chose to script

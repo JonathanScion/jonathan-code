@@ -31,7 +31,7 @@ DATA_WINDOW_COL_USED = "_dataWindowcolused_"
 FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
-def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables = None):
+def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables | None = None):
             
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
