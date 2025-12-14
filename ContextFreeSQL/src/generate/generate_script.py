@@ -20,7 +20,7 @@ from src.generate.generate_final_security import (
 )
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables = None, sql_script_params: SQLScriptParams = None) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables | None = None, sql_script_params: SQLScriptParams | None = None) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -339,11 +339,6 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("--Dropping Principals (users, roles)---------------------------------------------------\n")
         buffer.write(drop_principals.getvalue())
         buffer.write("\n")"""
-    
-    # Add transaction commit if needed
-    if scrpt_ops.as_transaction:
-        code_funcs.append_commit_changes(buffer)
-    
     
     #end out buffer
     if db_type == DBType.PostgreSQL:

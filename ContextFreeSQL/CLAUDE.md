@@ -143,7 +143,6 @@ Generation modules (called in order):
   },
   "scripting_options": {
     "remove_all_extra_ents": false,           // Drop entities not in source
-    "as_transaction": false,                   // Wrap in transaction
     "script_schemas": true,                    // Include schema DDL
     "script_security": true,                   // Include security (roles, permissions, RLS)
     "all_schemas": true,                       // Script all schemas or only used ones
@@ -183,7 +182,6 @@ Generation modules (called in order):
 The configuration system supports environment variable overrides using double-underscore notation:
 - `DATABASE__HOST` overrides `database.host`
 - `DATABASE__PASSWORD` overrides `database.password`
-- `SCRIPTING_OPTIONS__AS_TRANSACTION` overrides `scripting_options.as_transaction`
 
 This is handled by `src/utils/load_config.py` but is optional - all configuration can be managed through config.json alone.
 
@@ -247,9 +245,7 @@ The script generation order is critical:
 - Boolean values: `true`/`false` for PostgreSQL, `1`/`0` for MSSQL
 
 ### Transaction Control
-- When `as_transaction: true`, wraps script in BEGIN/COMMIT block
-- PostgreSQL scripts always wrapped in `DO $$ BEGIN...END $$` procedural block
-- Individual operations not transactional unless explicitly enabled
+- **PostgreSQL:** Scripts are wrapped in `DO $$ BEGIN...END $$` block which is **inherently atomic** - the entire script is all-or-nothing. If any uncaught error occurs, the whole script rolls back automatically. No explicit transaction configuration needed.
 
 ### Code Generation Conventions
 
@@ -295,10 +291,9 @@ This pattern ensures scripts can be run repeatedly without errors.
 - **Add configuration option:** Update `ScriptingOptions` or `ScriptTableOptions` dataclass, add to config.json schema
 
 ### Debugging Script Output
-1. Generated SQL written to `tests/sample_out.sql` (hardcoded path)
-2. Compare with `tests/old_sample_out.sql` to see differences
-3. Each generation phase writes comments like `--Iterate tables, generate all code----------------`
-4. Enable `as_transaction: false` to prevent rollback on errors during testing
+1. Generated SQL written to path specified in `input_output.output_sql`
+2. Each generation phase writes comments like `--Iterate tables, generate all code----------------`
+3. Set `exec_code: false` in `sql_script_params` to see what would be executed without actually running it
 
 ## Data Model
 

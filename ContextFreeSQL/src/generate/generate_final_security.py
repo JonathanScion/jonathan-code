@@ -115,7 +115,7 @@ def generate_security_state_tables(db_type: DBType, sql_buffer: StringIO, db_sch
     sql_buffer.write("\t);\n\n")
 
 
-def generate_security_inserts(db_type: DBType, sql_buffer: StringIO, db_schema, scripted_tables: list = None):
+def generate_security_inserts(db_type: DBType, sql_buffer: StringIO, db_schema, scripted_tables: list | None = None):
     """Generate INSERT statements to populate security state tables with desired state."""
 
     if db_type != DBType.PostgreSQL:

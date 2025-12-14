@@ -237,7 +237,7 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
                 null as secondary_type_desc,
                 null as fill_factor,
                 null as type_desc, --for MSSQL comparisons
-                substring(indexdef,'\((.*?)\)') /* ix.indkey*/ as index_columns,
+                substring(indexdef,'\\((.*?)\\)') /* ix.indkey*/ as index_columns,
                 idx.indexdef as index_sql --PG provides full CREATE INDEX actually. could even compare only on this field (and schma)name and table_name)
             from
                 pg_index ix 
@@ -554,6 +554,7 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
 def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List[str]] = None) -> pd.DataFrame:
     conn = None
     cur = None
+    tbl_ents = pd.DataFrame()  # Initialize to avoid unbound variable
     try:
         conn = Database.connect_to_database(conn_settings)
         
@@ -656,8 +657,7 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
         
     except Exception as e:
         print(f"Error in load_all_db_ents: {e}")
-        # Return empty DataFrame or partial result
-        return pd.DataFrame() if 'tbl_ents' not in locals() else tbl_ents
+        return tbl_ents
         
     finally:
         if cur:

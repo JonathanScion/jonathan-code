@@ -10,7 +10,6 @@
       "remove_all_extra_ents": true,
       "column_collation": true,
       "code_compare_no_white_space": true,
-      "as_transaction": false,
       "pre_add_constraints_data_checks": false,
       "script_schemas": true,
       "all_schemas": true,
