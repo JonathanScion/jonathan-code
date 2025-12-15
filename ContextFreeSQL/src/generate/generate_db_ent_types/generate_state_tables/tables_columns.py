@@ -206,7 +206,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\tEND || 'user_type_name is ' \n")
         script_db_state_tables.write(f"{align}\t || CAST(DB.user_type_name AS {db_syntax.nvarchar_type}(10)) || ', should be ' \n")
         script_db_state_tables.write(f"{align}\t || CAST(J.user_type_name AS {db_syntax.nvarchar_type}(10)) \n")
-        script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.data_type as user_type_name \n")
+        script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.udt_name as user_type_name \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
         script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
@@ -388,16 +388,22 @@ def create_db_state_columns(
     # Update tables where columns are different
     script_db_state_tables.write(f"{align}\n\n")
     script_db_state_tables.write(f"{align}--update tables where columns are different\n")
-    script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptTables set tableStat=3 \n")
-    script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptTables T INNER JOIN {db_syntax.temp_table_prefix}ScriptCols C on LOWER(T.table_schema) = LOWER(C.table_schema) AND LOWER(T.table_name) = LOWER(C.table_name) \n")
-    script_db_state_tables.write(f"{align}where C.colStat IN (1,2,3) AND (T.tableStat NOT IN (1,2) OR t.tableStat IS NULL); --extra, missing, or different \n")
-    
+    script_db_state_tables.write(f"UPDATE {db_syntax.temp_table_prefix}ScriptTables SET tableStat=3 \n")
+    script_db_state_tables.write(f"FROM {db_syntax.temp_table_prefix}ScriptCols C \n")
+    script_db_state_tables.write(f"WHERE LOWER({db_syntax.temp_table_prefix}ScriptTables.table_schema) = LOWER(C.table_schema) \n")
+    script_db_state_tables.write(f"  AND LOWER({db_syntax.temp_table_prefix}ScriptTables.table_name) = LOWER(C.table_name) \n")
+    script_db_state_tables.write(f"  AND C.colStat IN (1,2,3) \n")
+    script_db_state_tables.write(f"  AND ({db_syntax.temp_table_prefix}ScriptTables.tableStat NOT IN (1,2) OR {db_syntax.temp_table_prefix}ScriptTables.tableStat IS NULL); --extra, missing, or different \n")
+
     # Wherever got columns different, mark the tables as different
     script_db_state_tables.write(f"{align}\n")
     script_db_state_tables.write(f"{align}--wherever got columns different, mark the tables as different\n")
     script_db_state_tables.write(f"UPDATE {db_syntax.temp_table_prefix}ScriptTables SET col_diff={db_syntax.boolean_true_value}\n")
-    script_db_state_tables.write(f"FROM {db_syntax.temp_table_prefix}ScriptTables T INNER JOIN {db_syntax.temp_table_prefix}ScriptCols C ON LOWER(T.table_schema) = LOWER(C.table_schema) AND LOWER(T.table_name) = LOWER(C.table_name)\n")
-    script_db_state_tables.write(f"{align}WHERE C.ColStat Is Not NULL AND (T.tableStat NOT IN (1,2) OR t.tableStat IS NULL);\n")
+    script_db_state_tables.write(f"FROM {db_syntax.temp_table_prefix}ScriptCols C \n")
+    script_db_state_tables.write(f"WHERE LOWER({db_syntax.temp_table_prefix}ScriptTables.table_schema) = LOWER(C.table_schema) \n")
+    script_db_state_tables.write(f"  AND LOWER({db_syntax.temp_table_prefix}ScriptTables.table_name) = LOWER(C.table_name) \n")
+    script_db_state_tables.write(f"  AND C.ColStat IS NOT NULL \n")
+    script_db_state_tables.write(f"  AND ({db_syntax.temp_table_prefix}ScriptTables.tableStat NOT IN (1,2) OR {db_syntax.temp_table_prefix}ScriptTables.tableStat IS NULL);\n")
     script_db_state_tables.write(f"{align}\n")
 
     return script_db_state_tables

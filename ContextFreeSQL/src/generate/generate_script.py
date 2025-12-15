@@ -13,6 +13,7 @@ from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
 from src.generate.generate_final_coded_ents import generate_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
+from src.generate.generate_final_code_diffs import generate_code_diffs
 from src.generate.generate_final_security import (
     generate_security_state_tables, generate_security_inserts, generate_security_state_updates,
     generate_create_roles, generate_grant_table_permissions,
@@ -37,9 +38,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
 
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
     if db_type == DBType.PostgreSQL:
-        buffer.write("BEGIN --overall code\n") 
+        buffer.write("BEGIN --main DO block\n")
 
-    buffer.write("\tBEGIN --the code\n") #! title not clear. why "the code" is different from "overall code"? do full alignment of everything, wheres the END of this one? what does this block achieves?
+    buffer.write("\tBEGIN --script initialization and execution\n")
     buffer.write("\tperform n.nspname, c.relname\n")
     buffer.write("\tFROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n")
     buffer.write("\tWHERE n.nspname LIKE 'pg_temp_%' AND c.relname='scriptoutput' AND pg_catalog.pg_table_is_visible(c.oid);\n")
@@ -111,8 +112,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
     generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
     generate_html_report(db_type=db_type, sql_buffer=coded_ents, input_output=input_output)
+    generate_code_diffs(db_type=db_type, sql_buffer=coded_ents, input_output=input_output)
 
-  
+
     # Bad data check StringBuilders
     bad_data_pre_add_indx = StringIO()
     bad_data_pre_add_fk = StringIO()
@@ -342,7 +344,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     
     #end out buffer
     if db_type == DBType.PostgreSQL:
-        buffer.write("END; --overall code\n")  # close all openings of PG code
+        buffer.write("END; --main DO block\n")
         buffer.write("$$\n")
         buffer.write(";select * from scriptoutput\n")
 

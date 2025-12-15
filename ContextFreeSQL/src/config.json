@@ -30,8 +30,8 @@
       "check_constraints": true,
       "extended_props": true
     },
-    "db_ents_to_load":  {      
-      "tables": ["public.students", "public.some_crap_generated"]
+    "db_ents_to_load":  {
+      "tables": []
     },
     "tables_data": {
       "tables": ["public.students", "public.some_crap_generated"],
@@ -40,6 +40,8 @@
     "input_output": {
       "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare_template.html",
       "html_output_path": "C:/Temp/ContextFreeSQL/database_report.html",
+      "diff_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/code_diff_template.html",
+      "diff_output_dir": "C:/Temp/ContextFreeSQL",
       "output_sql": "C:/Temp/ContextFreeSQL/sample_out.sql"
     },
     "sql_script_params": {

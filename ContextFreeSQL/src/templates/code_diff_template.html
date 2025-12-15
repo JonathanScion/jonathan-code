@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Comparison - [[ENTITY_NAME]]</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
+    <style>
+        :root {
+            --bg-body: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-container: white;
+            --text-main: #2c3e50;
+            --header-bg: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            --shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-body);
+            min-height: 100vh;
+            padding: 20px;
+            color: var(--text-main);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: var(--bg-container);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            margin-top: 8px;
+            opacity: 0.9;
+        }
+
+        .controls {
+            padding: 15px 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .control-group select, .control-group button {
+            padding: 8px 16px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .control-group button {
+            background: #667eea;
+            color: white;
+            border: none;
+        }
+
+        .control-group button:hover {
+            background: #5a6fd6;
+        }
+
+        .diff-container {
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .d2h-wrapper {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .legend {
+            padding: 15px 25px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-color.added { background: #e6ffec; border: 1px solid #34d058; }
+        .legend-color.removed { background: #ffebe9; border: 1px solid #d73a49; }
+        .legend-color.unchanged { background: #f6f8fa; border: 1px solid #e1e4e8; }
+
+        .footer {
+            padding: 15px 25px;
+            text-align: center;
+            background: #f8f9fa;
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 10px;
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="database_report.html" class="back-link">&larr; Back to Report</a>
+            <h1>Code Comparison</h1>
+            <div class="subtitle">[[ENTITY_TYPE]]: [[ENTITY_SCHEMA]].[[ENTITY_NAME]]</div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>View Mode:</label>
+                <select id="viewMode" onchange="renderDiff()">
+                    <option value="side-by-side">Side by Side</option>
+                    <option value="line-by-line">Unified</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Context Lines:</label>
+                <select id="contextLines" onchange="renderDiff()">
+                    <option value="3">3 lines</option>
+                    <option value="5">5 lines</option>
+                    <option value="10">10 lines</option>
+                    <option value="99999" selected>Full file</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color removed"></div>
+                <span>Script Version (Expected)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color added"></div>
+                <span>Database Version (Actual)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color unchanged"></div>
+                <span>Unchanged</span>
+            </div>
+        </div>
+
+        <div class="diff-container" id="diffOutput"></div>
+
+        <div class="footer">
+            Code Comparison Tool - Generated on <span id="currentDate"></span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+    <script>
+        // Code content will be injected here
+        const scriptCode = [[SCRIPT_CODE]];
+        const dbCode = [[DB_CODE]];
+        const entityName = '[[ENTITY_NAME]]';
+
+        function createUnifiedDiff(oldStr, newStr, oldHeader, newHeader) {
+            const diff = Diff.createTwoFilesPatch(
+                oldHeader || 'Script Version',
+                newHeader || 'Database Version',
+                oldStr,
+                newStr,
+                'Expected',
+                'Actual'
+            );
+            return diff;
+        }
+
+        function renderDiff() {
+            const viewMode = document.getElementById('viewMode').value;
+            const contextLines = parseInt(document.getElementById('contextLines').value);
+
+            const diffString = createUnifiedDiff(scriptCode, dbCode,
+                'Script Version (Expected)',
+                'Database Version (Actual)');
+
+            const diffHtml = Diff2Html.html(diffString, {
+                drawFileList: false,
+                matching: 'lines',
+                outputFormat: viewMode,
+                renderNothingWhenEmpty: false,
+                rawTemplates: {
+                    'generic-empty-diff': '<div class="d2h-info" style="padding: 20px; text-align: center;">No differences found - code is identical</div>'
+                }
+            });
+
+            document.getElementById('diffOutput').innerHTML = diffHtml;
+        }
+
+        // Initialize
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString();
+        renderDiff();
+    </script>
+</body>
+</html>

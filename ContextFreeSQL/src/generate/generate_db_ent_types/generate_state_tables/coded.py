@@ -166,9 +166,14 @@ END;
         if db_type == DBType.MSSQL:
             script_builder.write(f"'DROP {ent_row['enttype']} [{ent_row['entschema']}].[{ent_row['entname']}];');\n")
         else:
+            # For DROP, use entparamlisttypes (types only) for correct PostgreSQL syntax
+            # e.g., DROP PROCEDURE name(integer) not DROP PROCEDURE name(IN studentid integer)
+            param_list_types_str = ent_row['entparamlisttypes'] if not pd.isna(ent_row.get('entparamlisttypes')) else ''
+            param_list_for_drop = f"({param_list_types_str})" if param_list_types_str else "()"
+            # Keep full param list for matching/comparison
             param_list_str = ent_row['entparamlist'] if not pd.isna(ent_row['entparamlist']) else ''
             ent_param_list_val = f"'{param_list_str}'" if param_list_str else "''"
-            script_builder.write(f"'DROP {ent_row['enttype']} {ent_row['entschema']}.{ent_row['entname']} {param_list_str};', {ent_param_list_val});\n")
+            script_builder.write(f"'DROP {ent_row['enttype']} {ent_row['entschema']}.{ent_row['entname']}{param_list_for_drop};', {ent_param_list_val});\n")
     
     # Update state against existing entities
     script_builder.write(f"{align}\n--Entities only On Johannes database (need To add)\n")
@@ -328,7 +333,7 @@ Where v.table_schema Not In ('information_schema', 'pg_catalog')
         else:
             script_builder.write("WHERE J.SQL_CREATE<>DB.definition \n")
         
-        script_builder.write("AND (ScriptCode.ent_schema = J.ent_schema AND ScriptCode.ent_name = J.ent_name); --PG wants an explicit join of the updated table to its alias  \n")
+        script_builder.write("AND (ScriptCode.ent_schema = J.ent_schema AND ScriptCode.ent_name = J.ent_name AND ScriptCode.param_type_list = J.param_type_list); --PG wants an explicit join of the updated table to its alias  \n")
     
     script_builder.write(f"\n{align}End; --coded entities\n")
     

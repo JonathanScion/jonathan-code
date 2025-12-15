@@ -968,6 +968,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("BEGIN\n")
         elif db_type == DBType.PostgreSQL:
             out_buffer.write(f"IF ({s_flag_ent_created}=False) THEN --Records to be deleted or removed: do not even check if the table was just created\n")
+            # Add check to skip data comparison if table has pending column additions and execCode=False
+            # This prevents errors when trying to SELECT columns that don't exist in the target database
+            out_buffer.write(f"-- Skip data comparison if table has pending column changes and execCode=False (columns don't exist yet)\n")
+            out_buffer.write(f"IF (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1)) THEN\n")
 
         out_buffer.write("--records to be removed:\n")
         # Insert the ones we're deleting, just before deleting them
@@ -1132,6 +1136,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             out_buffer.write("END IF; --'of: 'remove all extra recods'\n")
             out_buffer.write("END IF; --Of 'Records to be deleted or removed: do not even check if the table was just created'\n")
+            out_buffer.write("END IF; --of skip data comparison if table has pending column changes\n")
             out_buffer.write("END IF; --of table was just created\n")
         
         out_buffer.write("\n")
@@ -1303,6 +1308,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("END\n")
         
         elif db_type == DBType.PostgreSQL: #3418
+            # Skip update fields if table has pending column additions and execCode=False
+            # This prevents errors when trying to access columns that don't exist in the target database
+            out_buffer.write(f"-- Skip update fields if table has pending column changes and execCode=False (columns don't exist yet)\n")
+            out_buffer.write(f"IF (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1)) THEN\n")
             for col_name in ar_no_key_cols:
                 # First, report it (this must be done BEFORE we actually update)
                 if script_ops.data_scripting_leave_report_fields_updated:
@@ -1427,8 +1436,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("';\n")
                 out_buffer.write("\tEXECUTE sqlCode;\n")
                 out_buffer.write("END IF;\n")
+            out_buffer.write("END IF; --of skip update fields if table has pending column changes\n")
 
-        
+
         # Generate individual DML statements for delete, update
         if script_ops.data_scripting_generate_dml_statements: #3531
             out_buffer.write("\n")
@@ -1767,7 +1777,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             csv_file_indb = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}_indb.csv"
 
             # Export if exportCsv=True OR (htmlReport=True AND this table has data differences)
-            out_buffer.write(f"IF (exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3))) THEN\n")
+            # Also check: skip if table has pending column additions and execCode=False (columns don't exist yet)
+            out_buffer.write(f"IF ((exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3)))")
+            out_buffer.write(f" AND (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1))) THEN\n")
             out_buffer.write(f"\t-- Database data for {s_ent_full_name} (current state in DB)\n")
             out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_ent_full_name_sql};\n")
             out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file_indb}');\n")
