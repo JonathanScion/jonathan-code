@@ -22,18 +22,18 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg-body);
+            background: var(--bg-container);
             min-height: 100vh;
-            padding: 20px;
+            padding: 0;
             color: var(--text-main);
         }
 
         .container {
-            max-width: 1600px;
-            margin: 0 auto;
+            width: 100%;
+            margin: 0;
             background: var(--bg-container);
-            border-radius: 12px;
-            box-shadow: var(--shadow);
+            border-radius: 0;
+            box-shadow: none;
             overflow: hidden;
         }
 
@@ -104,6 +104,15 @@
         .d2h-wrapper {
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 13px;
+        }
+
+        /* Ensure diff starts at top, not auto-scrolled to first change */
+        .d2h-file-side-diff {
+            scroll-behavior: auto;
+        }
+        .d2h-code-side-linenumber,
+        .d2h-code-side-line {
+            scroll-margin-top: 0;
         }
 
         .legend {
@@ -209,14 +218,15 @@
         const dbCode = [[DB_CODE]];
         const entityName = '[[ENTITY_NAME]]';
 
-        function createUnifiedDiff(oldStr, newStr, oldHeader, newHeader) {
+        function createUnifiedDiff(oldStr, newStr, oldHeader, newHeader, contextLines) {
             const diff = Diff.createTwoFilesPatch(
                 oldHeader || 'Script Version',
                 newHeader || 'Database Version',
                 oldStr,
                 newStr,
                 'Expected',
-                'Actual'
+                'Actual',
+                { context: contextLines }
             );
             return diff;
         }
@@ -227,7 +237,8 @@
 
             const diffString = createUnifiedDiff(scriptCode, dbCode,
                 'Script Version (Expected)',
-                'Database Version (Actual)');
+                'Database Version (Actual)',
+                contextLines);
 
             const diffHtml = Diff2Html.html(diffString, {
                 drawFileList: false,
@@ -240,11 +251,23 @@
             });
 
             document.getElementById('diffOutput').innerHTML = diffHtml;
+
+            // Scroll to top after rendering (prevent auto-scroll to first difference)
+            setTimeout(function() {
+                // Scroll the window to top
+                window.scrollTo(0, 0);
+                // Scroll all diff side panels to top
+                document.querySelectorAll('.d2h-file-side-diff').forEach(function(el) {
+                    el.scrollTop = 0;
+                });
+            }, 50);
         }
 
         // Initialize
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString();
         renderDiff();
+        // Ensure page starts at top on load
+        window.scrollTo(0, 0);
     </script>
 </body>
 </html>
