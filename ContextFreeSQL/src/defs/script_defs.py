@@ -72,6 +72,8 @@ class DBSyntax:
 class InputOutput:
    html_template_path: str = "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare.html"
    html_output_path: str = "C:/temp/database_report.html"
+   diff_template_path: str = "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/code_diff_template.html"
+   diff_output_dir: str = "C:/temp/ContextFreeSQL"
    output_sql: str = "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/tests/sample_out.sql"
 
 @dataclass

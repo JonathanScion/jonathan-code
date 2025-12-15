@@ -30,6 +30,18 @@ def main():
         # Update the path so SQL will reference the copied file
         config_vals.input_output.html_template_path = new_template_path
 
+    # Copy diff template to output directory so pg_read_file can access it
+    if config_vals.input_output.diff_template_path:
+        diff_template_filename = os.path.basename(config_vals.input_output.diff_template_path)
+        new_diff_template_path = os.path.join(output_dir, diff_template_filename).replace("\\", "/")
+
+        # Copy the diff template file
+        shutil.copy2(config_vals.input_output.diff_template_path, new_diff_template_path)
+        print(f"Copied diff template to: {new_diff_template_path}")
+
+        # Update the path so SQL will reference the copied file
+        config_vals.input_output.diff_template_path = new_diff_template_path
+
     # Copy CSV compare template if we have data tables to script
     if len(config_vals.tables_data.tables) >= 1:
         src_dir = os.path.dirname(os.path.abspath(__file__))

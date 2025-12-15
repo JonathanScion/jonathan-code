@@ -538,9 +538,13 @@ END; --of cursor
             const row = document.createElement('div');
             row.className = 'data-row';
 
-            // For Data entries with differences, make name a clickable link to comparison HTML
+            // For entries with differences, make name a clickable link to comparison/diff HTML
             let nameCell;
-            if (item.type === 'Data' && item.status === 'different') {
+            if (item.status === 'different' && item.diffFile) {
+                // Coded entities (functions, procedures, views) with diffFile field
+                nameCell = `<a href="${item.diffFile}" style="color: #dc3545; text-decoration: underline; cursor: pointer;" title="View code differences">${item.name}</a>`;
+            } else if (item.type === 'Data' && item.status === 'different') {
+                // Data entries - use compare_schema_name.html pattern
                 const compareHtmlUrl = `compare_${item.schema}_${item.name}.html`;
                 nameCell = `<a href="${compareHtmlUrl}" style="color: #dc3545; text-decoration: underline; cursor: pointer;">${item.name}</a>`;
             } else {

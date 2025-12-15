@@ -187,9 +187,10 @@ This is handled by `src/utils/load_config.py` but is optional - all configuratio
 
 ### Critical Configuration Behavior
 
-- **Empty `db_ents_to_load.tables`**: Loads ALL entities from database
+- **Empty `db_ents_to_load.tables`**: Loads ALL entities from database (tables, views, functions, procedures, triggers)
+- **Specifying `db_ents_to_load.tables`**: Filters ALL entity types, not just tables. If you specify tables, functions/procedures/views are also filtered out unless explicitly listed.
 - **Empty `tables_data.tables`**: Scripts data for ALL tables (can be slow)
-- **Filtering:** When specifying tables, use format `schema.tablename` (e.g., `"public.students"`)
+- **Filtering format:** Use `schema.entityname` (e.g., `"public.students"`, `"public.my_function"`)
 
 ## Database Connection
 
@@ -222,7 +223,9 @@ This is handled by `src/utils/load_config.py` but is optional - all configuratio
 ## Important Implementation Details
 
 ### Data Type Handling
-- PostgreSQL types mapped in `DBSyntax`: `character varying`, `boolean`, `integer`, etc.
+- PostgreSQL uses `udt_name` from `information_schema.columns` for type names (e.g., `varchar`, `int4`, `timestamp`)
+  - This provides shorter names than `data_type` (which returns `character varying`, `integer`, `timestamp without time zone`)
+  - Custom types (enums, domains) show their actual names instead of `USER-DEFINED`
 - MSSQL types mapped separately: `nvarchar`, `BIT`, `int`, etc.
 - Data type conversion handled in `generate_final_columns.py`
 
@@ -317,9 +320,18 @@ Contains pandas DataFrames:
 Tracks entities to script with columns:
 - `entschema`: Schema name
 - `entname`: Entity name
-- `enttype`: 'Table', 'View', 'Function', etc.
+- `enttype`: 'Table', 'View', 'Function', 'Procedure', 'Trigger'
+- `entparamlist`: Parameter list for functions/procedures (e.g., `IN studentid integer`) - used for comparison
+- `entparamlisttypes`: Parameter types only (e.g., `integer`) - used for DROP statements in PostgreSQL
 - `scriptdata`: Boolean flag - whether to generate INSERT statements
 - Additional state tracking columns added during generation
+
+### Function/Procedure Overloading (PostgreSQL)
+PostgreSQL supports function overloading - multiple functions with the same name but different parameters. The system handles this by:
+- **Identification:** Uses `entparamlist` (from `pg_get_function_arguments()`) to distinguish overloads
+- **Comparison:** Each overload is compared independently - changing one doesn't affect others
+- **DROP syntax:** Uses `entparamlisttypes` for correct PostgreSQL DROP syntax (e.g., `DROP PROCEDURE name(integer)`)
+- **State tracking:** ScriptCode table includes `param_type_list` column to track each overload separately
 
 ## Known Issues and Limitations
 
@@ -363,3 +375,5 @@ Column-level permissions that are already covered by table-level permissions are
 - Data scripting with historical value preservation (save_old_value option)
 - Coded entities handling (functions/procedures/triggers)
 - Column permissions filtering (exclude redundant grants)
+- **Function overloading support:** Proper handling of PostgreSQL overloaded functions/procedures
+- **Column type naming:** Using `udt_name` for PostgreSQL type names (shorter, supports custom types)

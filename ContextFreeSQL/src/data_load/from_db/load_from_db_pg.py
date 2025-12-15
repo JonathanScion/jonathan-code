@@ -151,7 +151,7 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
     try:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, DATA_TYPE AS user_type_name, 
+        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, udt_name AS user_type_name, 
                             CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
                              null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS col_unsigned, 
                             NULL AS extra, 
@@ -561,32 +561,33 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
         # First, fetch the database entities
         cur = conn.cursor(cursor_factory=RealDictCursor)
         entities_sql = """SELECT CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,
-                    table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType , NULL as EntParamList
+                    table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType, NULL as EntParamList, NULL as EntParamListTypes
                 FROM information_schema.tables
                 where table_schema not in ('information_schema', 'pg_catalog') and TABLE_TYPE<>'VIEW'
                 UNION
-                select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList
+                select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList, NULL as EntParamListTypes
                 from information_schema.views
                 where table_schema not in ('information_schema', 'pg_catalog')
-                UNION 
+                UNION
                 select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
                     p.proname as EntName,
                     cast(p.prokind as character varying)  as EntBaseType,
                     case p.prokind WHEN 'p' THEN 'Procedure' WHEN 'f' THEN 'Function' END as EntType,
-                    pg_get_function_arguments(p.oid) as EntParamList 
+                    pg_get_function_arguments(p.oid) as EntParamList,
+                    pg_get_function_identity_arguments(p.oid) as EntParamListTypes
                 FROM pg_proc p
                 left join pg_namespace n on p.pronamespace = n.oid
                 left join pg_language l on p.prolang = l.oid
-                left join pg_type t on t.oid = p.prorettype 
+                left join pg_type t on t.oid = p.prorettype
                 where n.nspname not in ('pg_catalog', 'information_schema')
-                UNION 
+                UNION
                 Select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
                                         trigger_name As EntName,
                                         'TR' as EntBaseType,
-                                        'Trigger' as EntType,                                         
-                                        NULL as EntParamList
+                                        'Trigger' as EntType,
+                                        NULL as EntParamList, NULL as EntParamListTypes
                 FROM information_schema.triggers
-                Group By 1, 2, 3, 4,5, 6,7"""
+                Group By 1, 2, 3, 4, 5, 6, 7, 8"""
         cur.execute(entities_sql)
         entities_results = cur.fetchall()
         tbl_ents = pd.DataFrame(entities_results)

@@ -35,7 +35,8 @@
       "Bash(python run_test_sql.py:*)",
       "Bash(python run_generated_sql.py:*)",
       "Bash(del \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\run_test_sql.py\")",
-      "Bash(del \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\run_generated_sql.py\")"
+      "Bash(del \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\run_generated_sql.py\")",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []
