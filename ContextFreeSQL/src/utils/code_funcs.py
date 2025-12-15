@@ -86,28 +86,28 @@ def add_size_precision_scale(row_col):
         length_field = "max_length"
         precision_field = "precision"
         scale_field = "scale"
-        
+
         type_name = str(row_col[type_name_field])
-        
+
         if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext", "character varying", "bpchar", "character"]: #2025-04-01 added pg string types
             if row_col[length_field] == 0:
-                return " (max) "  # In SQL 2005+ this means max size
+                return "(max)"  # In SQL 2005+ this means max size
             else:
                 if type_name.lower() in ["nchar", "nvarchar"]:
                     # Unicode: trim to half-size
                     if row_col[length_field] == -1:
-                        return " (max) "
+                        return "(max)"
                     else:
-                        return f" ({int(row_col[length_field] / 2)}) "
+                        return f"({int(row_col[length_field] / 2)})"
                 elif type_name.lower() in ["text", "ntext"]:
                     return ""  # Never specify size for text/ntext
                 else:
                     if row_col[length_field] == -1:
-                        return " (max) "
+                        return "(max)"
                     else:
-                        return f" ({row_col[length_field]:.0f}) "
+                        return f"({row_col[length_field]:.0f})"
         elif type_name.lower() in ["decimal", "numeric"]:
-            return f" ({row_col[precision_field]},{row_col[scale_field]}) "
+            return f"({row_col[precision_field]},{row_col[scale_field]})"
         else:
             return ""  # Don't add anything for other types
 

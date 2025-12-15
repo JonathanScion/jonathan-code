@@ -367,10 +367,38 @@ Column-level permissions that are already covered by table-level permissions are
 3. Run script - should detect and fix differences
 4. With `exec_code: false`, script shows what WOULD be done without executing
 
+## HTML Report and Diff Generation
+
+### Overview
+When `html_report: true` is set in config, the system generates:
+1. **Main Report (`database_report.html`):** Dashboard showing all entities and their status (equal/different/add/drop)
+2. **Diff Files:** Individual HTML files for each entity with differences, showing side-by-side code comparison
+
+### Key Files
+- **`src/templates/db_compare_template.html`:** Template for main report dashboard
+- **`src/templates/code_diff_template.html`:** Template for individual diff pages
+- **`src/generate/generate_final_code_diffs.py`:** Generates diff HTML files for entities with `stat=3` (different)
+
+### Diff Template Features
+The diff template uses:
+- **diff2html library:** For rendering side-by-side or unified diffs
+- **jsdiff library:** For computing diffs between script and database versions
+- **Context Lines dropdown:** Controls how much surrounding context is shown (3, 5, 10, or full file)
+- The `contextLines` value is passed to `Diff.createTwoFilesPatch()` via `{ context: contextLines }` option
+
+### Table CREATE Statement Generation
+For table diffs, full CREATE TABLE statements are compared including:
+- Column definitions (name, type, nullability, defaults)
+- PRIMARY KEY constraints (output first)
+- Regular indexes (output after PRIMARY KEY)
+- Foreign keys
+
+The order matches PostgreSQL's `pg_indexes` output format for accurate comparison.
+
 ## Recent Development Areas (from git history)
 
 - **Security scripting:** Roles, permissions, RLS policies (phased operations)
-- HTML report generation for database comparisons
+- **HTML report generation:** Database comparison dashboard with individual diff files
 - Filtering specific tables and entities (db_ents_to_load)
 - Data scripting with historical value preservation (save_old_value option)
 - Coded entities handling (functions/procedures/triggers)

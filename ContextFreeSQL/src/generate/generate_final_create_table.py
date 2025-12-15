@@ -62,6 +62,16 @@ def get_create_table_from_sys_tables(
             schema_tables.columns['object_id'] == table_row['object_id']
         ].sort_values('column_id')
 
+        # Build a dict of column defaults for inline inclusion (PostgreSQL)
+        col_defaults = {}
+        if script_table_ops.defaults and schema_tables.defaults is not None:
+            default_rows = schema_tables.defaults[
+                (schema_tables.defaults['table_schema'] == table_schema) &
+                (schema_tables.defaults['table_name'] == table_name)
+            ]
+            for _, default_row in default_rows.iterrows():
+                col_defaults[default_row['col_name']] = default_row['default_definition']
+
         col_num = 0
         for idx, col_row in col_rows.iterrows():
             col_num += 1
@@ -69,7 +79,11 @@ def get_create_table_from_sys_tables(
                 col_row, table_row['table_schema'], table_row['table_name'],
                 DBEntScriptState.InLine, db_type, script_table_ops.column_identity, force_allow_null
             ).strip()
-            
+
+            # For PostgreSQL, include DEFAULT inline with the column
+            if db_type == DBType.PostgreSQL and col_row['col_name'] in col_defaults:
+                col_sql += f" DEFAULT {col_defaults[col_row['col_name']]}"
+
             if col_num < len(col_rows):
                 col_sql += ","
             create_table_lines.append(col_sql)
@@ -82,8 +96,12 @@ def get_create_table_from_sys_tables(
             idx_rows = schema_tables.indexes[
                 schema_tables.indexes['object_id'] == table_row['object_id']
             ]
-            
+
+            # First pass: output PRIMARY KEY constraints first
             for _, idx_row in idx_rows.iterrows():
+                if not utils.val_if_null(idx_row.get('is_primary_key'), False):
+                    continue  # Skip non-PK indexes in first pass
+
                 if db_type == DBType.MSSQL:
                     idx_cols = schema_tables.index_cols[
                         (schema_tables.index_cols['object_id'] == table_row['object_id']) &
@@ -95,7 +113,25 @@ def get_create_table_from_sys_tables(
                         (schema_tables.index_cols['index_name'] == idx_row['index_name'])
                     ]
                 index_sql = get_index_sql(idx_row, idx_cols, db_type)
-                create_table_lines.append( index_sql + ";")
+                create_table_lines.append(index_sql + ";")
+
+            # Second pass: output regular indexes (non-PK)
+            for _, idx_row in idx_rows.iterrows():
+                if utils.val_if_null(idx_row.get('is_primary_key'), False):
+                    continue  # Skip PK indexes in second pass
+
+                if db_type == DBType.MSSQL:
+                    idx_cols = schema_tables.index_cols[
+                        (schema_tables.index_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.index_cols['index_id'] == idx_row['index_id'])
+                    ]
+                else:
+                    idx_cols = schema_tables.index_cols[
+                        (schema_tables.index_cols['object_id'] == table_row['object_id']) &
+                        (schema_tables.index_cols['index_name'] == idx_row['index_name'])
+                    ]
+                index_sql = get_index_sql(idx_row, idx_cols, db_type)
+                create_table_lines.append(index_sql + ";")
 
         # Add foreign keys if requested
         if script_table_ops.foreign_keys and schema_tables.fks is not None:
@@ -112,13 +148,13 @@ def get_create_table_from_sys_tables(
                 ]
                 create_table_lines.append(get_fk_sql(fk_row.to_dict(), fk_cols, db_type) + ";")
         
-        #defaults
-        if script_table_ops.defaults and schema_tables.defaults is not None:
+        #defaults - only add as separate ALTER statements for MSSQL (PostgreSQL includes them inline)
+        if db_type == DBType.MSSQL and script_table_ops.defaults and schema_tables.defaults is not None:
             default_rows = schema_tables.defaults[
                 (schema_tables.defaults['table_schema'] == table_schema) &
                 (schema_tables.defaults['table_name'] == table_name)
             ]
-    
+
             for _, default_row in default_rows.iterrows():
                 create_table_lines.append(get_default_sql(db_type, default_row.to_dict()))
 
@@ -209,9 +245,9 @@ def get_col_sql(
 
     # Type
     if db_type == DBType.MSSQL:
-        sql.append(f" [{actual_type}] ")
+        sql.append(f"[{actual_type}]")
     else:
-        sql.append(f" {actual_type} ")
+        sql.append(f"{actual_type}")
 
     # Add size, precision, scale (assuming Utils.AddSizePrecisionScale is implemented elsewhere)
     type_size_prec_scale = code_funcs.add_size_precision_scale(sys_cols_row)
@@ -320,25 +356,21 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_t
             buffer.write("\n)\n")
             
         elif db_type == DBType.PostgreSQL:
-            if not in_line:
-                buffer.write(f"ALTER TABLE {index_row['table_schema']}.{index_row['table_name']} ADD CONSTRAINT {index_row['index_name']} PRIMARY KEY")
-            buffer.write(f"{'CLUSTERED ' if index_row['type'] == 1 else ''}\n")
-            buffer.write("(\n")
-            
+            # Generate single-line format to match pg_indexes output
             if index_cols_rows.empty:
                 raise Exception(f"Internal Error: Primary Key '{index_row['index_name']}' on table {index_row['table_schema']}.{index_row['table_name']} has no columns")
-            
+
+            cols = []
             for col in index_cols_rows.to_dict('records'):
                 if col is None:
                     raise Exception(f"Primary Key '{index_row['index_name']}' has an unknown field")
-                
-                buffer.write(col['name'])
+                col_str = col['name']
                 if utils.c_to_bool(col.get('is_descending_key'), False):
-                    buffer.write(" DESC")
-                buffer.write(",\n")
-            
-            buffer.seek(buffer.tell() - 2)  # Remove last comma
-            buffer.write("\n)\n")
+                    col_str += " DESC"
+                cols.append(col_str)
+
+            if not in_line:
+                buffer.write(f"ALTER TABLE {index_row['table_schema']}.{index_row['table_name']} ADD CONSTRAINT {index_row['index_name']} PRIMARY KEY ({', '.join(cols)})")
             
     elif utils.val_if_null(index_row.get('is_unique_constraint'), False):
         if db_type == DBType.MSSQL:
@@ -363,31 +395,33 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_t
             buffer.write("\n)")
             
         else:  # MySQL and PostgreSQL
-            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}" 
+            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}"
                         if db_type == DBType.PostgreSQL else index_row['table_name'])
-            
-            if not in_line:
-                buffer.write(f"ALTER TABLE {table_ref} ADD\n")
-                buffer.write(f"CONSTRAINT {index_row['index_name']} UNIQUE {'CLUSTERED ' if utils.c_to_bool(index_row.get('is_clustered'), False) else ''}\n")
-            else:
-                buffer.write(f"UNIQUE KEY {index_row['index_name']}\n")
-            
-            buffer.write("(\n")
-            
+
             if index_cols_rows.empty:
                 raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table {table_ref} has no columns")
-            
+
+            cols = []
             for col in index_cols_rows.to_dict('records'):
                 if col is None:
                     raise Exception(f"Unique Constraint '{index_row['index_name']}' has an unknown field")
-                
-                buffer.write(col['col_name'])
+                col_str = col['col_name']
                 if utils.c_to_bool(col.get('is_descending_key'), False):
-                    buffer.write(" DESC")
-                buffer.write(",\n")
-            
-            buffer.seek(buffer.tell() - 2)  # Remove last comma
-            buffer.write("\n)\n")
+                    col_str += " DESC"
+                cols.append(col_str)
+
+            if db_type == DBType.PostgreSQL:
+                # Single-line format for PostgreSQL
+                if not in_line:
+                    buffer.write(f"ALTER TABLE {table_ref} ADD CONSTRAINT {index_row['index_name']} UNIQUE ({', '.join(cols)})")
+            else:
+                # Multi-line format for MySQL
+                if not in_line:
+                    buffer.write(f"ALTER TABLE {table_ref} ADD\n")
+                    buffer.write(f"CONSTRAINT {index_row['index_name']} UNIQUE\n")
+                else:
+                    buffer.write(f"UNIQUE KEY {index_row['index_name']}\n")
+                buffer.write(f"({', '.join(cols)})\n")
             
     else:  # Regular index
         if db_type == DBType.MSSQL:
@@ -438,30 +472,35 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_t
                 buffer.write(")\n")
                 
         else:  # MySQL and PostgreSQL
-            buffer.write("CREATE ")
-            if utils.c_to_bool(index_row.get('is_unique'), False):
-                buffer.write("UNIQUE ")
-            buffer.write(f"INDEX {index_row['index_name']}\n")
-            
-            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}" 
+            table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}"
                         if db_type == DBType.PostgreSQL else index_row['table_name'])
-            buffer.write(f"ON {table_ref}\n")
-            buffer.write("(\n")
-            
+
             if index_cols_rows.empty:
                 raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table {table_ref} has no columns")
-            
+
+            cols = []
             for col in index_cols_rows.to_dict('records'):
                 if col is None:
                     raise Exception(f"Index '{index_row['index_name']}' has an unknown field")
-                
-                buffer.write(col['col_name']) 
+                col_str = col['col_name']
                 if utils.c_to_bool(col.get('is_descending_key'), False):
-                    buffer.write(" DESC")
-                buffer.write(",\n")
-            
-            buffer.seek(buffer.tell() - 2)  # Remove last comma
-            buffer.write("\n)\n")
+                    col_str += " DESC"
+                cols.append(col_str)
+
+            if db_type == DBType.PostgreSQL:
+                # Single-line format to match pg_indexes output: CREATE [UNIQUE] INDEX name ON table USING btree (cols)
+                buffer.write("CREATE ")
+                if utils.c_to_bool(index_row.get('is_unique'), False):
+                    buffer.write("UNIQUE ")
+                buffer.write(f"INDEX {index_row['index_name']} ON {table_ref} USING btree ({', '.join(cols)})")
+            else:
+                # Multi-line format for MySQL
+                buffer.write("CREATE ")
+                if utils.c_to_bool(index_row.get('is_unique'), False):
+                    buffer.write("UNIQUE ")
+                buffer.write(f"INDEX {index_row['index_name']}\n")
+                buffer.write(f"ON {table_ref}\n")
+                buffer.write(f"({', '.join(cols)})\n")
     
     result = buffer.getvalue()
     buffer.close()
