@@ -46,7 +46,20 @@
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/ -v --tb=short)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_columns.py::TestColumnOperations::test_alter_column_type_varchar_length -v --tb=long)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_columns.py::TestColumnOperations::test_alter_column_type_varchar_length -v --tb=short)",
-      "Bash(\"venv/Scripts/python.exe\" -m pytest:*)"
+      "Bash(\"venv/Scripts/python.exe\" -m pytest:*)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_data/test_insert_scripting.py::TestDataScripting::test_null_values -v --tb=long)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_foreign_keys.py::TestForeignKeyOperations::test_composite_foreign_key -v --tb=long)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_foreign_keys.py::TestForeignKeyOperations::test_composite_foreign_key -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/ -v --tb=line)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_foreign_keys.py -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_coded_entities/test_functions.py::TestFunctionOperations::test_create_missing_function -v --tb=long)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_data/test_insert_scripting.py::TestDataScripting::test_null_values -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_data/ -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_tables.py::TestTableOperations::test_table_with_all_column_types -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_tables.py -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/test_table_permissions.py::TestTablePermissions::test_revoke_extra_permission -v --tb=long)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/test_table_permissions.py::TestTablePermissions::test_revoke_extra_permission -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/ -v --tb=short)"
     ],
     "deny": [],
     "ask": []

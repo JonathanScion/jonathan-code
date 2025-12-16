@@ -22,6 +22,36 @@ def numeric_or_null(value: float) -> str:
         return "NULL"
     return str(value)
 
+
+def format_value_for_sql(value: Any) -> str:
+    """Format a value for SQL INSERT statement.
+
+    Handles:
+    - NULL/NaN -> NULL
+    - Floats that are whole numbers (42.0) -> '42' (quoted integer)
+    - Other numbers -> quoted as-is
+    - Strings -> quoted with escaped single quotes
+    - Booleans -> 'true'/'false'
+    """
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "NULL"
+
+    if isinstance(value, bool):
+        return "'true'" if value else "'false'"
+
+    if isinstance(value, float):
+        # Convert whole number floats to integers (42.0 -> 42)
+        if value.is_integer():
+            return f"'{int(value)}'"
+        return f"'{value}'"
+
+    if isinstance(value, int):
+        return f"'{value}'"
+
+    # String or other - escape single quotes
+    str_val = str(value).replace("'", "''")
+    return f"'{str_val}'"
+
 def bool_to_sql_bit_boolean_val(val, full_boolean):    
     if val is None:
         return "NULL"
@@ -97,6 +127,9 @@ def write_drop_temp_table_if_exists(db_type: DBType, indent_level: int, script: 
 
 
 def parse_pg_array(array_str):
+    # If already a list, return it as-is
+    if isinstance(array_str, list):
+        return array_str
     # Remove curly braces and split
     if pd.isna(array_str):
         return []

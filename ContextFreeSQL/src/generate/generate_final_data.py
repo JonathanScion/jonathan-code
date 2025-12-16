@@ -391,13 +391,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                             o_val = row.get(s_col_name)
                             if pd.isna(o_val):  # Equivalent to IsDBNull
                                 s_insert_into.append("NULL")
+                            elif isinstance(o_val, (datetime.datetime, datetime.date)):
+                                s_insert_into.append("''")
+                                s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                                s_insert_into.append("''")
                             else:
-                                s_insert_into.append("''")
-                                if isinstance(o_val, (datetime.datetime, datetime.date)):
-                                    s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
-                                else:
-                                    s_insert_into.append(str(o_val).replace("'", "''"))
-                                s_insert_into.append("''")
+                                # Use helper to handle float-to-int conversion and proper quoting
+                                # Note: we need double quotes here since this is inside a string literal
+                                formatted = utils.format_value_for_sql(o_val)
+                                s_insert_into.append(formatted.replace("'", "''"))
                             if i_count < i_col_count:
                                 s_insert_into.append(",")
                             i_count += 1
@@ -504,13 +506,13 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     o_val = row.get(s_col_name)
                     if pd.isna(o_val):
                         out_buffer.write("NULL")
+                    elif isinstance(o_val, (datetime.datetime, datetime.date)):
+                        out_buffer.write("'")
+                        out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                        out_buffer.write("'")
                     else:
-                        out_buffer.write("'")
-                        if isinstance(o_val, (datetime.datetime, datetime.date)):
-                            out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
-                        else:
-                            out_buffer.write(str(o_val).replace("'", "''"))
-                        out_buffer.write("'")
+                        # Use helper to handle float-to-int conversion and proper quoting
+                        out_buffer.write(utils.format_value_for_sql(o_val))
                     if i_count < i_col_count:
                         out_buffer.write(",")
                     i_count += 1
@@ -930,7 +932,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             # Some types cannot be compared, mark them here
             if not utils.can_type_be_compared(d_row_col['user_type_name']):
-                ar_no_key_cols_no_compare.append(d_row_col['name'])
+                ar_no_key_cols_no_compare.append(d_row_col['col_name'])
 
         # Find uniqueness
         if not got_settings_override or tbl_settings is None:
