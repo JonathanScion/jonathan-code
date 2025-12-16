@@ -2,11 +2,62 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional, List, Tuple
 import pandas as pd
+import re
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from typing import List, Dict, Any
 from io import StringIO
-from src.utils import funcs as utils, code_funcs 
+from src.utils import funcs as utils, code_funcs
+
+
+def _is_serial_default(default_definition: str, col_type: str) -> Optional[str]:
+    """Check if a default is a SERIAL pattern and return the SERIAL type if so.
+
+    PostgreSQL SERIAL is syntactic sugar for:
+    - CREATE SEQUENCE tablename_colname_seq
+    - DEFAULT nextval('tablename_colname_seq'::regclass)
+
+    Returns 'serial', 'bigserial', 'smallserial', or None if not a SERIAL pattern.
+    """
+    if not default_definition:
+        return None
+
+    # Check if it's a nextval() call
+    if not re.match(r"nextval\s*\(", default_definition, re.IGNORECASE):
+        return None
+
+    # Map column types to SERIAL types
+    col_type_lower = col_type.lower()
+    if col_type_lower in ('int4', 'integer', 'int'):
+        return 'serial'
+    elif col_type_lower in ('int8', 'bigint'):
+        return 'bigserial'
+    elif col_type_lower in ('int2', 'smallint'):
+        return 'smallserial'
+
+    return None
+
+
+def _pg_fk_action_to_sql(action_char: str) -> str:
+    """Convert PostgreSQL FK action character to SQL clause.
+
+    PostgreSQL uses single characters:
+    'a' = NO ACTION (default, returns None - don't write)
+    'r' = RESTRICT
+    'c' = CASCADE
+    'n' = SET NULL
+    'd' = SET DEFAULT
+    """
+    if action_char == 'c':
+        return 'CASCADE'
+    elif action_char == 'r':
+        return 'RESTRICT'
+    elif action_char == 'n':
+        return 'SET NULL'
+    elif action_char == 'd':
+        return 'SET DEFAULT'
+    # 'a' (NO ACTION) is the default, no need to write it
+    return None
 
 
 def get_create_table_from_sys_tables(
@@ -81,8 +132,26 @@ def get_create_table_from_sys_tables(
             ).strip()
 
             # For PostgreSQL, include DEFAULT inline with the column
+            # But check for SERIAL pattern first - if it's a nextval() default,
+            # use SERIAL/BIGSERIAL type instead (so the sequence is auto-created)
             if db_type == DBType.PostgreSQL and col_row['col_name'] in col_defaults:
-                col_sql += f" DEFAULT {col_defaults[col_row['col_name']]}"
+                default_def = col_defaults[col_row['col_name']]
+                col_type = col_row.get('user_type_name', '')
+                serial_type = _is_serial_default(default_def, col_type)
+
+                if serial_type:
+                    # Replace the type with SERIAL/BIGSERIAL/SMALLSERIAL
+                    # col_sql format is like "colname int4 NOT NULL" or "colname int4 NULL"
+                    # We need to replace the type (int4/int8/int2) with serial/bigserial/smallserial
+                    col_sql = re.sub(
+                        r'^(\S+)\s+(int4|int8|int2|integer|bigint|smallint)\b',
+                        rf'\1 {serial_type}',
+                        col_sql,
+                        flags=re.IGNORECASE
+                    )
+                    # Don't add DEFAULT - SERIAL handles it automatically
+                else:
+                    col_sql += f" DEFAULT {default_def}"
 
             if col_num < len(col_rows):
                 col_sql += ","
@@ -603,7 +672,17 @@ def get_fk_sql(fk_row: Dict[str, Any], fk_cols_rows: pd.DataFrame, db_type: DBTy
             
         buffer.seek(buffer.tell() - 2)  # Remove last comma
         buffer.write("\n)")
-    
+
+        # Add ON DELETE/UPDATE actions for PostgreSQL
+        if 'confdeltype' in fk_row and fk_row['confdeltype']:
+            delete_action = _pg_fk_action_to_sql(fk_row['confdeltype'])
+            if delete_action:
+                buffer.write(f" ON DELETE {delete_action}")
+        if 'confupdtype' in fk_row and fk_row['confupdtype']:
+            update_action = _pg_fk_action_to_sql(fk_row['confupdtype'])
+            if update_action:
+                buffer.write(f" ON UPDATE {update_action}")
+
     buffer.write("\n")
     result = buffer.getvalue()
     buffer.close()

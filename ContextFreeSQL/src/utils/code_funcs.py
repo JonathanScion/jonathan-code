@@ -107,7 +107,10 @@ def add_size_precision_scale(row_col):
                     else:
                         return f"({row_col[length_field]:.0f})"
         elif type_name.lower() in ["decimal", "numeric"]:
-            return f"({row_col[precision_field]},{row_col[scale_field]})"
+            # Convert to int to avoid float output like numeric(10.0,2.0)
+            precision = int(row_col[precision_field])
+            scale = int(row_col[scale_field])
+            return f"({precision},{scale})"
         else:
             return ""  # Don't add anything for other types
 
