@@ -78,7 +78,7 @@ def create_db_state_columns(
     if scripting_data:
         script_db_state_tables.write(f"{align}\t,SQL_ALTER_PostData_NotNULL {db_syntax.nvarchar_type} {db_syntax.max_length_str} null --if we are adding NULL column and got data as well - then add, set data, then change to NOT NULL\n")
     
-    script_db_state_tables.write(f"{align}{align});\n\n")
+    script_db_state_tables.write(f"{align});\n\n")
 
     tables_to_script_set = set()
     filtered_ents = tbl_ents_to_script[

@@ -82,7 +82,18 @@ def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name
        script.write(f"{align}\tEXECUTE {exec_str_name};\n")
        script.write(f"{align}END IF;\n")
        script.write(f"{align}schemaChanged := True;\n")  # !no! what if its only data?? fix also for MS (but maybe its ok... see where this one is used
-       
+
+
+def write_drop_temp_table_if_exists(db_type: DBType, indent_level: int, script: StringIO, table_name: str) -> None:
+    """Write the drop-if-exists pattern for temp tables (PostgreSQL)."""
+    align = "\t" * indent_level
+    if db_type == DBType.PostgreSQL:
+        script.write(f"{align}PERFORM n.nspname, c.relname\n")
+        script.write(f"{align}FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n")
+        script.write(f"{align}WHERE n.nspname LIKE 'pg_temp_%' AND c.relname='{table_name.lower()}' AND pg_catalog.pg_table_is_visible(c.oid);\n")
+        script.write(f"{align}IF FOUND THEN\n")
+        script.write(f"{align}\tDROP TABLE {table_name};\n")
+        script.write(f"{align}END IF;\n")
 
 
 def parse_pg_array(array_str):
