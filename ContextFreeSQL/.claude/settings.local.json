@@ -36,7 +36,13 @@
       "Bash(python run_generated_sql.py:*)",
       "Bash(del \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\run_test_sql.py\")",
       "Bash(del \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\run_generated_sql.py\")",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(venvScriptspip install pytest)",
+      "Bash(\"venv/Scripts/pip.exe\" install pytest)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/test_main.py -v)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_tables.py::TestTableOperations::test_add_missing_table -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/ -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/ -v --tb=line)"
     ],
     "deny": [],
     "ask": []

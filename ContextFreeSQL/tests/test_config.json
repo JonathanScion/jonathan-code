@@ -1,0 +1,13 @@
+{
+  "database": {
+    "host": "localhost",
+    "db_name": "Jonathan1",
+    "user": "postgres",
+    "password": "yonision",
+    "port": "5432"
+  },
+  "test_settings": {
+    "cleanup_on_success": true,
+    "verbose_sql": false
+  }
+}
