@@ -273,8 +273,11 @@ def get_col_sql(
             sql.append(" NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL ")
         elif db_type == DBType.PostgreSQL:
             if script_state == DBEntScriptState.Alter:
-                null_value = " NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL "
-                sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} SET {null_value}")
+                # PostgreSQL uses SET NOT NULL or DROP NOT NULL (not SET NULL)
+                if sys_cols_row.get(is_null_field, False):
+                    sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} DROP NOT NULL")
+                else:
+                    sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} SET NOT NULL")
             else:
                 sql.append(" NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL ")
 

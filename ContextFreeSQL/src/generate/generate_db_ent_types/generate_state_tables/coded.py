@@ -140,17 +140,17 @@ END;
         
         # Skip if no creation code found
         if not create_ent:
-            script_builder.write(f"PRINT 'Entity ''{ent_full_name}'' cannot be scripted. No code was found'''\n")
+            script_builder.write(f"{align}PRINT 'Entity ''{ent_full_name}'' cannot be scripted. No code was found'''\n")
             continue
-        
+
         # Insert statement
         if db_type == DBType.PostgreSQL:
-            script_builder.write(f"INSERT INTO {db_syntax.temp_table_prefix}ScriptCode (ent_schema, ent_name, ent_type, SQL_CREATE, SQL_DROP, param_type_list)\n")
+            script_builder.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCode (ent_schema, ent_name, ent_type, SQL_CREATE, SQL_DROP, param_type_list)\n")
         else:
-            script_builder.write(f"INSERT INTO {db_syntax.temp_table_prefix}ScriptCode (ent_schema, ent_name, ent_type, SQL_CREATE, SQL_DROP)\n")
-        
+            script_builder.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCode (ent_schema, ent_name, ent_type, SQL_CREATE, SQL_DROP)\n")
+
         # Entity schema and name
-        script_builder.write(f"VALUES ({quote_str_or_null(ent_row['entschema'])}, ")
+        script_builder.write(f"{align}\tVALUES ({quote_str_or_null(ent_row['entschema'])}, ")
         script_builder.write(f"{quote_str_or_null(ent_row['entname'])}, ")
         
         # Entity type

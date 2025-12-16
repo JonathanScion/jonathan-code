@@ -42,7 +42,11 @@
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/test_main.py -v)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_tables.py::TestTableOperations::test_add_missing_table -v --tb=short)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/ -v --tb=short)",
-      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/ -v --tb=line)"
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/ -v --tb=line)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/ -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_columns.py::TestColumnOperations::test_alter_column_type_varchar_length -v --tb=long)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_columns.py::TestColumnOperations::test_alter_column_type_varchar_length -v --tb=short)",
+      "Bash(\"venv/Scripts/python.exe\" -m pytest:*)"
     ],
     "deny": [],
     "ask": []
