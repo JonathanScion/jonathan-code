@@ -59,7 +59,11 @@
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_schema/test_tables.py -v --tb=short)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/test_table_permissions.py::TestTablePermissions::test_revoke_extra_permission -v --tb=long)",
       "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/test_table_permissions.py::TestTablePermissions::test_revoke_extra_permission -v --tb=short)",
-      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/ -v --tb=short)"
+      "Bash(\"venv/Scripts/python.exe\" -m pytest tests/integration/test_security/ -v --tb=short)",
+      "Bash(\"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\venv\\Scripts\\pip.exe\" install pyinstaller)",
+      "Bash(\"venv\\Scripts\\pyinstaller.exe\" contextfreesql.spec --clean)",
+      "Bash(\"venv\\Scripts\\python.exe\" -m src.main --help)",
+      "Bash(\"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\venv\\Scripts\\python.exe\" -m pytest \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\tests\" -v --tb=line)"
     ],
     "deny": [],
     "ask": []

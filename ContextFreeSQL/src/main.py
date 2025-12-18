@@ -1,42 +1,97 @@
 import sys
+import argparse
+import getpass
 from pathlib import Path
-import site; print(site.getsitepackages())  # Show where Python looks for packages
 from dataclasses import dataclass
 import os
 import shutil
 
 from src.utils.load_config import load_config
+from src.utils.resources import get_template_path, get_default_config_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description='ContextFreeSQL - Generate database migration scripts',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  contextfreesql config.json
+  contextfreesql config.json --password=secret123
+  contextfreesql prod_config.json --password
+        '''
+    )
+    parser.add_argument(
+        'config',
+        nargs='?',
+        default=None,
+        help='Path to config.json file (default: src/config.json)'
+    )
+    parser.add_argument(
+        '--password', '-p',
+        nargs='?',
+        const='PROMPT',  # If --password is given without value, set to PROMPT
+        default=None,
+        help='Database password. If flag is given without value, prompts interactively.'
+    )
+    return parser.parse_args()
+
+
 def main():
+    # Parse command line arguments
+    args = parse_args()
+
     # Load configuration
-    config_path = sys.argv[1] if len(sys.argv) > 1 else None
-    config_vals: ConfigVals = load_config(config_path)
+    config_vals: ConfigVals = load_config(args.config)
+
+    # Handle password: command line > config file > interactive prompt
+    if args.password == 'PROMPT':
+        # --password flag given without value, prompt for it
+        config_vals.db_conn.password = getpass.getpass('Password: ')
+    elif args.password is not None:
+        # --password=value given, use it
+        config_vals.db_conn.password = args.password
+    elif not config_vals.db_conn.password:
+        # No password in config file either, prompt for it
+        config_vals.db_conn.password = getpass.getpass('Password: ')
 
     # Copy HTML template to output directory so pg_read_file can access it
     output_dir = os.path.dirname(config_vals.input_output.output_sql)
     os.makedirs(output_dir, exist_ok=True)
 
-    if config_vals.input_output.html_template_path:
-        template_filename = os.path.basename(config_vals.input_output.html_template_path)
+    # Resolve template paths - use bundled templates if path doesn't exist
+    html_template_source = config_vals.input_output.html_template_path
+    if not os.path.exists(html_template_source):
+        # Try bundled template
+        html_template_source = get_template_path('db_compare_template.html')
+
+    if os.path.exists(html_template_source):
+        template_filename = os.path.basename(html_template_source)
         new_template_path = os.path.join(output_dir, template_filename).replace("\\", "/")
 
         # Copy the template file
-        shutil.copy2(config_vals.input_output.html_template_path, new_template_path)
+        shutil.copy2(html_template_source, new_template_path)
         print(f"Copied template to: {new_template_path}")
 
         # Update the path so SQL will reference the copied file
         config_vals.input_output.html_template_path = new_template_path
 
-    # Copy diff template to output directory so pg_read_file can access it
-    if config_vals.input_output.diff_template_path:
-        diff_template_filename = os.path.basename(config_vals.input_output.diff_template_path)
+    # Resolve diff template path
+    diff_template_source = config_vals.input_output.diff_template_path
+    if not os.path.exists(diff_template_source):
+        # Try bundled template
+        diff_template_source = get_template_path('code_diff_template.html')
+
+    if os.path.exists(diff_template_source):
+        diff_template_filename = os.path.basename(diff_template_source)
         new_diff_template_path = os.path.join(output_dir, diff_template_filename).replace("\\", "/")
 
         # Copy the diff template file
-        shutil.copy2(config_vals.input_output.diff_template_path, new_diff_template_path)
+        shutil.copy2(diff_template_source, new_diff_template_path)
         print(f"Copied diff template to: {new_diff_template_path}")
 
         # Update the path so SQL will reference the copied file
@@ -44,8 +99,7 @@ def main():
 
     # Copy CSV compare template if we have data tables to script
     if len(config_vals.tables_data.tables) >= 1:
-        src_dir = os.path.dirname(os.path.abspath(__file__))
-        csv_compare_template = os.path.join(src_dir, "templates", "csv_compare_standalone.html")
+        csv_compare_template = get_template_path('csv_compare_standalone.html')
         if os.path.exists(csv_compare_template):
             new_csv_template_path = os.path.join(output_dir, "csv_compare_standalone.html").replace("\\", "/")
             shutil.copy2(csv_compare_template, new_csv_template_path)
@@ -87,10 +141,10 @@ def main():
 
     with open(config_vals.input_output.output_sql, 'w') as f:
        f.write(script)
-       
-print(sys.executable)  # Shows which Python is running
-#print(sys.version)
-main()
+
+    print(f"Script written to: {config_vals.input_output.output_sql}")
 
 
+if __name__ == "__main__":
+    main()
 

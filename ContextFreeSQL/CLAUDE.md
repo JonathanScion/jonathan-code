@@ -32,7 +32,20 @@ python -m src.main
 
 # Run with custom config
 python -m src.main path/to/config.json
+
+# With password on command line
+python -m src.main config.json --password=secret123
+
+# With password prompt (if not in config or command line)
+python -m src.main config.json --password
+Password: ********
 ```
+
+**Password Handling:**
+- If password is in config.json, it's used automatically
+- `--password=VALUE` overrides config file password
+- `--password` (no value) forces interactive prompt
+- If password is empty everywhere, prompts interactively
 
 **Output Location:** Generated SQL scripts are written to the path specified in `config.json` under `input_output.output_sql`
 
@@ -55,7 +68,7 @@ Config Loading → Schema Loading → Entity Filtering → Data Loading → Scri
 
 ### Key Architectural Patterns
 
-1. **Configuration-Driven:** All behavior controlled via `config.json` or environment variables
+1. **Configuration-Driven:** All behavior controlled via `config.json` with command-line password override
 2. **Pandas-Based Data Model:** All database metadata stored in pandas DataFrames for easy manipulation
 3. **Multi-Database Abstraction:** `DBType` enum and `DBSyntax` dataclass provide syntax abstraction for different databases
 4. **StringIO Buffering:** Script generation uses StringIO buffers to build SQL incrementally
@@ -63,7 +76,7 @@ Config Loading → Schema Loading → Entity Filtering → Data Loading → Scri
 
 ### Main Execution Flow (src/main.py)
 
-1. **Load Config:** Reads `config.json` (with optional environment variable overrides)
+1. **Load Config:** Reads `config.json`, handles password from command line or interactive prompt
 2. **Load Complete Schema:** Calls `load_all_schema()` to load all schemas, tables, columns, indexes, FKs, defaults
 3. **Filter Entities:** If `db_ents_to_load.tables` is specified, loads only those entities; otherwise loads all
 4. **Mark Data Tables:** Sets `scriptdata=True` flag for tables listed in `tables_data.tables`
@@ -114,8 +127,7 @@ Generation modules (called in order):
 16. **HTML Report:** `generate_html_report()` - Comparison visualization
 
 **Utilities (`src/utils/`)**
-- `load_config.py`: Configuration loading with environment variable override support
-  - Environment variables use format: `SECTION__KEY` (e.g., `DATABASE__HOST` overrides `database.host`)
+- `load_config.py`: Configuration loading from JSON file
 - `funcs.py`: SQL formatting utilities and code generation helpers:
   - `quote_str_or_null()`: Escape string values for SQL
   - `bool_to_sql_bit_boolean_val()`: Convert booleans to SQL format
@@ -177,14 +189,6 @@ Generation modules (called in order):
 }
 ```
 
-### Environment Variable Overrides
-
-The configuration system supports environment variable overrides using double-underscore notation:
-- `DATABASE__HOST` overrides `database.host`
-- `DATABASE__PASSWORD` overrides `database.password`
-
-This is handled by `src/utils/load_config.py` but is optional - all configuration can be managed through config.json alone.
-
 ### Critical Configuration Behavior
 
 - **Empty `db_ents_to_load.tables`**: Loads ALL entities from database (tables, views, functions, procedures, triggers)
@@ -197,7 +201,7 @@ This is handled by `src/utils/load_config.py` but is optional - all configuratio
 **Infrastructure:** `src/infra/database.py`
 - Uses `psycopg2-binary` for PostgreSQL connections
 - Connection created via `Database.connect_to_database(DBConnSettings)`
-- Credentials from config.json (or environment variable overrides)
+- Credentials from config.json (password can be overridden via command line or interactive prompt)
 
 **Schema Queries:** Reads from `information_schema` views:
 - `information_schema.schemata` - Schemas
