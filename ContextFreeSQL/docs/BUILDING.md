@@ -61,19 +61,30 @@ The executable is created at: `dist/contextfreesql.exe`
 
 ## Building for All Platforms
 
-### Option 1: GitHub Actions (Recommended)
+### Option 1: GitHub Actions (Configured)
 
-Set up automated builds for Windows, macOS, and Linux using GitHub Actions. GitHub provides free runners for all three platforms.
+The repository includes `.github/workflows/build-release.yml` which automatically builds for all platforms.
 
-A workflow would:
-1. Trigger on release tags (e.g., `v1.0.0`)
-2. Build on all three OS runners in parallel
-3. Upload artifacts to GitHub Releases
+**To create a release:**
 
-Produces:
+```bash
+# Tag the release
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+**What happens:**
+1. GitHub Actions triggers on the tag
+2. Builds run in parallel on Windows, macOS, and Linux runners
+3. Executables are uploaded to GitHub Releases automatically
+
+**Produces:**
 - `contextfreesql-windows.exe`
 - `contextfreesql-macos`
 - `contextfreesql-linux`
+- `config.sample.json`
+
+All downloadable from: `https://github.com/YOUR_USERNAME/ContextFreeSQL/releases`
 
 ### Option 2: Manual Builds
 
