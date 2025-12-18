@@ -84,7 +84,23 @@ git push origin v1.0.0
 - `contextfreesql-linux`
 - `config.sample.json`
 
-All downloadable from: `https://github.com/YOUR_USERNAME/ContextFreeSQL/releases`
+## Download Links
+
+**Release page:**
+https://github.com/JonathanScion/jonathan-code/releases
+
+**Direct download links (replace `v0.1.0` with actual version):**
+
+| Platform | Download URL |
+|----------|--------------|
+| Windows | `https://github.com/JonathanScion/jonathan-code/releases/download/v0.1.0/contextfreesql-windows.exe` |
+| macOS | `https://github.com/JonathanScion/jonathan-code/releases/download/v0.1.0/contextfreesql-macos` |
+| Linux | `https://github.com/JonathanScion/jonathan-code/releases/download/v0.1.0/contextfreesql-linux` |
+
+For new releases, the pattern is:
+```
+https://github.com/JonathanScion/jonathan-code/releases/download/<VERSION>/<FILENAME>
+```
 
 ### Option 2: Manual Builds
 
