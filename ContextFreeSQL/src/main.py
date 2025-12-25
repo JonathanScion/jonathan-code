@@ -12,18 +12,39 @@ from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_e
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 
+__version__ = '0.1.0'
+
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='ContextFreeSQL - Generate database migration scripts',
+        prog='contextfreesql',
+        description='ContextFreeSQL - Generate database migration scripts from PostgreSQL',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
   contextfreesql config.json
   contextfreesql config.json --password=secret123
   contextfreesql prod_config.json --password
+
+Description:
+  Extracts complete schema and data from a PostgreSQL database and generates
+  standalone SQL scripts that can recreate the database from scratch. The
+  generated scripts are "context-free" - they contain all necessary DDL
+  (schema) and DML (data) statements with proper dependency ordering.
+
+Config file:
+  Create a config.json file with your database connection settings and
+  scripting options. See config.sample.json for an example.
+
+More info:
+  https://github.com/JonathanScion/jonathan-code
         '''
+    )
+    parser.add_argument(
+        '--version', '-v',
+        action='version',
+        version=f'%(prog)s {__version__}'
     )
     parser.add_argument(
         'config',
