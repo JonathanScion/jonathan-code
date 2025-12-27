@@ -84,7 +84,11 @@
       "Bash(git -C \"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\" rev-parse --show-toplevel)",
       "Bash(git push:*)",
       "Bash(git tag:*)",
-      "Bash(\"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\venv\\Scripts\\python.exe\" -m src.main --help)"
+      "Bash(\"C:\\Users\\yonis\\source\\repos\\veteran-developer\\ContextFreeSQL\\venv\\Scripts\\python.exe\" -m src.main --help)",
+      "Bash(git -C \"C:\\\\Users\\\\yonis\\\\source\\\\repos\\\\veteran-developer\\\\ContextFreeSQL\" remote -v)",
+      "Bash(gh run list:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)"
     ],
     "deny": [],
     "ask": []
