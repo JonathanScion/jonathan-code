@@ -137,8 +137,6 @@ def main():
         # Default: load all entities
         tbl_ents = load_all_db_ents(config_vals.db_conn)
 
-    
-    
     # Mark tables for scripting
     if len(config_vals.tables_data.tables) >= 1:  # Changed from >1 to >=1 to handle single table
         # Get the specific tables from config

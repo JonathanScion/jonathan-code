@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jonathan's Code | Software Engineer</title>
+    <link rel="icon" type="image/jpeg" href="logo.jpg">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0f;
+            color: #ffffff;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Animated gradient orbs */
+        .bg-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.6;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        .orb-1 {
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, #00ced1 0%, transparent 70%);
+            top: -200px;
+            left: -100px;
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, #9b30ff 0%, transparent 70%);
+            bottom: -150px;
+            right: -100px;
+            animation-delay: -5s;
+            animation-duration: 25s;
+        }
+
+        .orb-3 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, #00ced1 0%, transparent 70%);
+            bottom: 20%;
+            left: 10%;
+            animation-delay: -10s;
+            animation-duration: 30s;
+        }
+
+        .orb-4 {
+            width: 350px;
+            height: 350px;
+            background: radial-gradient(circle, #9b30ff 0%, transparent 70%);
+            top: 30%;
+            right: 15%;
+            animation-delay: -7s;
+            animation-duration: 22s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -50px) scale(1.1); }
+            50% { transform: translate(-30px, 30px) scale(0.95); }
+            75% { transform: translate(-50px, -30px) scale(1.05); }
+        }
+
+        /* Grid overlay */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(0, 206, 209, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 206, 209, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            mask-image: radial-gradient(ellipse at center, black 0%, transparent 75%);
+            -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 75%);
+        }
+
+        /* Floating particles */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #00ced1;
+            border-radius: 50%;
+            opacity: 0;
+            animation: rise 10s ease-in infinite;
+        }
+
+        .particle:nth-child(odd) {
+            background: #9b30ff;
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; animation-duration: 12s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 2s; animation-duration: 10s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 4s; animation-duration: 14s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 1s; animation-duration: 11s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 3s; animation-duration: 13s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 5s; animation-duration: 9s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 2.5s; animation-duration: 12s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 0.5s; animation-duration: 15s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 3.5s; animation-duration: 10s; }
+        .particle:nth-child(10) { left: 15%; animation-delay: 6s; animation-duration: 11s; }
+        .particle:nth-child(11) { left: 25%; animation-delay: 7s; animation-duration: 13s; }
+        .particle:nth-child(12) { left: 75%; animation-delay: 8s; animation-duration: 12s; }
+        .particle:nth-child(13) { left: 85%; animation-delay: 4.5s; animation-duration: 14s; }
+        .particle:nth-child(14) { left: 45%; animation-delay: 6.5s; animation-duration: 10s; }
+        .particle:nth-child(15) { left: 55%; animation-delay: 1.5s; animation-duration: 11s; }
+
+        @keyframes rise {
+            0% {
+                bottom: -10px;
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            10% {
+                opacity: 0.8;
+            }
+            90% {
+                opacity: 0.6;
+            }
+            100% {
+                bottom: 100vh;
+                opacity: 0;
+                transform: scale(1.2);
+            }
+        }
+
+        /* Scan line effect */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            background: linear-gradient(
+                to bottom,
+                transparent 50%,
+                rgba(0, 0, 0, 0.02) 51%
+            );
+            background-size: 100% 4px;
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 800px;
+            position: relative;
+            z-index: 10;
+        }
+
+        .logo-container {
+            margin-bottom: 2rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 320px;
+        }
+
+        .logo-video {
+            width: 400px;
+            max-width: 90vw;
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 206, 209, 0.4),
+                        0 0 60px rgba(155, 48, 255, 0.2);
+            transition: opacity 0.8s ease, transform 0.3s ease, box-shadow 0.3s ease;
+            background: transparent;
+        }
+
+        .logo-video.fade-out {
+            opacity: 0;
+        }
+
+        .logo-static {
+            position: absolute;
+            width: 320px;
+            max-width: 80vw;
+            height: auto;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 0.8s ease, transform 0.8s ease;
+        }
+
+        .logo-static.fade-in {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.8rem 1.5rem;
+            text-decoration: none;
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.15), rgba(155, 48, 255, 0.15));
+            border: 1px solid rgba(0, 206, 209, 0.4);
+            border-radius: 50px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .link-btn:hover {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.3), rgba(155, 48, 255, 0.3));
+            border-color: #00ced1;
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 206, 209, 0.3);
+        }
+
+        .link-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .downloads-btn {
+            background: linear-gradient(135deg, rgba(155, 48, 255, 0.2), rgba(0, 206, 209, 0.2));
+            border-color: rgba(155, 48, 255, 0.5);
+        }
+
+        .downloads-btn:hover {
+            border-color: #9b30ff;
+            box-shadow: 0 10px 30px rgba(155, 48, 255, 0.3);
+        }
+
+        footer {
+            position: fixed;
+            bottom: 1rem;
+            color: #555;
+            font-size: 0.8rem;
+            z-index: 10;
+        }
+
+        @media (max-width: 600px) {
+            .logo-video {
+                width: 300px;
+            }
+
+            .logo-static {
+                width: 240px;
+            }
+
+            .link-btn {
+                padding: 0.6rem 1.2rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated background elements -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+    </div>
+    <div class="grid-overlay"></div>
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+    <div class="scanline"></div>
+
+    <div class="container">
+        <div class="logo-container">
+            <video class="logo-video" id="logo-video" autoplay muted playsinline>
+                <source src="logo-animation.mp4" type="video/mp4">
+            </video>
+            <img src="logo.jpg" alt="Jonathan's Code Logo" class="logo-static" id="logo-static">
+        </div>
+
+        <div class="links">
+            <a href="https://www.linkedin.com/in/jonathan-scion/" target="_blank" class="link-btn" title="LinkedIn">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                </svg>
+                LinkedIn
+            </a>
+
+            <a href="https://www.youtube.com/@JonathansCode" target="_blank" class="link-btn" title="YouTube">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                YouTube
+            </a>
+
+            <a href="https://www.udemy.com/user/jonathan-scion/" target="_blank" class="link-btn" title="Udemy">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 0L5.81 3.573v3.574l6.189-3.574 6.191 3.574V3.573zM5.81 10.148v8.144c0 1.85.589 3.243 1.741 4.234S10.177 24 11.973 24s3.269-.482 4.448-1.474c1.179-.991 1.768-2.439 1.768-4.314v-8.064h-3.242v7.85c0 2.036-1.509 3.055-2.974 3.055-1.465 0-2.974-1.019-2.974-3.055v-7.85z"/>
+                </svg>
+                Udemy
+            </a>
+
+            <a href="mailto:jonathan.scion@gmail.com" class="link-btn" title="Email">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
+                </svg>
+                Email
+            </a>
+
+            <a href="https://github.com/JonathanScion/jonathan-code" target="_blank" class="link-btn" title="GitHub">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                GitHub
+            </a>
+
+            <a href="downloads.html" class="link-btn downloads-btn" title="My Downloads">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                </svg>
+                My Downloads
+            </a>
+        </div>
+    </div>
+
+    <footer>
+        &copy; 2026 Jonathan's Code
+    </footer>
+
+    <script>
+        const video = document.getElementById('logo-video');
+        const logo = document.getElementById('logo-static');
+
+        video.addEventListener('ended', () => {
+            video.classList.add('fade-out');
+            setTimeout(() => {
+                logo.classList.add('fade-in');
+            }, 400);
+        });
+    </script>
+</body>
+</html>

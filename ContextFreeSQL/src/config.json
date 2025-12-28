@@ -34,7 +34,7 @@
       "tables": []
     },
     "tables_data": {
-      "tables": ["public.students", "public.some_crap_generated"],
+      "tables": ["public.students"],
       "from_file": true
     },
     "input_output": {
