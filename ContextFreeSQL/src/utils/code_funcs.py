@@ -1,3 +1,4 @@
+import pandas as pd
 from src.defs.script_defs import DBType
 from io import StringIO
 from src.utils import funcs as utils
@@ -88,29 +89,39 @@ def add_size_precision_scale(row_col):
         scale_field = "scale"
 
         type_name = str(row_col[type_name_field])
+        max_length = row_col[length_field]
 
-        if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext", "character varying", "bpchar", "character"]: #2025-04-01 added pg string types
-            if row_col[length_field] == 0:
+        if type_name.lower() in ["varchar", "char", "nvarchar", "nchar", "binary", "varbinary", "text", "ntext", "character varying", "bpchar", "character", "bit", "varbit", "bit varying"]:
+            # Handle NULL/NaN max_length - for bpchar/char without length, PostgreSQL defaults to char(1)
+            if pd.isna(max_length):
+                if type_name.lower() in ["bpchar", "char", "character", "bit"]:
+                    return "(1)"  # PostgreSQL char/bit without length defaults to (1)
+                else:
+                    return ""  # For varchar/varbit without length, don't specify size
+            elif max_length == 0:
                 return "(max)"  # In SQL 2005+ this means max size
             else:
                 if type_name.lower() in ["nchar", "nvarchar"]:
                     # Unicode: trim to half-size
-                    if row_col[length_field] == -1:
+                    if max_length == -1:
                         return "(max)"
                     else:
-                        return f"({int(row_col[length_field] / 2)})"
+                        return f"({int(max_length / 2)})"
                 elif type_name.lower() in ["text", "ntext"]:
                     return ""  # Never specify size for text/ntext
                 else:
-                    if row_col[length_field] == -1:
+                    if max_length == -1:
                         return "(max)"
                     else:
-                        return f"({row_col[length_field]:.0f})"
+                        return f"({int(max_length)})"
         elif type_name.lower() in ["decimal", "numeric"]:
             # Convert to int to avoid float output like numeric(10.0,2.0)
-            precision = int(row_col[precision_field])
-            scale = int(row_col[scale_field])
-            return f"({precision},{scale})"
+            precision = row_col[precision_field]
+            scale = row_col[scale_field]
+            # Handle NULL/NaN for precision/scale
+            if pd.isna(precision) or pd.isna(scale):
+                return ""  # Don't specify if precision/scale are NULL
+            return f"({int(precision)},{int(scale)})"
         else:
             return ""  # Don't add anything for other types
 

@@ -223,3 +223,90 @@ class TestTableOperations:
         # Verify NOT NULL constraints
         schema_assertions.assert_column_nullable('public', table_name, 'required_field', False)
         schema_assertions.assert_column_nullable('public', table_name, 'optional_field', True)
+
+    def test_table_without_defaults(self, test_connection, script_generator, unique_prefix, schema_assertions):
+        """
+        Test that script correctly handles tables where NO columns have DEFAULT values.
+
+        This tests the fix for the empty defaults DataFrame issue where accessing
+        schema_tables.defaults['table_schema'] on an empty DataFrame caused a KeyError.
+
+        Regression test for: Empty defaults DataFrame causing 'table_schema' KeyError
+        """
+        table_name = f"{unique_prefix}no_defaults"
+        full_table_name = f"public.{table_name}"
+
+        # Create table with NO default values on any column
+        db_helpers.execute_sql(
+            test_connection,
+            f'''
+            CREATE TABLE public."{table_name}" (
+                id INT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP
+            )
+            '''
+        )
+
+        # Generate script - this should NOT raise KeyError: 'table_schema'
+        script = script_generator.generate([full_table_name])
+
+        # Verify the script contains CREATE TABLE (not an error message)
+        assert f'CREATE TABLE public.{table_name}' in script or f"CREATE TABLE public.\"{table_name}\"" in script
+        assert 'cannot be scripted' not in script
+
+        # Drop the table
+        db_helpers.execute_sql(test_connection, f'DROP TABLE public."{table_name}"')
+
+        # Run script
+        execute_generated_script(test_connection, script)
+
+        # Verify the table is recreated correctly
+        schema_assertions.assert_table_exists('public', table_name)
+        schema_assertions.assert_column_exists('public', table_name, 'id')
+        schema_assertions.assert_column_exists('public', table_name, 'name')
+        schema_assertions.assert_column_exists('public', table_name, 'description')
+        schema_assertions.assert_column_exists('public', table_name, 'created_at')
+
+    def test_table_with_defaults(self, test_connection, script_generator, unique_prefix, schema_assertions):
+        """
+        Test that script correctly handles tables WITH column DEFAULT values.
+
+        Companion test to test_table_without_defaults to ensure both cases work.
+        """
+        table_name = f"{unique_prefix}with_defaults"
+        full_table_name = f"public.{table_name}"
+
+        # Create table WITH default values
+        db_helpers.execute_sql(
+            test_connection,
+            f'''
+            CREATE TABLE public."{table_name}" (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) DEFAULT 'Unknown',
+                status VARCHAR(20) DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                counter INT DEFAULT 0
+            )
+            '''
+        )
+
+        # Generate script
+        script = script_generator.generate([full_table_name])
+
+        # Verify the script contains CREATE TABLE
+        assert 'cannot be scripted' not in script
+
+        # Drop the table
+        db_helpers.execute_sql(test_connection, f'DROP TABLE public."{table_name}"')
+
+        # Run script
+        execute_generated_script(test_connection, script)
+
+        # Verify the table is recreated
+        schema_assertions.assert_table_exists('public', table_name)
+        schema_assertions.assert_column_exists('public', table_name, 'id')
+        schema_assertions.assert_column_exists('public', table_name, 'name')
+        schema_assertions.assert_column_exists('public', table_name, 'status')
+        schema_assertions.assert_column_exists('public', table_name, 'created_at')
