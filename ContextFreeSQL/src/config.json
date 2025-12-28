@@ -34,8 +34,8 @@
       "tables": []
     },
     "tables_data": {
-      "tables": ["public.students"],
-      "from_file": true
+      "tables": [],
+      "from_file": false
     },
     "input_output": {
       "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare_template.html",
