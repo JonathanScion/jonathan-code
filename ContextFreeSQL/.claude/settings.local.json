@@ -88,7 +88,10 @@
       "Bash(git -C \"C:\\\\Users\\\\yonis\\\\source\\\\repos\\\\veteran-developer\\\\ContextFreeSQL\" remote -v)",
       "Bash(gh run list:*)",
       "Bash(gh release list:*)",
-      "Bash(gh release view:*)"
+      "Bash(gh release view:*)",
+      "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\python.exe\" -m pytest:*)",
+      "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\pip.exe\" install pytest)",
+      "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\python.exe\" -m pytest \"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\tests\\\\integration\\\\test_schema\\\\test_tables.py::TestTableOperations::test_table_with_defaults\" -v --tb=short)"
     ],
     "deny": [],
     "ask": []

@@ -161,7 +161,7 @@ def get_create_table_from_sys_tables(
 
         
         
-        if script_table_ops.indexes and schema_tables.indexes is not None:
+        if script_table_ops.indexes and schema_tables.indexes is not None and not schema_tables.indexes.empty:
             idx_rows = schema_tables.indexes[
                 schema_tables.indexes['object_id'] == table_row['object_id']
             ]
@@ -203,7 +203,7 @@ def get_create_table_from_sys_tables(
                 create_table_lines.append(index_sql + ";")
 
         # Add foreign keys if requested
-        if script_table_ops.foreign_keys and schema_tables.fks is not None:
+        if script_table_ops.foreign_keys and schema_tables.fks is not None and not schema_tables.fks.empty:
             fk_rows = schema_tables.fks[
                 (schema_tables.fks['fkey_table_schema'] == table_schema) &
                 (schema_tables.fks['fkey_table_name'] == table_name)
