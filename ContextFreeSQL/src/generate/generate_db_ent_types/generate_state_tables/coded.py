@@ -6,7 +6,7 @@ from io import StringIO
 
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.utils.funcs import quote_str_or_null 
+from src.utils.funcs import quote_str_or_null, add_print
 
 def create_db_state_temp_tables_for_coded(
     db_type: DBType,
@@ -140,7 +140,7 @@ END;
         
         # Skip if no creation code found
         if not create_ent:
-            script_builder.write(f"{align}PRINT 'Entity ''{ent_full_name}'' cannot be scripted. No code was found'''\n")
+            add_print(db_type, 1, script_builder, f"'Entity ''{ent_full_name}'' cannot be scripted. No code was found'")
             continue
 
         # Insert statement

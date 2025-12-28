@@ -74,10 +74,10 @@ def get_create_table_from_sys_tables(
     try:
         out_script = None
         out_err = None
-        
+
         if script_table_ops is None:
             script_table_ops = ScriptTableOptions()
-        
+
         db_syntax = DBSyntax.get_syntax(db_type)
 
         # Get the table information
@@ -87,8 +87,8 @@ def get_create_table_from_sys_tables(
         ]
         
         if len(table_rows) == 0:
-            return ("","could not find table in the result set: {table_schema}.{table_name}")
-        
+            return ("", f"could not find table in the result set: {table_schema}.{table_name}")
+
         table_row = table_rows.iloc[0]
         create_table_lines = []
 
@@ -115,7 +115,7 @@ def get_create_table_from_sys_tables(
 
         # Build a dict of column defaults for inline inclusion (PostgreSQL)
         col_defaults = {}
-        if script_table_ops.defaults and schema_tables.defaults is not None:
+        if script_table_ops.defaults and schema_tables.defaults is not None and not schema_tables.defaults.empty:
             default_rows = schema_tables.defaults[
                 (schema_tables.defaults['table_schema'] == table_schema) &
                 (schema_tables.defaults['table_name'] == table_name)
@@ -218,7 +218,7 @@ def get_create_table_from_sys_tables(
                 create_table_lines.append(get_fk_sql(fk_row.to_dict(), fk_cols, db_type) + ";")
         
         #defaults - only add as separate ALTER statements for MSSQL (PostgreSQL includes them inline)
-        if db_type == DBType.MSSQL and script_table_ops.defaults and schema_tables.defaults is not None:
+        if db_type == DBType.MSSQL and script_table_ops.defaults and schema_tables.defaults is not None and not schema_tables.defaults.empty:
             default_rows = schema_tables.defaults[
                 (schema_tables.defaults['table_schema'] == table_schema) &
                 (schema_tables.defaults['table_name'] == table_name)
@@ -228,7 +228,7 @@ def get_create_table_from_sys_tables(
                 create_table_lines.append(get_default_sql(db_type, default_row.to_dict()))
 
         return ("\n".join(create_table_lines),"")
-    
+
     except Exception as e:
         return ("", str(e))
 
