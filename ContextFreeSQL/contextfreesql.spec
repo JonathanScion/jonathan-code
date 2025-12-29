@@ -32,6 +32,8 @@ datas = [
     (os.path.join(PROJECT_ROOT, 'src', 'templates', 'data_compare_script.js'), 'templates'),
     # Default config file (users can override with their own)
     (os.path.join(PROJECT_ROOT, 'src', 'config.json'), '.'),
+    # Documentation
+    (os.path.join(PROJECT_ROOT, 'docs', 'CONFIG.md'), 'docs'),
 ]
 
 # Hidden imports that PyInstaller might miss

@@ -56,3 +56,23 @@ def is_bundled() -> bool:
         True if running from bundled executable, False if running from source
     """
     return getattr(sys, 'frozen', False)
+
+
+def get_docs_path(doc_name: str) -> str:
+    """
+    Get the full path to a documentation file.
+
+    Args:
+        doc_name: Name of the doc file (e.g., 'CONFIG.md')
+
+    Returns:
+        Full path to the documentation file
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle - docs are in the bundle
+        return os.path.join(sys._MEIPASS, 'docs', doc_name)
+    else:
+        # Running from source - docs are at project root level
+        src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_root = os.path.dirname(src_dir)
+        return os.path.join(project_root, 'docs', doc_name)

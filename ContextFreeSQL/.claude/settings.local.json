@@ -91,7 +91,12 @@
       "Bash(gh release view:*)",
       "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\python.exe\" -m pytest:*)",
       "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\pip.exe\" install pytest)",
-      "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\python.exe\" -m pytest \"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\tests\\\\integration\\\\test_schema\\\\test_tables.py::TestTableOperations::test_table_with_defaults\" -v --tb=short)"
+      "Bash(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\venv\\\\Scripts\\\\python.exe\" -m pytest \"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\ContextFreeSQL\\\\tests\\\\integration\\\\test_schema\\\\test_tables.py::TestTableOperations::test_table_with_defaults\" -v --tb=short)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m src.main)",
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -h localhost -U postgres -d Jonathan2 -f \"C:/Temp/ContextFreeSQL/sample_out.sql\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\":*)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"\nimport psycopg2\nconn = psycopg2.connect\\(host=''localhost'', database=''Jonathan2'', user=''postgres'', password=''yonision'', port=''5432''\\)\nconn.autocommit = True\ncur = conn.cursor\\(\\)\nwith open\\(''C:/Temp/ContextFreeSQL/sample_out.sql'', ''r'', encoding=''utf-8''\\) as f:\n    sql = f.read\\(\\)\ntry:\n    cur.execute\\(sql\\)\n    print\\(''Second run executed successfully!''\\)\nexcept Exception as e:\n    print\\(f''Error: {e}''\\)\nfinally:\n    cur.close\\(\\)\n    conn.close\\(\\)\n\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m src.main --show-config)"
     ],
     "deny": [],
     "ask": []

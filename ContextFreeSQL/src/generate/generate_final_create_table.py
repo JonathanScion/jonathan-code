@@ -360,7 +360,18 @@ def get_col_sql(
                                    "Make sure to add Identity to that field via enterprise manager'\n")
                 else:
                     sql.append(f" IDENTITY ({sys_cols_row['seed_value']},{sys_cols_row['increment_value']})")
+        elif db_type == DBType.PostgreSQL:
+            if sys_cols_row.get('is_identity', False):
+                if script_state == DBEntScriptState.Alter:
+                    print_warning = (f"--Column {table_schema}.{table_name}.{sys_cols_row['col_name']} "
+                                   "needs identity but cannot be altered via script. "
+                                   "Recreate the table or use ADD GENERATED.\n")
+                else:
+                    # PostgreSQL uses GENERATED [ALWAYS|BY DEFAULT] AS IDENTITY
+                    identity_gen = sys_cols_row.get('identity_generation', 'ALWAYS')
+                    sql.append(f" GENERATED {identity_gen} AS IDENTITY")
         else:
+            # MySQL
             extra_val = str(sys_cols_row.get('EXTRA', ''))
             if 'auto_increment' in extra_val.lower():
                 sql.append(" AUTO_INCREMENT")

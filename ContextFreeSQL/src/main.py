@@ -7,7 +7,7 @@ import os
 import shutil
 
 from src.utils.load_config import load_config
-from src.utils.resources import get_template_path, get_default_config_path, is_bundled
+from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
@@ -15,17 +15,85 @@ from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 __version__ = '0.1.0'
 
 
+def show_config_docs():
+    """Display the configuration documentation."""
+    docs_path = get_docs_path('CONFIG.md')
+    if os.path.exists(docs_path):
+        with open(docs_path, 'r', encoding='utf-8') as f:
+            print(f.read())
+    else:
+        # Fallback inline documentation
+        print("""
+ContextFreeSQL Configuration Reference
+======================================
+
+Configuration file documentation not found at: {docs_path}
+
+For full documentation, see: docs/CONFIG.md in the source repository.
+
+Quick Reference:
+----------------
+
+database:
+  host        - Database server hostname
+  db_name     - Database name
+  user        - Database username
+  password    - Database password (or use --password flag)
+  port        - Database port (default: 5432)
+
+scripting_options:
+  remove_all_extra_ents    - Drop entities not in source (default: false)
+  script_schemas           - Include schema DDL (default: true)
+  script_security          - Include roles/permissions (default: true)
+
+db_ents_to_load:
+  tables      - List of entities to script (empty = all)
+
+tables_data:
+  tables      - List of tables to script data for (empty = all)
+  from_file   - Load data from CSV files (default: false)
+
+input_output:
+  output_sql  - Path for generated SQL script
+
+sql_script_params:
+  print       - Print descriptions (default: true)
+  print_exec  - Print SQL statements (default: true)
+  exec_code   - Execute statements (default: true)
+  html_report - Generate HTML report (default: true)
+  export_csv  - Export to CSV (default: false)
+
+For complete documentation, visit:
+https://github.com/JonathanScion/jonathan-code
+""".format(docs_path=docs_path))
+
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         prog='contextfreesql',
-        description='ContextFreeSQL - Generate database migration scripts from PostgreSQL',
+        description='''ContextFreeSQL - Generate database migration scripts from PostgreSQL
+
+Command Line Options Summary:
++------------------+-------+--------------------------------------------------+
+| Option           | Short | Description                                      |
++------------------+-------+--------------------------------------------------+
+| --help           | -h    | Show this help message                           |
+| --version        | -v    | Show version number                              |
+| --show-config    | -c    | Show full config.json documentation              |
+| --password VALUE | -p    | Override database password from config           |
+| --password       | -p    | Prompt for password interactively                |
+| config           |       | Path to config.json (default: src/config.json)   |
++------------------+-------+--------------------------------------------------+
+''',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
-  contextfreesql config.json
-  contextfreesql config.json --password=secret123
-  contextfreesql prod_config.json --password
+  contextfreesql config.json                    Run with config file
+  contextfreesql config.json --password=secret  Override password
+  contextfreesql config.json -p                 Prompt for password
+  contextfreesql --show-config                  Show config.json documentation
+  contextfreesql -c | more                      Page through config docs
 
 Description:
   Extracts complete schema and data from a PostgreSQL database and generates
@@ -35,7 +103,7 @@ Description:
 
 Config file:
   Create a config.json file with your database connection settings and
-  scripting options. See config.sample.json for an example.
+  scripting options. Use --show-config to see full documentation.
 
 More info:
   https://github.com/JonathanScion/jonathan-code
@@ -45,6 +113,11 @@ More info:
         '--version', '-v',
         action='version',
         version=f'%(prog)s {__version__}'
+    )
+    parser.add_argument(
+        '--show-config', '-c',
+        action='store_true',
+        help='Show full configuration file documentation and exit'
     )
     parser.add_argument(
         'config',
@@ -65,6 +138,11 @@ More info:
 def main():
     # Parse command line arguments
     args = parse_args()
+
+    # Handle --show-config flag
+    if args.show_config:
+        show_config_docs()
+        return
 
     # Load configuration
     config_vals: ConfigVals = load_config(args.config)

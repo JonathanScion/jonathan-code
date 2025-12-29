@@ -331,7 +331,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}on J.table_schema=DB.table_schema and J.table_name=DB.table_name and J.col_name=DB.col_name \n")
         script_db_state_tables.write(f"{align}where J.is_identity <> DB.is_identity;\n")
     elif db_type == DBType.PostgreSQL:
-        script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols Set max_length_diff = true, colStat = 3, is_identity_db=DB.is_identity, \n")
+        script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols Set is_identity_diff = B'1', colStat = 3, is_identity_db=DB.is_identity, \n")
         script_db_state_tables.write(f"{align}\tdiff_descr = Case When j.diff_descr Is NULL Then '' \n")
         script_db_state_tables.write(f"{align}\t\tELSE j.diff_descr || ', ' \n")
         script_db_state_tables.write(f"{align}\tEND || 'is_identity is ' \n")

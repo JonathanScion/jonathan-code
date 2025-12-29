@@ -138,6 +138,22 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 with open(csv_file_path, 'w', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow(empty_tbl_cols)
+
+            # Still need to set JustCreated flag for empty tables (needed in second round)
+            s_flag_ent_created = s_ent_var_name + FLAG_CREATED
+            if len(tbl_ents[(tbl_ents["scriptschema"] == True) & (tbl_ents["enttype"] == "Table")]) > 0:
+                if db_type == DBType.MSSQL:
+                    out_buffer.write(f"\t\tIF EXISTS(SELECT * FROM #ScriptTables WHERE table_schema='{drow_ent['entschema']}' AND table_name='{drow_ent['entname'].replace("'", "''")}' AND tablestat=1)\n")
+                    out_buffer.write(f"\t\t\tSET {db_syntax.var_prefix}{s_flag_ent_created}=1\n")
+                    out_buffer.write("\t\tELSE\n")
+                    out_buffer.write(f"\t\t\tSET {db_syntax.var_prefix}{s_flag_ent_created}=0\n")
+                else:  # PostgreSQL
+                    out_buffer.write(f"\t\tperform 1 from scripttables T WHERE T.table_schema='{drow_ent['entschema']}' AND T.table_name='{drow_ent['entname'].replace("'", "''")}' AND tablestat=1;\n")
+                    out_buffer.write("\t\tIF FOUND THEN\n")
+                    out_buffer.write(f"\t\t\t{db_syntax.var_prefix}{s_flag_ent_created} := true;\n")
+                    out_buffer.write("\t\tELSE\n")
+                    out_buffer.write(f"\t\t\t{db_syntax.var_prefix}{s_flag_ent_created} := false;\n")
+                    out_buffer.write("\t\tEND IF;\n")
             continue
             
         s_flag_ent_created = s_ent_var_name + FLAG_CREATED
@@ -603,8 +619,16 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"END --of INSERTing into {s_ent_full_name}\n")
 
         elif db_type == DBType.PostgreSQL:
-            # PostgreSQL version
-            out_buffer.write(f"\t\tUPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.EXTRA1.value} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
+            # PostgreSQL version - first check if source table exists
+            out_buffer.write(f"\t\t-- Check if source table exists before comparison\n")
+            out_buffer.write(f"\t\tPERFORM 1 FROM information_schema.tables t WHERE t.table_schema = '{drow_ent['entschema']}' AND t.table_name = '{drow_ent['entname']}';\n")
+            out_buffer.write(f"\t\tIF NOT FOUND THEN\n")
+            out_buffer.write(f"\t\t\t-- Source table does not exist, mark all records as needing to be added\n")
+            out_buffer.write(f"\t\t\tUPDATE {s_temp_table_name} SET {FLD_COMPARE_STATE} = {RowState.EXTRA1.value};\n")
+            utils.add_print(db_type, 3, out_buffer, f"'Table ''{s_ent_full_name}'' does not exist in database - all {len(tbl_data)} records will be marked for insertion'")
+            out_buffer.write(f"\t\tELSE\n")
+            out_buffer.write(f"\t\t\t-- Source table exists, proceed with comparison\n")
+            out_buffer.write(f"\t\t\tUPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.EXTRA1.value} FROM {db_syntax.temp_table_prefix}{s_temp_table_name} t LEFT JOIN {s_source_table_name} p ON ")
             
             # Key field comparisons
             i_count = 1
@@ -660,6 +684,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
             out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} WHERE {FLD_COMPARE_STATE}={RowState.EXTRA1.value}';\n")
             out_buffer.write("\t\t\tEXECUTE sqlCode;\n")
+            out_buffer.write(f"\t\tEND IF; -- of source table exists check\n")
             out_buffer.write(f"\t\tEND IF; --of INSERTing into {s_ent_full_name}\n")
      
         
@@ -864,11 +889,14 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 utils.add_exec_sql(db_type, 3, out_buffer)
                 out_buffer.write("\t\tEND\n")
             elif db_type == DBType.PostgreSQL:
-                out_buffer.write(f"\t\tIF exists(select 1 from {s_ent_full_name_sql}) THEN\n")
-                out_buffer.write(f"\t\t\t{db_syntax.var_prefix}sqlCode='DELETE FROM {s_ent_full_name_sql}'; --it should be empty, so just delete everything\n")
-                utils.add_exec_sql(db_type, 3, out_buffer)
+                # Only check for existing data if table wasn't just created (it would be empty anyway)
+                out_buffer.write(f"\t\tIF ({s_flag_ent_created} = False) THEN\n")
+                out_buffer.write(f"\t\t\tIF exists(select 1 from {s_ent_full_name_sql}) THEN\n")
+                out_buffer.write(f"\t\t\t\t{db_syntax.var_prefix}sqlCode := 'DELETE FROM {s_ent_full_name_sql}'; --it should be empty, so just delete everything\n")
+                utils.add_exec_sql(db_type, 4, out_buffer)
+                out_buffer.write("\t\t\tEND IF;\n")
                 out_buffer.write("\t\tEND IF;\n")
-            
+
             continue  # Table is empty - nothing to do here
 
         s_temp_table_name = f"{db_syntax.temp_table_prefix}{re.sub(r'[ \\/\$#:,\.]', '_', drow_ent['entschema'] + '_' + drow_ent['entname'])}"
@@ -1144,6 +1172,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write("\n")
 
         # Records in both: find which need to be updated #3288
+        # Wrap in check for JustCreated flag - if table was just created, temp table doesn't exist
+        if db_type == DBType.PostgreSQL:
+            out_buffer.write(f"IF ({s_flag_ent_created} = False) THEN -- Only check for updates if temp table exists\n")
+
         if db_type == DBType.MSSQL:
             if (len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)) > 0:  # Could be a table that PK actually covers all fields
                 out_buffer.write("--records in both: find which need to be updated\n")
@@ -1759,6 +1791,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             # Update ScriptTables to mark data as different
             out_buffer.write(f"\tUPDATE ScriptTables SET dataStat = 3 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
             out_buffer.write("END IF;\n")
+            out_buffer.write(f"END IF; -- of check for {s_flag_ent_created} = False (temp table exists)\n")
 
     # CSV Export of both sides data for comparison
     if db_type == DBType.PostgreSQL and table_columns_map:
