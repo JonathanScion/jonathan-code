@@ -31,7 +31,7 @@ DATA_WINDOW_COL_USED = "_dataWindowcolused_"
 FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
-def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables | None = None):
+def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables | None = None, sql_script_params = None):
             
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
@@ -490,6 +490,12 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t-- Loading data from CSV file: {csv_file_path}\n")
             out_buffer.write(f"\t\tEXECUTE format('COPY {s_temp_table_name} ({col_names}) FROM %L WITH (FORMAT CSV, HEADER)', '{csv_file_path}');\n")
         else:
+            # Even when not loading from file, write CSV for HTML comparison if html_report is enabled
+            if sql_script_params and sql_script_params.html_report and db_type == DBType.PostgreSQL:
+                csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
+                csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+                os.makedirs(csv_output_dir, exist_ok=True)
+                tbl_data[ar_cols].to_csv(csv_file_path, index=False)
             # Generate INSERT statements
             for index, row in tbl_data.iterrows():
                 out_buffer.write(f"\t\tINSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
