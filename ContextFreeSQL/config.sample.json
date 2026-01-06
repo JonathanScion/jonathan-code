@@ -42,7 +42,7 @@
       "html_output_path": "./output/database_report.html",
       "diff_template_path": "",
       "diff_output_dir": "./output",
-      "output_sql": "./output/migration.sql"
+      "output_sql": "./output/{host}_{database}_{timestamp}.sql"
     },
     "sql_script_params": {
       "print": true,

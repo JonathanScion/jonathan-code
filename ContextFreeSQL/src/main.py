@@ -3,6 +3,7 @@ import argparse
 import getpass
 from pathlib import Path
 from dataclasses import dataclass
+from datetime import datetime
 import os
 import shutil
 
@@ -66,6 +67,32 @@ sql_script_params:
 For complete documentation, visit:
 https://github.com/JonathanScion/jonathan-code
 """.format(docs_path=docs_path))
+
+
+def resolve_output_filename(template_path: str, host: str, database: str) -> str:
+    """
+    Resolve placeholders in the output filename template.
+
+    Supported placeholders:
+        {host}      - Database host
+        {database}  - Database name
+        {timestamp} - Current timestamp (yyyyMMdd_HHmmss)
+
+    Args:
+        template_path: Path with optional placeholders
+        host: Database host value
+        database: Database name value
+
+    Returns:
+        Resolved path with placeholders replaced
+    """
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    resolved = template_path.replace('{host}', host)
+    resolved = resolved.replace('{database}', database)
+    resolved = resolved.replace('{timestamp}', timestamp)
+
+    return resolved
 
 
 def parse_args():
@@ -158,17 +185,26 @@ def main():
         # No password in config file either, prompt for it
         config_vals.db_conn.password = getpass.getpass('Password: ')
 
+    # Resolve output filename template placeholders
+    config_vals.input_output.output_sql = resolve_output_filename(
+        config_vals.input_output.output_sql,
+        config_vals.db_conn.host,
+        config_vals.db_conn.db_name
+    )
+
     # Copy HTML template to output directory so pg_read_file can access it
     output_dir = os.path.dirname(config_vals.input_output.output_sql)
     os.makedirs(output_dir, exist_ok=True)
 
     # Resolve template paths - use bundled templates if path doesn't exist
     html_template_source = config_vals.input_output.html_template_path
-    if not os.path.exists(html_template_source):
+    if not html_template_source or not os.path.exists(html_template_source):
         # Try bundled template
         html_template_source = get_template_path('db_compare_template.html')
+        if html_template_source and os.path.exists(html_template_source):
+            print(f"Using bundled template: {html_template_source}")
 
-    if os.path.exists(html_template_source):
+    if html_template_source and os.path.exists(html_template_source):
         template_filename = os.path.basename(html_template_source)
         new_template_path = os.path.join(output_dir, template_filename).replace("\\", "/")
 
@@ -178,14 +214,20 @@ def main():
 
         # Update the path so SQL will reference the copied file
         config_vals.input_output.html_template_path = new_template_path
+    else:
+        print(f"WARNING: HTML template not found. Tried: {config_vals.input_output.html_template_path}")
+        print(f"         Bundled path: {get_template_path('db_compare_template.html')}")
+        print("         HTML report generation may fail.")
 
     # Resolve diff template path
     diff_template_source = config_vals.input_output.diff_template_path
-    if not os.path.exists(diff_template_source):
+    if not diff_template_source or not os.path.exists(diff_template_source):
         # Try bundled template
         diff_template_source = get_template_path('code_diff_template.html')
+        if diff_template_source and os.path.exists(diff_template_source):
+            print(f"Using bundled diff template: {diff_template_source}")
 
-    if os.path.exists(diff_template_source):
+    if diff_template_source and os.path.exists(diff_template_source):
         diff_template_filename = os.path.basename(diff_template_source)
         new_diff_template_path = os.path.join(output_dir, diff_template_filename).replace("\\", "/")
 
@@ -195,14 +237,21 @@ def main():
 
         # Update the path so SQL will reference the copied file
         config_vals.input_output.diff_template_path = new_diff_template_path
+    else:
+        print(f"WARNING: Diff template not found. Tried: {config_vals.input_output.diff_template_path}")
+        print(f"         Bundled path: {get_template_path('code_diff_template.html')}")
+        print("         Code diff generation may fail.")
 
     # Copy CSV compare template if we have data tables to script
     if len(config_vals.tables_data.tables) >= 1:
         csv_compare_template = get_template_path('csv_compare_standalone.html')
-        if os.path.exists(csv_compare_template):
+        if csv_compare_template and os.path.exists(csv_compare_template):
             new_csv_template_path = os.path.join(output_dir, "csv_compare_standalone.html").replace("\\", "/")
             shutil.copy2(csv_compare_template, new_csv_template_path)
             print(f"Copied CSV compare template to: {new_csv_template_path}")
+        else:
+            print(f"WARNING: CSV compare template not found at: {csv_compare_template}")
+            print("         Data comparison HTML may fail.")
 
     schema = load_all_schema(config_vals.db_conn, load_security=config_vals.script_ops.script_security)
 
