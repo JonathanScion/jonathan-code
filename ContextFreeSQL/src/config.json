@@ -42,7 +42,7 @@
       "html_output_path": "C:/Temp/ContextFreeSQL/database_report.html",
       "diff_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/code_diff_template.html",
       "diff_output_dir": "C:/Temp/ContextFreeSQL",
-      "output_sql": "C:/Temp/ContextFreeSQL/sample_out.sql"
+      "output_sql": "C:/Temp/ContextFreeSQL/{host}_{database}_{timestamp}.sql"
     },
     "sql_script_params": {
       "print": true,

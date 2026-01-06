@@ -1,4 +1,5 @@
 from io import StringIO
+import os
 import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables, SQLScriptParams
@@ -33,7 +34,8 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("DO $$\n")
 
     # 1. Add header
-    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename='theSome.sql')
+    script_filename = os.path.basename(input_output.output_sql)
+    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename=script_filename)
     buffer.write(header)
 
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
