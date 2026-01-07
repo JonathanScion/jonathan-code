@@ -13,7 +13,7 @@ from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_e
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 
-__version__ = '0.1.0'
+__version__ = '0.2.2'
 
 
 def show_config_docs():
