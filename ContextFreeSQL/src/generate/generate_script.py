@@ -419,9 +419,5 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_sc
     # Get content and clean up
     header_content = header.getvalue()
     header.close()
-    
-    # Write to file
-    with open(filename, 'w') as f:
-        f.write(header_content)
-    
+
     return header_content

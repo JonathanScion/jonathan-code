@@ -112,6 +112,13 @@ Command Line Options Summary:
 | --password       | -p    | Prompt for password interactively                |
 | config           |       | Path to config.json (default: src/config.json)   |
 +------------------+-------+--------------------------------------------------+
+
+Environment Variables (override config.json values):
+  PGHOST       - Database host
+  PGPORT       - Database port
+  PGUSER       - Database user
+  PGPASSWORD   - Database password
+  PGDATABASE   - Database name
 ''',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
@@ -121,6 +128,16 @@ Examples:
   contextfreesql config.json -p                 Prompt for password
   contextfreesql --show-config                  Show config.json documentation
   contextfreesql -c | more                      Page through config docs
+
+  # Using environment variables:
+  set PGPASSWORD=secret && contextfreesql config.json
+  export PGPASSWORD=secret && contextfreesql config.json  (Linux/Mac)
+
+Priority (highest to lowest):
+  1. Command line arguments (--password)
+  2. Environment variables (PGPASSWORD, etc.)
+  3. config.json values
+  4. Interactive prompt (for password only)
 
 Description:
   Extracts complete schema and data from a PostgreSQL database and generates
@@ -174,15 +191,29 @@ def main():
     # Load configuration
     config_vals: ConfigVals = load_config(args.config)
 
-    # Handle password: command line > config file > interactive prompt
+    # Apply environment variables (override config.json values)
+    if os.environ.get('PGHOST'):
+        config_vals.db_conn.host = os.environ['PGHOST']
+    if os.environ.get('PGPORT'):
+        config_vals.db_conn.port = os.environ['PGPORT']
+    if os.environ.get('PGUSER'):
+        config_vals.db_conn.user = os.environ['PGUSER']
+    if os.environ.get('PGDATABASE'):
+        config_vals.db_conn.db_name = os.environ['PGDATABASE']
+    # PGPASSWORD is handled below with other password options
+
+    # Handle password: command line > env var > config file > interactive prompt
     if args.password == 'PROMPT':
         # --password flag given without value, prompt for it
         config_vals.db_conn.password = getpass.getpass('Password: ')
     elif args.password is not None:
         # --password=value given, use it
         config_vals.db_conn.password = args.password
+    elif os.environ.get('PGPASSWORD'):
+        # Environment variable set, use it
+        config_vals.db_conn.password = os.environ['PGPASSWORD']
     elif not config_vals.db_conn.password:
-        # No password in config file either, prompt for it
+        # No password anywhere, prompt for it
         config_vals.db_conn.password = getpass.getpass('Password: ')
 
     # Resolve output filename template placeholders
@@ -191,6 +222,12 @@ def main():
         config_vals.db_conn.host,
         config_vals.db_conn.db_name
     )
+
+    # Convert all paths to absolute (PostgreSQL COPY requires absolute paths)
+    config_vals.input_output.output_sql = os.path.abspath(config_vals.input_output.output_sql).replace("\\", "/")
+    config_vals.input_output.html_output_path = os.path.abspath(config_vals.input_output.html_output_path).replace("\\", "/")
+    config_vals.input_output.diff_output_dir = os.path.abspath(config_vals.input_output.diff_output_dir).replace("\\", "/")
+    print(f"Output SQL path: {config_vals.input_output.output_sql}")
 
     # Copy HTML template to output directory so pg_read_file can access it
     output_dir = os.path.dirname(config_vals.input_output.output_sql)
@@ -242,17 +279,6 @@ def main():
         print(f"         Bundled path: {get_template_path('code_diff_template.html')}")
         print("         Code diff generation may fail.")
 
-    # Copy CSV compare template if we have data tables to script
-    if len(config_vals.tables_data.tables) >= 1:
-        csv_compare_template = get_template_path('csv_compare_standalone.html')
-        if csv_compare_template and os.path.exists(csv_compare_template):
-            new_csv_template_path = os.path.join(output_dir, "csv_compare_standalone.html").replace("\\", "/")
-            shutil.copy2(csv_compare_template, new_csv_template_path)
-            print(f"Copied CSV compare template to: {new_csv_template_path}")
-        else:
-            print(f"WARNING: CSV compare template not found at: {csv_compare_template}")
-            print("         Data comparison HTML may fail.")
-
     schema = load_all_schema(config_vals.db_conn, load_security=config_vals.script_ops.script_security)
 
      # Determine which entities to load
@@ -282,7 +308,18 @@ def main():
         tbl_ents.loc[tbl_ents['enttype'] == 'Table', 'scriptdata'] = True
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
-  
+
+    # Copy CSV compare template if we have data tables to script (must be after tables_data.tables is populated)
+    if len(config_vals.tables_data.tables) >= 1:
+        csv_compare_template = get_template_path('csv_compare_standalone.html')
+        if csv_compare_template and os.path.exists(csv_compare_template):
+            new_csv_template_path = os.path.join(output_dir, "csv_compare_standalone.html").replace("\\", "/")
+            shutil.copy2(csv_compare_template, new_csv_template_path)
+            print(f"Copied CSV compare template to: {new_csv_template_path}")
+        else:
+            print(f"WARNING: CSV compare template not found at: {csv_compare_template}")
+            print("         Data comparison HTML may fail.")
+
     script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params)
 
     with open(config_vals.input_output.output_sql, 'w') as f:
