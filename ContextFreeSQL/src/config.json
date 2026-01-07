@@ -1,55 +1,54 @@
 {
-    "database": {
-      "host": "localhost",
-      "db_name": "Jonathan1",
-      "user": "postgres",
-      "password": "yonision",
-      "port": "5432"
-    },
-    "scripting_options": {
-      "remove_all_extra_ents": true,
-      "column_collation": true,
-      "code_compare_no_white_space": true,
-      "pre_add_constraints_data_checks": false,
-      "script_schemas": true,
-      "all_schemas": true,
-      "script_security": true,
-      "code_compare_no_whitespace": false,
-      "data_scripting_leave_report_fields_updated": true,
-      "data_scripting_leave_report_fields_updated_save_old_value": true,
-      "data_scripting_generate_dml_statements": true,
-      "data_comparison_include_equal_rows": false,
-      "data_window_only": false,
-      "data_window_got_specific_cells": false
-    },
-    "table_script_ops": {
-      "column_identity": true,
-      "indexes": true,
-      "foreign_keys": true,
-      "defaults": true,
-      "check_constraints": true,
-      "extended_props": true
-    },
-    "db_ents_to_load":  {
-      "tables": []
-    },
-    "tables_data": {
-      "tables": [],
-      "from_file": false
-    },
-    "input_output": {
-      "html_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/db_compare_template.html",
-      "html_output_path": "C:/Temp/ContextFreeSQL/database_report.html",
-      "diff_template_path": "C:/Users/yonis/source/repos/veteran-developer/ContextFreeSQL/src/templates/code_diff_template.html",
-      "diff_output_dir": "C:/Temp/ContextFreeSQL",
-      "output_sql": "C:/Temp/ContextFreeSQL/{host}_{database}_{timestamp}.sql"
-    },
-    "sql_script_params": {
-      "print": true,
-      "print_exec": true,
-      "exec_code": false,
-      "html_report": true,
-      "export_csv": false
-    }
+  "database": {
+    "host": "localhost",
+    "db_name": "Jonathan1",
+    "user": "postgres",
+    "password": "yonision",
+    "port": "5432"
+  },
+  "scripting_options": {
+    "remove_all_extra_ents": true,
+    "column_collation": true,
+    "code_compare_no_white_space": true,
+    "pre_add_constraints_data_checks": false,
+    "script_schemas": true,
+    "all_schemas": true,
+    "script_security": true,
+    "code_compare_no_whitespace": false,
+    "data_scripting_leave_report_fields_updated": true,
+    "data_scripting_leave_report_fields_updated_save_old_value": true,
+    "data_scripting_generate_dml_statements": true,
+    "data_comparison_include_equal_rows": false,
+    "data_window_only": false,
+    "data_window_got_specific_cells": false
+  },
+  "table_script_ops": {
+    "column_identity": true,
+    "indexes": true,
+    "foreign_keys": true,
+    "defaults": true,
+    "check_constraints": true,
+    "extended_props": true
+  },
+  "db_ents_to_load": {
+    "tables": []
+  },
+  "tables_data": {
+    "tables": [],
+    "from_file": false
+  },
+  "input_output": {
+    "html_template_path": "",
+    "html_output_path": "./output/database_report.html",
+    "diff_template_path": "",
+    "diff_output_dir": "./output",
+    "output_sql": "./output/{host}_{database}_{timestamp}.sql"
+  },
+  "sql_script_params": {
+    "print": true,
+    "print_exec": true,
+    "exec_code": false,
+    "html_report": true,
+    "export_csv": false
   }
-  
+}

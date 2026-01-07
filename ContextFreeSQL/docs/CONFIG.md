@@ -47,11 +47,35 @@ Database connection settings.
 }
 ```
 
-**Password handling:**
-- If password is in config.json, it's used automatically
-- `--password=VALUE` on command line overrides config file
-- `--password` (no value) prompts interactively
-- If password is empty/missing everywhere, prompts interactively
+**Environment Variables:**
+
+You can override any database connection setting using PostgreSQL standard environment variables:
+
+| Variable | Overrides |
+|----------|-----------|
+| `PGHOST` | `database.host` |
+| `PGPORT` | `database.port` |
+| `PGUSER` | `database.user` |
+| `PGPASSWORD` | `database.password` |
+| `PGDATABASE` | `database.db_name` |
+
+**Priority (highest to lowest):**
+1. Command line arguments (`--password`)
+2. Environment variables (`PGPASSWORD`, etc.)
+3. config.json values
+4. Interactive prompt (for password only)
+
+**Examples:**
+```bash
+# Windows
+set PGPASSWORD=secret && contextfreesql config.json
+
+# Linux/Mac
+export PGPASSWORD=secret && contextfreesql config.json
+
+# Or inline (Linux/Mac)
+PGPASSWORD=secret PGHOST=prod-server contextfreesql config.json
+```
 
 ---
 
