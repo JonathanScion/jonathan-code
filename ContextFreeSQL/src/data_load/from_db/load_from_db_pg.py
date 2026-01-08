@@ -684,7 +684,6 @@ def load_all_tables_data(conn_settings: DBConnSettings,db_all: DBSchema, table_n
                 query = f'SELECT * FROM {table_name}'
             
             try:
-                print(f"Loading data for table: {table_name}")
                 cur.execute(query)
                 results = cur.fetchall()
                 
