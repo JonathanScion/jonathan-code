@@ -16,7 +16,7 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: contextfreesql.exe
-            asset_name: contextfreesql-windows.exe
+            asset_name: contextfreesql.exe
           - os: macos-latest
             artifact_name: contextfreesql
             asset_name: contextfreesql-macos
@@ -49,7 +49,7 @@ jobs:
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}
 
       - name: Rename artifact (Windows)
-        if: matrix.os == 'windows-latest'
+        if: matrix.os == 'windows-latest' && matrix.artifact_name != matrix.asset_name
         run: move dist\${{ matrix.artifact_name }} dist\${{ matrix.asset_name }}
         shell: cmd
 
@@ -78,7 +78,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/contextfreesql-windows.exe/contextfreesql-windows.exe
+            artifacts/contextfreesql.exe/contextfreesql.exe
             artifacts/contextfreesql-macos/contextfreesql-macos
             artifacts/contextfreesql-linux/contextfreesql-linux
             ContextFreeSQL/config.sample.json
