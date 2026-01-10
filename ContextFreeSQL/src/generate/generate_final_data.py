@@ -1004,10 +1004,6 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("BEGIN\n")
         elif db_type == DBType.PostgreSQL:
             out_buffer.write(f"IF ({s_flag_ent_created}=False) THEN --Records to be deleted or removed: do not even check if the table was just created\n")
-            # Add check to skip data comparison if table has pending column additions and execCode=False
-            # This prevents errors when trying to SELECT columns that don't exist in the target database
-            out_buffer.write(f"-- Skip data comparison if table has pending column changes and execCode=False (columns don't exist yet)\n")
-            out_buffer.write(f"IF (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1)) THEN\n")
 
         out_buffer.write("--records to be removed:\n")
         # Insert the ones we're deleting, just before deleting them
@@ -1058,47 +1054,41 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
         
         elif db_type == DBType.PostgreSQL:
-            out_buffer.write(f"sqlCode :='INSERT INTO {s_temp_table_name} (\n")
-            
-            for col_name in ar_cols:
-                out_buffer.write(f"{col_name}, ")
-            
-            out_buffer.write(f"{FLD_COMPARE_STATE})")  # Last field
-            out_buffer.write(" SELECT ")
-            
-            for col_name in ar_cols:
-                out_buffer.write(f"p.{col_name}, ")
-            
-            out_buffer.write(f"''{RowState.EXTRA2.value}''")
-            
+            # Build column list dynamically, excluding columns that don't exist in target yet (colStat=1)
+            # This allows DELETE detection to work even when there are pending column additions
+            out_buffer.write("-- Build column list dynamically, excluding new columns (colStat=1) that don't exist in target\n")
+            out_buffer.write("v_extra2_cols := '';\n")
+            out_buffer.write("v_extra2_select_cols := '';\n")
+            out_buffer.write("DECLARE\n")
+            out_buffer.write("    extra2_col_rec RECORD;\n")
+            out_buffer.write("BEGIN\n")
+            out_buffer.write(f"    FOR extra2_col_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) LOOP\n")
+            out_buffer.write("        v_extra2_cols := v_extra2_cols || extra2_col_rec.col_name || ', ';\n")
+            out_buffer.write("        v_extra2_select_cols := v_extra2_select_cols || 'p.' || extra2_col_rec.col_name || ', ';\n")
+            out_buffer.write("    END LOOP;\n")
+            out_buffer.write("END;\n")
+            out_buffer.write("\n")
+
             # Check for WHERE clause
             # !again, this feature, may activate if there's a need, maybe never
             #s_where = None
             #if drow_ent['TableToScript'] is not None:
             #    s_where = utils.get_where_from_settings_dset(drow_ent['TableToScript'])
-            
+
             #if s_where:
             #    s_source_table_name = f"(SELECT * FROM {s_ent_full_name_sql} WHERE {s_where.replace("'", "''")})"
             #else:
             s_source_table_name = s_ent_full_name_sql
-            
-            out_buffer.write(f" FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON ")
-            
-            count = 1
-            col_count = len(ar_key_cols)
-            
-            for col_name in ar_key_cols:
-                out_buffer.write(f"p.{col_name}=t.{col_name}")
-                if count < col_count:
-                    out_buffer.write(" AND ")
-                count += 1
-            
-            out_buffer.write(f" WHERE (t.{ar_key_cols[0]} IS NULL)';\n")
-            
+
+            # Build the JOIN condition for key columns
+            key_join_condition = " AND ".join([f"p.{col_name}=t.{col_name}" for col_name in ar_key_cols])
+
+            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{ar_key_cols[0]} IS NULL)';\n")
+
             if not script_ops.data_window_only:
                 out_buffer.write("EXECUTE sqlCode;\n")
             else:
-                out_buffer.write("--EXEC (@sqlCode) --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
+                out_buffer.write("--EXECUTE sqlCode; --deactivated since we're doing a 'Data Window'. Dont delete stuff that's outside\n")
 
         # Remove all extra records
         s_source_table_name = "" #3221 in .net
@@ -1172,7 +1162,6 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             
             out_buffer.write("END IF; --'of: 'remove all extra recods'\n")
             out_buffer.write("END IF; --Of 'Records to be deleted or removed: do not even check if the table was just created'\n")
-            out_buffer.write("END IF; --of skip data comparison if table has pending column changes\n")
             out_buffer.write("END IF; --of table was just created\n")
         
         out_buffer.write("\n")
@@ -1225,42 +1214,38 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         elif db_type == DBType.PostgreSQL:
             if (len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)) > 0:  # Could be a table that PK actually covers all fields
                 out_buffer.write("--records in both: find which need to be updated\n")
-                out_buffer.write(f"sqlCode = 'UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
-                out_buffer.write(f" FROM {s_temp_table_name} t WHERE (\n")
-                
-                count = 1
-                col_count = len(ar_key_cols)
-                
-                for key_col_name in ar_key_cols:
-                    out_buffer.write(f"orig.{key_col_name} = t.{key_col_name}")
-                    if count < col_count:
-                        out_buffer.write(" AND ")
-                    count += 1
-                
-                out_buffer.write(") AND ( ")
-                
-                count = 1
-                col_count = len(ar_no_key_cols) - len(ar_no_key_cols_no_compare)
-                
-                for no_key_col_name in ar_no_key_cols:
-                    if no_key_col_name in ar_no_key_cols_no_compare:
-                        continue
-                    
-                    if script_ops.data_window_got_specific_cells:
-                        out_buffer.write("((")
-                    
-                    out_buffer.write(f"(orig.{no_key_col_name}<> t.{no_key_col_name}) OR (orig.{no_key_col_name} IS NULL AND t.{no_key_col_name} IS NOT NULL) OR (orig.{no_key_col_name} IS NOT NULL AND t.{no_key_col_name} IS NULL)")
-                    
-                    if script_ops.data_window_got_specific_cells:
-                        out_buffer.write(f") AND {NO_UPDATE_FLD}{no_key_col_name} IS NULL)")
-                    
-                    if count < col_count:
-                        out_buffer.write(" OR ")
-                    
-                    count += 1
-                
-                out_buffer.write(")';\n")
-                out_buffer.write("EXECUTE sqlCode; --flagging the temp table with records that need to be updated\n")
+                # Build the comparison dynamically, only for columns that exist in both source and target (colStat IN (0, 3))
+                out_buffer.write("DECLARE\n")
+                out_buffer.write("    update_compare_rec RECORD;\n")
+                out_buffer.write("    v_update_where_clause TEXT := '';\n")
+                out_buffer.write("    v_first_col BOOLEAN := true;\n")
+                out_buffer.write("BEGIN\n")
+
+                # Build list of non-key columns to exclude from comparison (lowercase for case-insensitive matching)
+                no_compare_cols_list = [col.lower() for col in ar_no_key_cols_no_compare] if ar_no_key_cols_no_compare else []
+                key_cols_list = [col.lower() for col in ar_key_cols]
+
+                out_buffer.write(f"    FOR update_compare_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(key_cols_list)}')")
+                if no_compare_cols_list:
+                    out_buffer.write(f" AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(no_compare_cols_list)}')")
+                out_buffer.write(" LOOP\n")
+                out_buffer.write("        IF v_first_col THEN\n")
+                out_buffer.write("            v_first_col := false;\n")
+                out_buffer.write("        ELSE\n")
+                out_buffer.write("            v_update_where_clause := v_update_where_clause || ' OR ';\n")
+                out_buffer.write("        END IF;\n")
+                out_buffer.write("        v_update_where_clause := v_update_where_clause || '(orig.' || update_compare_rec.col_name || '<> p.' || update_compare_rec.col_name || ') OR (orig.' || update_compare_rec.col_name || ' IS NULL AND p.' || update_compare_rec.col_name || ' IS NOT NULL) OR (orig.' || update_compare_rec.col_name || ' IS NOT NULL AND p.' || update_compare_rec.col_name || ' IS NULL)';\n")
+                out_buffer.write("    END LOOP;\n")
+                out_buffer.write("\n")
+                out_buffer.write("    IF v_update_where_clause <> '' THEN\n")
+
+                # Build key join condition
+                key_join_condition = " AND ".join([f"orig.{col_name} = p.{col_name}" for col_name in ar_key_cols])
+
+                out_buffer.write(f"        sqlCode := 'UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.DIFF.value} FROM {s_source_table_name} p WHERE ({key_join_condition}) AND (' || v_update_where_clause || ')';\n")
+                out_buffer.write("        EXECUTE sqlCode; --flagging the temp table with records that need to be updated\n")
+                out_buffer.write("    END IF;\n")
+                out_buffer.write("END;\n")
 
         out_buffer.write("\n")
         out_buffer.write("--update fields that are different:\n") #3346. we are in the updates and deletes look per entity. so 2 tabs ident is good
@@ -1635,6 +1620,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             elif db_type == DBType.PostgreSQL: #3654
                 out_buffer.write("--generating individual DML statements: DELETE, UPDATE\n")
                 out_buffer.write("IF (printExec=True) THEN --only if asked to print, since that's the only reason they are here\n")
+                # Only run this section if _diffbit_ columns were created (same condition as their creation)
+                out_buffer.write(f"IF (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1)) THEN\n")
                 out_buffer.write(f"\tPERFORM 1 from {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN ({RowState.EXTRA2.value},{RowState.DIFF.value});\n")
                 out_buffer.write("\tIF FOUND THEN\n")
                 
@@ -1770,6 +1757,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("\t\tEND LOOP;\n")
                 out_buffer.write("\tEND; --of record iteration (temprow) \n")
                 out_buffer.write("\tEND IF; --of IF FOUND (for generating individual DML statements: DELETE, UPDATE)\n")
+                out_buffer.write("END IF; --of check for _diffbit_ columns existing\n")
                 out_buffer.write("END IF; --of if asked to print\n")
         
         
@@ -1790,7 +1778,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         
         elif db_type == DBType.PostgreSQL:
             out_buffer.write("\n")
-            out_buffer.write(f"NumNonEqualRecs := COUNT(*) FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}<>1;\n")
+            out_buffer.write(f"SELECT COUNT(*) INTO NumNonEqualRecs FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN (2, 3);\n")
             out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
             comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
             utils.add_print(db_type, 1, out_buffer, f"'There were ' || NumNonEqualRecs || ' records that were different. {comment_prefix}SELECT * FROM {s_temp_table_name}; --to get the full state of the data comparison. for summary do: SELECT CASE _cmprstate_ WHEN 1 THEN ''Added'' WHEN 2 THEN ''Removed'' WHEN 3 THEN ''Updated'' ELSE ''Unknown'' END AS state, count(*) AS count FROM {s_temp_table_name} GROUP BY _cmprstate_;'")
@@ -1818,14 +1806,25 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             csv_file_indb = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}_indb.csv"
 
             # Export if exportCsv=True OR (htmlReport=True AND this table has data differences)
-            # Also check: skip if table has pending column additions and execCode=False (columns don't exist yet)
-            out_buffer.write(f"IF ((exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3)))")
-            out_buffer.write(f" AND (execCode = True OR NOT EXISTS(SELECT 1 FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat = 1))) THEN\n")
+            out_buffer.write(f"IF (exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3))) THEN\n")
             out_buffer.write(f"\t-- Database data for {s_ent_full_name} (current state in DB)\n")
-            out_buffer.write(f"\tCREATE TEMP TABLE temp_csv_export AS SELECT {col_names} FROM {s_ent_full_name_sql};\n")
-            out_buffer.write(f"\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file_indb}');\n")
-            out_buffer.write(f"\tDROP TABLE temp_csv_export;\n")
-            out_buffer.write(f"\tRAISE NOTICE 'CSV file created: {csv_file_indb}';\n")
+            out_buffer.write(f"\t-- Build column list dynamically, only including columns that actually exist in the target table\n")
+            out_buffer.write("\tDECLARE\n")
+            out_buffer.write("\t\tv_csv_cols TEXT := '';\n")
+            out_buffer.write("\t\tv_csv_col_rec RECORD;\n")
+            out_buffer.write("\tBEGIN\n")
+            # Query information_schema directly to get columns that actually exist in the target table
+            out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') ORDER BY c.ordinal_position LOOP\n")
+            out_buffer.write("\t\t\tIF v_csv_cols <> '' THEN v_csv_cols := v_csv_cols || ', '; END IF;\n")
+            out_buffer.write("\t\t\tv_csv_cols := v_csv_cols || v_csv_col_rec.column_name;\n")
+            out_buffer.write("\t\tEND LOOP;\n")
+            out_buffer.write("\t\tIF v_csv_cols <> '' THEN\n")
+            out_buffer.write(f"\t\t\tEXECUTE 'CREATE TEMP TABLE temp_csv_export AS SELECT ' || v_csv_cols || ' FROM {s_ent_full_name_sql}';\n")
+            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file_indb}');\n")
+            out_buffer.write(f"\t\t\tDROP TABLE temp_csv_export;\n")
+            out_buffer.write(f"\t\t\tRAISE NOTICE 'CSV file created: {csv_file_indb}';\n")
+            out_buffer.write("\t\tEND IF;\n")
+            out_buffer.write("\tEND;\n")
             out_buffer.write("END IF;\n\n")
 
         out_buffer.write("--End CSV Export--------------------------------------------------------------\n")
