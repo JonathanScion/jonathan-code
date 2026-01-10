@@ -348,7 +348,7 @@ def get_col_sql(
                 else:
                     sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} SET NOT NULL")
             else:
-                sql.append(" NULL " if sys_cols_row.get(is_null_field, False) else " NOT NULL ")
+                sql.append(" NULL" if sys_cols_row.get(is_null_field, False) else " NOT NULL")
 
     # Identity/Auto Increment
     if column_identity:

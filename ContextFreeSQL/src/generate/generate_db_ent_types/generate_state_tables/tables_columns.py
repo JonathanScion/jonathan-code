@@ -69,7 +69,7 @@ def create_db_state_columns(
     script_db_state_tables.write(f"{align}\tcomputed_definition {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tcomputed_definition_diff bit null,\n")
     script_db_state_tables.write(f"{align}\tcomputed_definition_db {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
-    script_db_state_tables.write(f"{align}\tcolStat smallint null,\n")
+    script_db_state_tables.write(f"{align}\tcolStat smallint null DEFAULT 0,\n")
     script_db_state_tables.write(f"{align}\tdiff_descr {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tSQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tSQL_ALTER {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")

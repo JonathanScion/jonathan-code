@@ -409,6 +409,9 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_sc
     header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
     header.write(f"\tDECLARE {db_syntax.var_prefix}diff_descr {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
     header.write(f"\tDECLARE {db_syntax.var_prefix}ent_type {db_syntax.nvarchar_type} (25);\n")
+    # Variables for dynamic column list building in EXTRA2 detection (rows to delete)
+    header.write(f"\tDECLARE {db_syntax.var_prefix}v_extra2_cols TEXT;\n")
+    header.write(f"\tDECLARE {db_syntax.var_prefix}v_extra2_select_cols TEXT;\n")
 
     # Add conditional variable declaration
     if hasattr(db_syntax, 'pre_add_constraints_data_checks') and scrpt_ops.pre_add_constraints_data_checks:
