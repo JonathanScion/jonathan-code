@@ -12,7 +12,14 @@
       "Bash(npx tsc:*)",
       "Bash(python -c:*)",
       "Bash(pip install:*)",
-      "Bash(python -m src.main:*)"
+      "Bash(python -m src.main:*)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(PGPASSWORD=yonision psql:*)",
+      "Bash(PGPASSWORD=yonision \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(pyinstaller:*)",
+      "Bash(/c/Users/jonat/source/repos/jonathan-code/ContextFreeSQL/venv/Scripts/pyinstaller.exe:*)"
     ]
   }
 }
