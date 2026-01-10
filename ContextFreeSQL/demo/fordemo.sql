@@ -7,7 +7,6 @@ select * from public.students;
 select * from public.studentsgrades;
 */
 
-
 INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,studentbit,studentmsg) OVERRIDING SYSTEM VALUE
 VALUES 
 	('1','First Name1','last Name 1','2000-01-01',NULL,NULL),
@@ -25,16 +24,16 @@ VALUES
  
 --------------------------changes for demo------------------------------------------------------------
 alter table public.students add some_extra_col int NULL;
-alter table public.students DROP COLUMN studentmsg;
 
- update public.studentsgrades set comments='some comment for 2'
- where studentgradeid=2;
 
- delete from public.studentsgrades 
- where studentgradeid=3;
+update public.studentsgrades set comments='some comment for 2'
+where studentgradeid=2;
 
- delete from public.students
- where studentid=3;
+delete from public.studentsgrades 
+where studentgradeid=3;
+
+delete from public.students
+where studentid=3;
 
 INSERT INTO public.students (studentid,studentfirstname,studentlastname,studentdob,studentbit) OVERRIDING SYSTEM VALUE
 VALUES 
