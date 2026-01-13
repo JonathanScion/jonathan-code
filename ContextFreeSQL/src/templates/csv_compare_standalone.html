@@ -655,8 +655,8 @@
         .sort-indicator {
             display: inline-block;
             margin-left: 6px;
-            font-size: 10px;
-            opacity: 0.3;
+            font-size: 11px;
+            opacity: 0.5;
         }
 
         .comparison-table th.sorted .sort-indicator {
@@ -745,7 +745,14 @@
             background: var(--highlight-changed) !important;
             color: var(--highlight-changed-text);
             font-weight: 600;
-            border: 1px solid var(--highlight-changed-border);
+        }
+
+        .search-highlight {
+            background: #ffc107;
+            color: #000;
+            padding: 1px 2px;
+            border-radius: 2px;
+            font-weight: 600;
         }
 
         .comparison-table td.null-value {
@@ -1049,7 +1056,7 @@
 
         <!-- Key Selection Section -->
         <div class="key-selection-section" id="keySelectionSection">
-            <div class="key-selection-title">Select Key Column(s) for Comparison</div>
+            <div class="key-selection-title">Select Unique Key Column(s) for Comparison</div>
             <div class="key-columns-list" id="keyColumnsList">
                 <!-- Key column checkboxes will be generated here -->
             </div>
@@ -1119,7 +1126,7 @@
                             </div>
                         </div>
                         <!-- Action Buttons -->
-                        <button class="action-button" onclick="quickFilterDiffs()">Show Diffs Only</button>
+                        <button class="action-button" id="toggleDiffsButton" onclick="toggleDiffsFilter()">Show Diffs Only</button>
                         <button class="action-button primary" onclick="downloadReport()">Download Report</button>
                     </div>
                 </div>
@@ -1315,12 +1322,28 @@ License: MIT
         // QUICK ACTIONS
         // ============================================
 
-        function quickFilterDiffs() {
-            // Uncheck Equal, check others
-            document.getElementById('showEqual').checked = false;
-            document.getElementById('showLeftOnly').checked = true;
-            document.getElementById('showRightOnly').checked = true;
-            document.getElementById('showDifferent').checked = true;
+        let showingDiffsOnly = false;
+
+        function toggleDiffsFilter() {
+            const button = document.getElementById('toggleDiffsButton');
+            showingDiffsOnly = !showingDiffsOnly;
+
+            if (showingDiffsOnly) {
+                // Show diffs only - uncheck Equal, check others
+                document.getElementById('equal').checked = false;
+                document.getElementById('leftOnly').checked = true;
+                document.getElementById('rightOnly').checked = true;
+                document.getElementById('different').checked = true;
+                button.textContent = 'Show All';
+            } else {
+                // Show all - check all status filters
+                document.getElementById('equal').checked = true;
+                document.getElementById('leftOnly').checked = true;
+                document.getElementById('rightOnly').checked = true;
+                document.getElementById('different').checked = true;
+                button.textContent = 'Show Diffs Only';
+            }
+
             // Clear search
             const globalSearch = document.getElementById('globalSearch');
             if (globalSearch) globalSearch.value = '';
@@ -1646,7 +1669,7 @@ License: MIT
                 checkbox.type = 'checkbox';
                 checkbox.id = `key-${field}`;
                 checkbox.onclick = (e) => e.stopPropagation();
-                checkbox.onchange = () => toggleKeyColumn(field, wrapper);
+                checkbox.onchange = () => toggleKeyColumn(field, wrapper, true);
 
                 const label = document.createElement('label');
                 label.setAttribute('for', `key-${field}`);
@@ -1660,9 +1683,12 @@ License: MIT
             updateCompareButton();
         }
 
-        function toggleKeyColumn(field, wrapperEl) {
+        function toggleKeyColumn(field, wrapperEl, fromCheckbox = false) {
             const checkbox = wrapperEl.querySelector('input[type="checkbox"]');
-            checkbox.checked = !checkbox.checked;
+            // Only toggle if called from wrapper click, not checkbox onchange (browser already toggled it)
+            if (!fromCheckbox) {
+                checkbox.checked = !checkbox.checked;
+            }
 
             if (checkbox.checked) {
                 selectedKeyColumns.add(field);
@@ -2407,6 +2433,30 @@ License: MIT
             renderData();
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function highlightSearchMatch(value, searchTerm) {
+            if (!searchTerm || value === null || value === undefined) {
+                return escapeHtml(String(value));
+            }
+            const strValue = String(value);
+            const lowerValue = strValue.toLowerCase();
+            const lowerSearch = searchTerm.toLowerCase();
+            const index = lowerValue.indexOf(lowerSearch);
+            if (index === -1) {
+                return escapeHtml(strValue);
+            }
+            // Build highlighted string with proper escaping
+            const before = escapeHtml(strValue.substring(0, index));
+            const match = escapeHtml(strValue.substring(index, index + searchTerm.length));
+            const after = escapeHtml(strValue.substring(index + searchTerm.length));
+            return `${before}<span class="search-highlight">${match}</span>${after}`;
+        }
+
         function renderData() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = '';
@@ -2421,6 +2471,10 @@ License: MIT
 
         function createRow(item, rowIndex) {
             const row = document.createElement('tr');
+
+            // Get current search term for highlighting
+            const globalSearchInput = document.getElementById('globalSearch');
+            const searchTerm = globalSearchInput ? globalSearchInput.value : '';
 
             // Add checkbox cell if in selection mode
             if (selectionMode) {
@@ -2453,7 +2507,7 @@ License: MIT
                             td.classList.add('null-value');
                             td.textContent = 'NULL';
                         } else {
-                            td.textContent = value;
+                            td.innerHTML = highlightSearchMatch(value, searchTerm);
                         }
 
                         if (item.changedColumns.includes(col)) {
@@ -2477,7 +2531,7 @@ License: MIT
                             td.classList.add('null-value');
                             td.textContent = 'NULL';
                         } else {
-                            td.textContent = value;
+                            td.innerHTML = highlightSearchMatch(value, searchTerm);
                         }
 
                         if (item.changedColumns.includes(col)) {
