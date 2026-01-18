@@ -1,7 +1,7 @@
 {
   "name": "satellite-imagery-platform",
   "version": "1.0.0",
-  "description": "EOI Space - Satellite Imagery Management Platform Demo",
+  "description": "Satellite Imagery Management Platform",
   "private": true,
   "workspaces": [
     "frontend",
@@ -10,23 +10,26 @@
   ],
   "scripts": {
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install && cd ../shared && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
+    "start:backend": "cd backend && npm run start",
     "build:frontend": "cd frontend && npm run build",
     "build:backend": "cd backend && npm run build",
-    "test": "npm run test --workspaces",
-    "deploy": "cd terraform && terraform apply"
+    "build:shared": "cd shared && npm run build",
+    "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
+    "db:init": "cd backend && node -e \"require('./dist/lib/database').initializeDatabase().then(() => process.exit(0))\"",
+    "test": "npm run test --workspaces"
   },
   "keywords": [
     "satellite",
     "imagery",
-    "geospatial",
-    "aws",
-    "serverless"
+    "geospatial"
   ],
-  "author": "EOI Space",
+  "author": "",
   "license": "MIT",
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "typescript": "^5.9.3"
   }
 }

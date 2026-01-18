@@ -1,115 +1,92 @@
-# EOI Space - Satellite Imagery Management Platform
+# Satellite Imagery Management Platform
 
-![Platform Banner](https://via.placeholder.com/1200x300/2ea3f2/ffffff?text=EOI+Space+Satellite+Platform)
+A satellite imagery management and cataloging system built with React, TypeScript, Express, and PostgreSQL.
 
-A comprehensive, production-ready satellite imagery management and cataloging system built with React, TypeScript, and AWS serverless technologies. Designed to match the professional aesthetic of [EOI Space](https://eoi.space).
+## Features
 
-## 🌟 Features
+- **Drag-and-drop upload** for TIFF/GeoTIFF files
+- **Interactive maps** with Leaflet
+- **3D globe visualization** (Cesium-ready)
+- **Advanced search** and filtering
+- **Analytics dashboard** with charts
+- **Collections** for organizing images
+- **Image comparison** side-by-side
+- **Geospatial metadata** extraction
+- **Tagging system** for categorization
 
-### Core Capabilities
-- 📤 **Drag-and-drop upload** for TIFF/GeoTIFF files
-- 🗺️ **Interactive maps** with Leaflet
-- 🌍 **3D globe visualization** (Cesium-ready)
-- 🔍 **Advanced search** and filtering
-- 📊 **Analytics dashboard** with charts
-- 📁 **Collections** for organizing images
-- 🔄 **Image comparison** side-by-side
-- 📍 **Geospatial metadata** extraction
-- 🏷️ **Tagging system** for categorization
-- 📈 **Real-time upload progress**
+## Prerequisites
 
-### Technical Highlights
-- ⚡ Serverless AWS architecture
-- 🔒 Secure S3 storage with presigned URLs
-- 💾 DynamoDB for fast metadata queries
-- 🎨 EOI Space-branded UI (matching eoi.space)
-- 📱 Fully responsive design
-- 🚀 Automated deployment with GitHub Actions
-- 🏗️ Infrastructure as Code with Terraform
+- **Node.js** 18+
+- **PostgreSQL** 14+
+- **npm** or **yarn**
 
-## 📋 Table of Contents
+## Quick Start
 
-- [Quick Start](#quick-start)
-- [Documentation](#documentation)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Deployment](#deployment)
-- [Development](#development)
-- [Features](#features)
-- [Technologies](#technologies)
-- [Contributing](#contributing)
-- [License](#license)
+### 1. Set up PostgreSQL
 
-## 🚀 Quick Start
+Create a database for the application:
 
-### Prerequisites
+```sql
+CREATE DATABASE satellite_images;
+```
 
-- **Node.js** 18+ and npm
-- **AWS Account** with CLI configured
-- **Terraform** 1.5+
-- **Git**
-
-### One-Command Deployment (Unix/Linux/Mac)
+### 2. Install Dependencies
 
 ```bash
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh
+npm run install:all
 ```
 
-### One-Command Deployment (Windows)
+### 3. Configure Environment
 
-```powershell
-.\scripts\deploy.ps1
+Copy the example environment files and update them:
+
+```bash
+# Backend
+cp backend/.env.example backend/.env
+# Edit backend/.env with your PostgreSQL credentials
+
+# Frontend (optional - defaults work for local development)
+cp frontend/.env.example frontend/.env
 ```
 
-### Manual Deployment
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
-
-## 📚 Documentation
-
-- **[FEATURES.md](FEATURES.md)** - Complete feature documentation
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment guide
-- **[terraform/README.md](terraform/README.md)** - Infrastructure details
-
-## 🏛️ Architecture
-
+**Backend `.env` configuration:**
 ```
-┌──────────────┐
-│   Browser    │
-└──────┬───────┘
-       │
-       ▼
-┌──────────────────────────────────────────┐
-│           S3 Static Website              │
-│       (React SPA - Frontend)             │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────┐
-│         API Gateway (REST API)           │
-└──────────────┬───────────────────────────┘
-               │
-       ┌───────┴───────┬──────────┐
-       ▼               ▼          ▼
-┌─────────────┐  ┌──────────┐  ┌────────┐
-│   Lambda    │  │  Lambda  │  │ Lambda │
-│  (Upload)   │  │ (Search) │  │  (...)  │
-└──────┬──────┘  └─────┬────┘  └────┬───┘
-       │               │            │
-       ▼               ▼            ▼
-┌──────────────────────────────────────────┐
-│              DynamoDB                    │
-│      (Images & Collections Tables)      │
-└──────────────────────────────────────────┘
-
-       ┌──────────────┐
-       │  S3 Bucket   │
-       │   (Images)   │
-       └──────────────┘
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=satellite_images
+DB_USER=postgres
+DB_PASSWORD=your_password
+PORT=3001
+STORAGE_DIR=./uploads
 ```
 
-## 📁 Project Structure
+### 4. Build Shared Types
+
+```bash
+npm run build:shared
+```
+
+### 5. Start Development Servers
+
+Run both frontend and backend:
+
+```bash
+npm run dev
+```
+
+Or run them separately:
+
+```bash
+# Terminal 1 - Backend (http://localhost:3001)
+npm run dev:backend
+
+# Terminal 2 - Frontend (http://localhost:5173)
+npm run dev:frontend
+```
+
+The database tables will be created automatically on first backend startup.
+
+## Project Structure
 
 ```
 satellite-imagery-platform/
@@ -119,285 +96,94 @@ satellite-imagery-platform/
 │   │   ├── pages/        # Page components
 │   │   ├── lib/          # Utilities, API, state
 │   │   └── main.tsx      # Entry point
-│   ├── package.json
-│   └── vite.config.ts
+│   └── package.json
 │
-├── backend/              # Lambda functions
+├── backend/              # Express server
 │   ├── src/
-│   │   ├── handlers/     # Lambda handlers
-│   │   └── lib/          # Utilities
-│   ├── package.json
-│   └── tsconfig.json
+│   │   ├── lib/          # Database, storage utilities
+│   │   └── server.ts     # Express server
+│   └── package.json
 │
 ├── shared/               # Shared TypeScript types
 │   └── src/
 │       └── types.ts
 │
-├── terraform/            # Infrastructure as Code
-│   ├── main.tf
-│   ├── s3.tf
-│   ├── dynamodb.tf
-│   ├── lambda.tf
-│   ├── api-gateway.tf
-│   └── outputs.tf
-│
-├── .github/
-│   └── workflows/        # CI/CD pipelines
-│       ├── ci.yml
-│       └── deploy.yml
-│
-├── scripts/              # Deployment scripts
-│   ├── deploy.sh         # Unix/Linux/Mac
-│   └── deploy.ps1        # Windows
-│
-├── FEATURES.md           # Feature documentation
-├── DEPLOYMENT.md         # Deployment guide
-└── README.md            # This file
+└── package.json          # Root workspace config
 ```
 
-## 🎨 Features Overview
+## API Endpoints
 
-### Upload & Management
-- Drag-and-drop interface with progress tracking
-- Automatic metadata extraction from GeoTIFF
-- Thumbnail generation
-- Support for multi-band imagery
-- File size up to 500MB per image
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/images/upload-url` | Request upload (creates record) |
+| POST | `/api/images/:id/upload` | Upload file |
+| POST | `/api/images/:id/confirm` | Confirm upload |
+| POST | `/api/images/search` | Search images |
+| GET | `/api/images/:id` | Get image details |
+| PATCH | `/api/images/:id` | Update image metadata |
+| DELETE | `/api/images/:id` | Delete image |
+| GET | `/api/analytics/statistics` | Get statistics |
+| GET | `/api/collections` | List collections |
+| POST | `/api/collections` | Create collection |
+| GET | `/api/collections/:id` | Get collection |
+| PATCH | `/api/collections/:id` | Update collection |
+| DELETE | `/api/collections/:id` | Delete collection |
+| POST | `/api/collections/:id/images` | Add images to collection |
 
-### Gallery & Browsing
-- **Grid View**: Card layout with thumbnails
-- **List View**: Detailed metadata display
-- **Map View**: Interactive Leaflet map
-- **Globe View**: 3D Cesium visualization
-
-### Search & Filtering
-- Full-text search across titles, descriptions, tags
-- Advanced filters:
-  - Date range (capture or upload)
-  - Geographic bounds
-  - Cloud coverage
-  - Satellite name
-  - Resolution range
-  - Tags
-
-### Analytics Dashboard
-- Total images count
-- Storage usage
-- Coverage area (km²)
-- Upload trends (monthly)
-- Tag distribution (pie chart)
-- Satellite breakdown (bar chart)
-
-### Collections
-- Group related images
-- Add/remove images
-- Share collections
-- Public/private visibility
-
-### Image Details
-- High-resolution viewer
-- Interactive location map
-- Complete metadata display
-- Edit title, description, tags
-- Download original file
-- Delete image
-- Add to collection
-- Compare with another image
-
-## 🛠️ Technologies
+## Technologies
 
 ### Frontend
-- **React 18** - UI library
-- **TypeScript** - Type safety
-- **Vite** - Build tool
-- **Tailwind CSS** - Styling (EOI Space theme)
-- **TanStack Query** - Server state management
-- **Jotai** - Client state management
-- **Framer Motion** - Animations
-- **React Router** - Navigation
-- **Leaflet** - 2D maps
-- **Cesium** - 3D globe (ready)
-- **Recharts** - Data visualization
+- React 18, TypeScript, Vite
+- Tailwind CSS
+- TanStack Query (server state)
+- Jotai (client state)
+- Leaflet (2D maps)
+- Cesium (3D globe)
+- Recharts (charts)
 
 ### Backend
-- **AWS Lambda** - Serverless functions
-- **Node.js 20** - Runtime
-- **TypeScript** - Type safety
-- **AWS SDK v3** - AWS services
-- **Sharp** - Image processing
-- **GeoTIFF.js** - Metadata extraction
+- Express.js
+- PostgreSQL with `pg`
+- Multer (file uploads)
+- Sharp (image processing)
+- GeoTIFF.js (metadata extraction)
 
-### Infrastructure
-- **AWS S3** - Object storage
-- **AWS DynamoDB** - NoSQL database
-- **AWS API Gateway** - REST API
-- **AWS CloudWatch** - Logging
-- **Terraform** - Infrastructure as Code
+## Development
 
-### DevOps
-- **GitHub Actions** - CI/CD
-- **ESLint** - Code linting
-- **npm workspaces** - Monorepo
-
-## 🎨 Design
-
-The UI is designed to match the professional aesthetic of [eoi.space](https://eoi.space):
-
-- **Primary Color**: `#2ea3f2` (EOI Space blue)
-- **Font**: Open Sans (300, 400, 600, 700, 800)
-- **Style**: Clean, minimal, corporate
-- **Components**: Cards with subtle shadows, smooth transitions
-- **Responsive**: Mobile, tablet, desktop
-
-## 🚢 Deployment
-
-### GitHub Actions (Recommended)
-
-1. Fork the repository
-2. Set GitHub secrets:
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-3. Push to `main` branch
-4. GitHub Actions handles the rest!
-
-### Manual Deployment
+### Build for Production
 
 ```bash
-# 1. Install dependencies
-npm run install:all
-
-# 2. Build everything
-cd shared && npm run build
-cd ../backend && npm run build
-
-# 3. Deploy infrastructure
-cd ../terraform
-terraform init
-terraform apply
-
-# 4. Update Lambda functions
-# (See DEPLOYMENT.md for details)
-
-# 5. Build and deploy frontend
-cd ../frontend
-npm run build
-aws s3 sync dist/ s3://$(cd ../terraform && terraform output -raw frontend_bucket_name)/
-```
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for complete instructions.
-
-## 💻 Development
-
-### Install Dependencies
-
-```bash
-npm run install:all
-```
-
-### Run Frontend
-
-```bash
-cd frontend
-npm run dev
-# Open http://localhost:5173
-```
-
-### Build Backend
-
-```bash
-cd backend
 npm run build
 ```
 
-### Run Tests
+### Run Production Server
 
 ```bash
-npm test
+npm run start:backend
 ```
 
-### Lint Code
+## Database Schema
 
-```bash
-cd frontend
-npm run lint
+The application uses three main tables:
+
+- **images** - Satellite image metadata
+- **collections** - Image groupings
+- **requests** - Imaging requests (future feature)
+
+Tables are created automatically on server startup.
+
+## File Storage
+
+Uploaded files are stored locally in the `backend/uploads/` directory:
+
+```
+uploads/
+├── images/
+│   └── {image-id}/
+│       └── {filename}
+└── thumbnails/
 ```
 
-## 📊 Cost Estimation
+## License
 
-### Demo Usage (100 images, 100 requests/day)
-- **Total**: ~$3-5/month
-
-### Production Usage (10,000 images, 10,000 requests/day)
-- **Total**: ~$160/month
-
-Detailed breakdown in [DEPLOYMENT.md](DEPLOYMENT.md).
-
-## 🔐 Security
-
-- S3 encryption at rest (AES-256)
-- HTTPS/TLS for data in transit
-- IAM role-based access control
-- Presigned URLs with expiration
-- Public access blocked on images bucket
-- Security best practices followed
-
-## 📈 Performance
-
-- **Frontend**: Code splitting, lazy loading, caching
-- **Backend**: Concurrent Lambda, DynamoDB indexes
-- **Storage**: S3 transfer acceleration ready
-- **CDN**: CloudFront integration ready
-
-## 🤝 Contributing
-
-This is a demo project. For production use:
-
-1. Add authentication (AWS Cognito)
-2. Add CloudFront CDN
-3. Add custom domain
-4. Enable CloudWatch alarms
-5. Add comprehensive tests
-6. Add API rate limiting
-
-## 📄 License
-
-MIT License - see LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- **EOI Space** - Design inspiration and branding
-- **AWS** - Cloud infrastructure
-- **Terraform** - Infrastructure as Code
-- **React** - UI framework
-- **Leaflet** - Mapping library
-- **Cesium** - 3D globe visualization
-
-## 📞 Support
-
-For questions about:
-- **This platform**: Check the documentation files
-- **EOI Space**: Visit [eoi.space](https://eoi.space)
-- **AWS issues**: Review CloudWatch logs
-- **Terraform**: Check `terraform/README.md`
-
-## 🎯 Next Steps
-
-After deployment:
-
-1. **Open your application** using the frontend URL
-2. **Upload a satellite image** (TIFF/GeoTIFF)
-3. **Explore the features**:
-   - View on map
-   - Add to collection
-   - Compare images
-   - Check analytics
-4. **Customize** the design to your needs
-5. **Add authentication** for production use
-
----
-
-**Built with ❤️ for EOI Space**
-
-**Demo Platform | Satellite Imagery Management**
-
-For more information, visit [eoi.space](https://eoi.space)
+MIT License

@@ -16,33 +16,122 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// GIBS tile URL template
+const GIBS_BASE_URL = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best';
+
+export interface GIBSLayerConfig {
+  id: string;
+  date?: string;
+  opacity?: number;
+}
+
 interface MapViewerProps {
   images: SatelliteImage[];
   onImageClick?: (image: SatelliteImage) => void;
   selectedImage?: SatelliteImage;
   height?: string;
+  gibsLayers?: GIBSLayerConfig[];
 }
 
-export function MapViewer({ images, onImageClick, selectedImage, height = '500px' }: MapViewerProps) {
+// GIBS layer metadata for tile URL construction
+const GIBS_LAYER_INFO: Record<string, { tileMatrixSet: string; format: string }> = {
+  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
+  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
+  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
+  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '250m', format: 'png' },
+  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png' },
+  'VIIRS_NOAA20_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png' },
+  'MODIS_Terra_Aerosol_Optical_Depth': { tileMatrixSet: '2km', format: 'png' },
+  'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png' },
+};
+
+function getGibsTileUrl(layerId: string, date: string): string {
+  const info = GIBS_LAYER_INFO[layerId] || { tileMatrixSet: '250m', format: 'jpg' };
+  return `${GIBS_BASE_URL}/${layerId}/default/${date}/${info.tileMatrixSet}/{z}/{y}/{x}.${info.format}`;
+}
+
+export function MapViewer({ images, onImageClick, selectedImage, height = '500px', gibsLayers = [] }: MapViewerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const gibsLayersRef = useRef<Map<string, L.TileLayer>>(new Map());
+  const baseLayerRef = useRef<L.TileLayer | null>(null);
 
+  // Initialize map once
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || mapRef.current) return;
 
-    // Initialize map
-    if (!mapRef.current) {
-      mapRef.current = L.map(containerRef.current).setView([0, 0], 2);
+    mapRef.current = L.map(containerRef.current).setView([0, 0], 2);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(mapRef.current);
-    }
+    baseLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    });
+    baseLayerRef.current.addTo(mapRef.current);
 
-    // Clear existing markers
-    mapRef.current.eachLayer((layer) => {
-      if (layer instanceof L.Marker) {
-        mapRef.current!.removeLayer(layer);
+    // CRITICAL: Destroy map on unmount to prevent memory leak
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        gibsLayersRef.current.clear();
+        baseLayerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Handle GIBS layers
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current;
+    const currentLayerIds = new Set(gibsLayers.map(l => l.id));
+
+    // Remove layers that are no longer enabled
+    gibsLayersRef.current.forEach((layer, id) => {
+      if (!currentLayerIds.has(id)) {
+        map.removeLayer(layer);
+        gibsLayersRef.current.delete(id);
+      }
+    });
+
+    // Add or update enabled layers
+    gibsLayers.forEach(config => {
+      const date = config.date || getYesterday();
+      const layerKey = `${config.id}_${date}`;
+
+      // Check if layer already exists with same date
+      const existingLayer = gibsLayersRef.current.get(config.id);
+      if (existingLayer) {
+        // Update opacity if needed
+        existingLayer.setOpacity(config.opacity ?? 0.7);
+        return;
+      }
+
+      // Create new GIBS layer
+      const tileUrl = getGibsTileUrl(config.id, date);
+      const layer = L.tileLayer(tileUrl, {
+        tileSize: 256,
+        bounds: [[-90, -180], [90, 180]],
+        minZoom: 1,
+        maxZoom: 9,
+        opacity: config.opacity ?? 0.7,
+        attribution: 'NASA GIBS',
+      });
+
+      layer.addTo(map);
+      gibsLayersRef.current.set(config.id, layer);
+    });
+  }, [gibsLayers]);
+
+  // Handle image markers and bounds
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current;
+
+    // Clear existing markers and rectangles (but keep tile layers)
+    map.eachLayer((layer) => {
+      if (layer instanceof L.Marker || layer instanceof L.Rectangle) {
+        map.removeLayer(layer);
       }
     });
 
@@ -65,7 +154,7 @@ export function MapViewer({ images, onImageClick, selectedImage, height = '500px
           onImageClick?.(image);
         });
 
-        marker.addTo(mapRef.current!);
+        marker.addTo(map);
         bounds.push([image.centerPoint.lat, image.centerPoint.lon]);
 
         // Draw bounding box if available
@@ -79,24 +168,22 @@ export function MapViewer({ images, onImageClick, selectedImage, height = '500px
             fillOpacity: 0.1
           });
 
-          rectangle.addTo(mapRef.current!);
+          rectangle.addTo(map);
         }
       }
     });
 
     // Fit map to markers
     if (bounds.length > 0) {
-      mapRef.current.fitBounds(bounds);
+      map.fitBounds(bounds);
     }
-
-    // CRITICAL: Destroy map on unmount to prevent memory leak
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
   }, [images, onImageClick]);
+
+  function getYesterday(): string {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    return date.toISOString().split('T')[0];
+  }
 
   // Highlight selected image
   useEffect(() => {

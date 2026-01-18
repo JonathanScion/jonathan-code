@@ -1,0 +1,198 @@
+/**
+ * NASA GIBS (Global Imagery Browse Services) Helper
+ * Generate tile URLs for map overlays
+ * No API key required
+ */
+
+export interface GIBSLayer {
+  id: string;
+  name: string;
+  description: string;
+  category: 'trueColor' | 'vegetation' | 'thermal' | 'atmosphere' | 'other';
+  format: 'jpg' | 'png';
+  tileMatrixSet: string;
+  hasTime: boolean;
+  startDate?: string; // First available date
+}
+
+// GIBS WMTS base URL
+const GIBS_BASE_URL = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best';
+
+// Supported layers
+export const GIBS_LAYERS: GIBSLayer[] = [
+  {
+    id: 'MODIS_Terra_CorrectedReflectance_TrueColor',
+    name: 'MODIS True Color',
+    description: 'Daily true color imagery from MODIS Terra',
+    category: 'trueColor',
+    format: 'jpg',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2000-02-24',
+  },
+  {
+    id: 'MODIS_Aqua_CorrectedReflectance_TrueColor',
+    name: 'MODIS Aqua True Color',
+    description: 'Daily true color imagery from MODIS Aqua',
+    category: 'trueColor',
+    format: 'jpg',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2002-07-04',
+  },
+  {
+    id: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor',
+    name: 'VIIRS True Color',
+    description: 'Daily true color from VIIRS NOAA-20 (higher resolution)',
+    category: 'trueColor',
+    format: 'jpg',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2018-01-01',
+  },
+  {
+    id: 'MODIS_Terra_NDVI_8Day',
+    name: 'NDVI Vegetation',
+    description: '8-day NDVI vegetation index',
+    category: 'vegetation',
+    format: 'png',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2000-02-18',
+  },
+  {
+    id: 'MODIS_Terra_Land_Surface_Temp_Day',
+    name: 'Surface Temperature (Day)',
+    description: 'Daytime land surface temperature',
+    category: 'thermal',
+    format: 'png',
+    tileMatrixSet: '1km',
+    hasTime: true,
+    startDate: '2000-02-24',
+  },
+  {
+    id: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
+    name: 'Thermal Anomalies',
+    description: 'Fire and thermal anomaly detections',
+    category: 'thermal',
+    format: 'png',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2018-01-01',
+  },
+  {
+    id: 'MODIS_Terra_Aerosol_Optical_Depth',
+    name: 'Aerosol Optical Depth',
+    description: 'Atmospheric aerosol concentration',
+    category: 'atmosphere',
+    format: 'png',
+    tileMatrixSet: '2km',
+    hasTime: true,
+    startDate: '2000-02-24',
+  },
+  {
+    id: 'MODIS_Terra_Cloud_Top_Temp_Day',
+    name: 'Cloud Top Temperature',
+    description: 'Temperature of cloud tops',
+    category: 'atmosphere',
+    format: 'png',
+    tileMatrixSet: '2km',
+    hasTime: true,
+    startDate: '2000-02-24',
+  },
+];
+
+/**
+ * Get all available GIBS layers
+ */
+export function getGIBSLayers(): GIBSLayer[] {
+  return GIBS_LAYERS;
+}
+
+/**
+ * Get layers by category
+ */
+export function getLayersByCategory(category: GIBSLayer['category']): GIBSLayer[] {
+  return GIBS_LAYERS.filter(l => l.category === category);
+}
+
+/**
+ * Generate WMTS tile URL template for Leaflet
+ * Returns a URL template like: https://gibs.../layer/{Time}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.jpg
+ */
+export function getGIBSTileUrl(layerId: string, date?: string): string {
+  const layer = GIBS_LAYERS.find(l => l.id === layerId);
+  if (!layer) {
+    throw new Error(`Unknown GIBS layer: ${layerId}`);
+  }
+
+  // Default to yesterday if no date provided (today's data may not be available yet)
+  const tileDate = date || getYesterday();
+
+  // WMTS REST URL pattern for Leaflet
+  // Leaflet expects {z}/{y}/{x} which maps to TileMatrix/TileRow/TileCol
+  const url = `${GIBS_BASE_URL}/${layerId}/default/${tileDate}/${layer.tileMatrixSet}/{z}/{y}/{x}.${layer.format}`;
+
+  return url;
+}
+
+/**
+ * Generate WMTS capabilities URL for a layer
+ */
+export function getWMTSCapabilitiesUrl(): string {
+  return `${GIBS_BASE_URL}/1.0.0/WMTSCapabilities.xml`;
+}
+
+/**
+ * Check if a date has data available for a layer
+ */
+export function isDateAvailable(layerId: string, date: string): boolean {
+  const layer = GIBS_LAYERS.find(l => l.id === layerId);
+  if (!layer || !layer.startDate) return false;
+
+  const checkDate = new Date(date);
+  const startDate = new Date(layer.startDate);
+  const today = new Date();
+
+  return checkDate >= startDate && checkDate <= today;
+}
+
+/**
+ * Get available date range for a layer
+ */
+export function getDateRange(layerId: string): { start: string; end: string } | null {
+  const layer = GIBS_LAYERS.find(l => l.id === layerId);
+  if (!layer || !layer.startDate) return null;
+
+  return {
+    start: layer.startDate,
+    end: getYesterday(), // Data up to yesterday is typically available
+  };
+}
+
+function getYesterday(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Get Leaflet tile layer configuration
+ */
+export function getLeafletLayerConfig(layerId: string, date?: string) {
+  const layer = GIBS_LAYERS.find(l => l.id === layerId);
+  if (!layer) {
+    throw new Error(`Unknown GIBS layer: ${layerId}`);
+  }
+
+  return {
+    url: getGIBSTileUrl(layerId, date),
+    options: {
+      tileSize: 256,
+      minZoom: 1,
+      maxZoom: 9,
+      attribution: 'NASA GIBS',
+      bounds: [[-90, -180], [90, 180]],
+    },
+  };
+}

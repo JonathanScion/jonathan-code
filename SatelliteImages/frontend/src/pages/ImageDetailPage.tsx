@@ -23,6 +23,8 @@ import { MapViewer } from '@/components/MapViewer';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { TIFFViewer } from '@/components/TIFFViewer';
+import { NasaLayersPanel } from '@/components/NasaLayersPanel';
+import { NasaTimeline } from '@/components/NasaTimeline';
 
 export function ImageDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +32,21 @@ export function ImageDetailPage() {
   const queryClient = useQueryClient();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', tags: '' });
+  const [enabledLayers, setEnabledLayers] = useState<string[]>([]);
+  const [layerDate, setLayerDate] = useState<string>(() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  });
+
+  const handleLayerToggle = (layerId: string, enabled: boolean, date?: string) => {
+    if (enabled) {
+      setEnabledLayers(prev => [...prev, layerId]);
+    } else {
+      setEnabledLayers(prev => prev.filter(id => id !== layerId));
+    }
+    if (date) setLayerDate(date);
+  };
 
   const { data: image, isLoading } = useQuery({
     queryKey: ['image', id],
@@ -149,14 +166,35 @@ export function ImageDetailPage() {
               )}
             </Card>
 
+            {/* NASA Timeline - shows when layers are enabled */}
+            {enabledLayers.length > 0 && (
+              <NasaTimeline
+                selectedDate={layerDate || new Date(Date.now() - 86400000).toISOString().split('T')[0]}
+                onDateChange={setLayerDate}
+                capturedAt={image.capturedAt}
+              />
+            )}
+
             {/* Map */}
             {image.centerPoint && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Location</CardTitle>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Location</span>
+                    {enabledLayers.length > 0 && (
+                      <span className="text-xs text-gray-500 font-normal">
+                        {enabledLayers.length} NASA layer{enabledLayers.length > 1 ? 's' : ''} active
+                      </span>
+                    )}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <MapViewer images={[image]} selectedImage={image} height="400px" />
+                  <MapViewer
+                    images={[image]}
+                    selectedImage={image}
+                    height="400px"
+                    gibsLayers={enabledLayers.map(id => ({ id, date: layerDate }))}
+                  />
                 </CardContent>
               </Card>
             )}
@@ -317,6 +355,17 @@ export function ImageDetailPage() {
                 </Link>
               </CardContent>
             </Card>
+
+            {/* NASA Layers Panel */}
+            <NasaLayersPanel
+              imageId={image.id}
+              centerPoint={image.centerPoint}
+              bounds={image.bounds}
+              capturedAt={image.capturedAt}
+              enrichment={(image as any).nasaEnrichment}
+              onLayerToggle={handleLayerToggle}
+              enabledLayers={enabledLayers}
+            />
           </div>
         </div>
       </div>
