@@ -37,8 +37,8 @@ export function UploadPage() {
         ...metadata,
       });
 
-      // Upload to S3
-      await imagesApi.uploadToS3(uploadResponse.uploadUrl, file, (progress) => {
+      // Upload file to server
+      await imagesApi.uploadFile(uploadResponse.uploadUrl, file, (progress) => {
         setUploadProgress(prev =>
           prev.map(up =>
             up.file === file ? { ...up, progress } : up
@@ -172,7 +172,7 @@ export function UploadPage() {
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-dark-light">
-                <li>✓ Files uploaded to secure S3 storage</li>
+                <li>✓ Files uploaded to local storage</li>
                 <li>✓ Metadata automatically extracted</li>
                 <li>✓ Thumbnails generated</li>
                 <li>✓ Geographic coordinates indexed</li>

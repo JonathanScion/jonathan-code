@@ -46,10 +46,15 @@ export const imagesApi = {
     return data.data!;
   },
 
-  uploadToS3: async (url: string, file: File, onProgress?: (progress: number) => void) => {
-    await axios.put(url, file, {
+  uploadFile: async (uploadUrl: string, file: File, onProgress?: (progress: number) => void) => {
+    // Use multipart form data upload to local server
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // uploadUrl is relative (e.g., /api/images/{id}/upload) - use api instance
+    await api.post(uploadUrl.replace('/api', ''), formData, {
       headers: {
-        'Content-Type': file.type,
+        'Content-Type': 'multipart/form-data',
       },
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
@@ -195,6 +200,220 @@ export const requestsApi = {
     const { data } = await api.post<ApiResponse<ImagingRequest>>(`/requests/${id}/cancel`, {
       cancelReason,
     });
+    return data.data!;
+  },
+};
+
+// NASA Integration APIs
+export interface BoundingBox {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface NasaGranule {
+  id: string;
+  title: string;
+  collectionId: string;
+  satellite: string;
+  sensor: string;
+  startDate: string;
+  endDate: string;
+  bbox: BoundingBox;
+  browseUrl?: string;
+  downloadUrl?: string;
+  cloudCover?: number;
+}
+
+export interface NasaCoverageResult {
+  granules: NasaGranule[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface GIBSLayer {
+  id: string;
+  name: string;
+  description: string;
+  category: 'trueColor' | 'vegetation' | 'thermal' | 'atmosphere' | 'other';
+  format: 'jpg' | 'png';
+  tileMatrixSet: string;
+  hasTime: boolean;
+  startDate?: string;
+}
+
+export interface FirePoint {
+  latitude: number;
+  longitude: number;
+  brightness: number;
+  acqDate: string;
+  acqTime: string;
+  satellite: string;
+  confidence: number;
+  frp: number;
+  dayNight: 'D' | 'N';
+}
+
+export interface FireDataResult {
+  fires: FirePoint[];
+  total: number;
+  source: string;
+  bbox: BoundingBox;
+  dateRange: { start: string; end: string };
+}
+
+export interface WeatherData {
+  date: string;
+  temperature: number;
+  temperatureMin: number;
+  temperatureMax: number;
+  humidity: number;
+  precipitation: number;
+  windSpeed: number;
+  solarRadiation: number;
+  cloudCover?: number;
+}
+
+export interface WeatherSummary {
+  location: { lat: number; lon: number };
+  period: { start: string; end: string };
+  current: WeatherData;
+  average: {
+    temperature: number;
+    humidity: number;
+    precipitation: number;
+  };
+  data: WeatherData[];
+}
+
+export interface SatellitePass {
+  satellite: string;
+  noradId: number;
+  startTime: string;
+  endTime: string;
+  maxElevation: number;
+  startAzimuth: number;
+  endAzimuth: number;
+  duration: number;
+}
+
+export interface PassPredictionResult {
+  location: { lat: number; lon: number; alt: number };
+  passes: SatellitePass[];
+  queriedAt: string;
+}
+
+export interface ImageEnrichment {
+  timestamp: string;
+  ndvi?: {
+    available: boolean;
+    layerUrl?: string;
+  };
+  fireRisk: {
+    level: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+    nearbyFires: number;
+    nearestKm?: number;
+  };
+  weather?: WeatherData;
+  nasaCoverage?: {
+    total: number;
+    satellites: string[];
+  };
+  nextPass?: {
+    satellite: string;
+    time: string;
+    elevation: number;
+  };
+}
+
+export const nasaApi = {
+  // Search NASA CMR for satellite imagery coverage
+  searchCoverage: async (
+    bbox: BoundingBox,
+    startDate?: string,
+    endDate?: string,
+    satellite?: string,
+    page = 1,
+    pageSize = 20
+  ): Promise<NasaCoverageResult> => {
+    const { data } = await api.post<ApiResponse<NasaCoverageResult>>('/nasa/coverage', {
+      bbox,
+      startDate,
+      endDate,
+      satellite,
+      page,
+      pageSize,
+    });
+    return data.data!;
+  },
+
+  // Get available GIBS layers
+  getGibsLayers: async (): Promise<GIBSLayer[]> => {
+    const { data } = await api.get<ApiResponse<GIBSLayer[]>>('/nasa/gibs/layers');
+    return data.data!;
+  },
+
+  // Get GIBS tile URL configuration for Leaflet
+  getGibsTileUrl: async (layerId: string, date?: string): Promise<{ url: string; options: any }> => {
+    const params = new URLSearchParams({ layerId });
+    if (date) params.append('date', date);
+    const { data } = await api.get<ApiResponse<{ url: string; options: any }>>(`/nasa/gibs/tile-url?${params}`);
+    return data.data!;
+  },
+
+  // Get fire data from NASA FIRMS
+  getFireData: async (
+    bbox: BoundingBox,
+    days = 1,
+    source = 'VIIRS_NOAA20_NRT'
+  ): Promise<FireDataResult> => {
+    const { data } = await api.post<ApiResponse<FireDataResult>>('/nasa/fires', {
+      bbox,
+      days,
+      source,
+    });
+    return data.data!;
+  },
+
+  // Get weather data from NASA POWER
+  getWeather: async (
+    lat: number,
+    lon: number,
+    startDate?: string,
+    endDate?: string
+  ): Promise<WeatherSummary> => {
+    const { data } = await api.post<ApiResponse<WeatherSummary>>('/nasa/weather', {
+      lat,
+      lon,
+      startDate,
+      endDate,
+    });
+    return data.data!;
+  },
+
+  // Get satellite pass predictions
+  getSatellitePasses: async (
+    lat: number,
+    lon: number,
+    alt = 0,
+    satellites?: string[],
+    days = 5
+  ): Promise<PassPredictionResult> => {
+    const { data } = await api.post<ApiResponse<PassPredictionResult>>('/nasa/satellites/passes', {
+      lat,
+      lon,
+      alt,
+      satellites,
+      days,
+    });
+    return data.data!;
+  },
+
+  // Enrich an image with NASA data
+  enrichImage: async (imageId: string): Promise<ImageEnrichment> => {
+    const { data } = await api.post<ApiResponse<ImageEnrichment>>(`/nasa/enrich/${imageId}`);
     return data.data!;
   },
 };
