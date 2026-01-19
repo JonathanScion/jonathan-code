@@ -276,7 +276,14 @@ export function NasaLayersPanel({
                         onChange={() => handleLayerToggle(layer.id)}
                         className="rounded text-primary"
                       />
-                      <span>{layer.name}</span>
+                      <span className="flex items-center gap-1">
+                        {layer.name}
+                        {(layer as any).requiresNasaMode && (
+                          <span className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-700 rounded" title="Requires NASA Mode">
+                            NASA
+                          </span>
+                        )}
+                      </span>
                     </label>
                   ))}
                 </div>

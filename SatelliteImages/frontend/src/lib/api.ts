@@ -242,6 +242,7 @@ export interface GIBSLayer {
   tileMatrixSet: string;
   hasTime: boolean;
   startDate?: string;
+  requiresNasaMode?: boolean; // True if layer only works in NASA Mode (EPSG:4326)
 }
 
 export interface FirePoint {

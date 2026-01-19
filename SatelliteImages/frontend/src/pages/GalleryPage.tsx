@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Grid3x3, List, Map as MapIcon, Loader } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { Grid3x3, List, Map as MapIcon, Loader, Trash2, Layers, X } from 'lucide-react';
 import { useAtom } from 'jotai';
 import { imagesApi } from '@/lib/api';
 import { viewModeAtom, searchFiltersAtom, selectedImagesAtom } from '@/lib/store';
@@ -18,11 +19,42 @@ export function GalleryPage() {
   const [selectedImages, setSelectedImages] = useAtom(selectedImagesAtom);
   const [page, setPage] = useState(1);
   const [showGlobe, setShowGlobe] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['images', filters, page],
     queryFn: () => imagesApi.search(filters, page, 20),
   });
+
+  // Bulk delete mutation
+  const deleteSelectedImages = async () => {
+    if (!window.confirm(`Delete ${selectedImages.length} image(s)? This cannot be undone.`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await Promise.all(selectedImages.map(img => imagesApi.delete(img.id)));
+      setSelectedImages([]);
+      queryClient.invalidateQueries({ queryKey: ['images'] });
+    } catch (err) {
+      console.error('Error deleting images:', err);
+      alert('Failed to delete some images');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCompareSelected = () => {
+    if (selectedImages.length >= 2) {
+      navigate(`/compare?image1=${selectedImages[0].id}&image2=${selectedImages[1].id}`);
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedImages([]);
+  };
 
   const handleSearch = useCallback((query: string) => {
     setFilters(prev => ({ ...prev, query }));
@@ -93,8 +125,40 @@ export function GalleryPage() {
           </div>
 
           {selectedImages.length > 0 && (
-            <div className="text-sm text-dark-light">
-              {selectedImages.length} image{selectedImages.length > 1 ? 's' : ''} selected
+            <div className="flex items-center space-x-2 bg-primary/10 px-3 py-1.5 rounded-lg">
+              <span className="text-sm font-medium text-primary">
+                {selectedImages.length} selected
+              </span>
+              <div className="h-4 w-px bg-primary/30" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={deleteSelectedImages}
+                disabled={isDeleting}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </Button>
+              {selectedImages.length >= 2 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCompareSelected}
+                  className="text-primary"
+                >
+                  <Layers className="w-4 h-4 mr-1" />
+                  Compare
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                className="text-gray-500"
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
           )}
         </div>
