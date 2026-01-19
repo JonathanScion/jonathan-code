@@ -16,8 +16,7 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// GIBS tile URL template
-const GIBS_BASE_URL = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best';
+export type ProjectionMode = 'streetMap' | 'nasaMode';
 
 export interface GIBSLayerConfig {
   id: string;
@@ -31,52 +30,175 @@ interface MapViewerProps {
   selectedImage?: SatelliteImage;
   height?: string;
   gibsLayers?: GIBSLayerConfig[];
+  projectionMode?: ProjectionMode;
 }
 
-// GIBS layer metadata for tile URL construction
-const GIBS_LAYER_INFO: Record<string, { tileMatrixSet: string; format: string }> = {
-  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
-  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
-  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg' },
-  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '250m', format: 'png' },
-  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png' },
-  'VIIRS_NOAA20_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png' },
-  'MODIS_Terra_Aerosol_Optical_Depth': { tileMatrixSet: '2km', format: 'png' },
-  'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png' },
+// GIBS layer metadata for EPSG:3857 (Web Mercator / Street Map mode)
+const GIBS_LAYERS_3857: Record<string, { tileMatrixSet: string; format: string; maxZoom: number }> = {
+  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
+  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
+  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
+  'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
+  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'png', maxZoom: 9 },
+  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: 'GoogleMapsCompatible_Level7', format: 'png', maxZoom: 7 },
 };
 
-function getGibsTileUrl(layerId: string, date: string): string {
-  const info = GIBS_LAYER_INFO[layerId] || { tileMatrixSet: '250m', format: 'jpg' };
-  return `${GIBS_BASE_URL}/${layerId}/default/${date}/${info.tileMatrixSet}/{z}/{y}/{x}.${info.format}`;
+// GIBS layer metadata for EPSG:4326 (Geographic / NASA mode) - ALL layers available
+const GIBS_LAYERS_4326: Record<string, { tileMatrixSet: string; format: string; maxZoom: number }> = {
+  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
+  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
+  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
+  'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
+  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
+  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
+  // Fire/thermal layers - only available in EPSG:4326!
+  'MODIS_Terra_Thermal_Anomalies_All': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
+  'MODIS_Aqua_Thermal_Anomalies_All': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
+  'VIIRS_NOAA20_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
+  'VIIRS_SNPP_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
+  // Additional layers only in 4326
+  'MODIS_Terra_Aerosol_Optical_Depth': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
+  'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
+};
+
+function getGibsTileUrl(layerId: string, date: string, mode: ProjectionMode): { url: string; maxZoom: number } {
+  const is4326 = mode === 'nasaMode';
+  const baseUrl = is4326
+    ? 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best'
+    : 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best';
+
+  const layerInfo = is4326 ? GIBS_LAYERS_4326 : GIBS_LAYERS_3857;
+  const info = layerInfo[layerId] || (is4326
+    ? { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 }
+    : { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 });
+
+  return {
+    url: `${baseUrl}/${layerId}/default/${date}/${info.tileMatrixSet}/{z}/{y}/{x}.${info.format}`,
+    maxZoom: info.maxZoom,
+  };
 }
 
-export function MapViewer({ images, onImageClick, selectedImage, height = '500px', gibsLayers = [] }: MapViewerProps) {
+function getYesterday(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().split('T')[0];
+}
+
+// Custom CRS for GIBS EPSG:4326 tiles
+// GIBS uses a specific tile matrix that differs from standard EPSG:4326
+function createGibsCRS4326() {
+  const resolutions = [
+    0.5625,      // Level 0
+    0.28125,     // Level 1
+    0.140625,    // Level 2
+    0.0703125,   // Level 3
+    0.03515625,  // Level 4
+    0.017578125, // Level 5
+    0.0087890625, // Level 6
+    0.00439453125, // Level 7
+    0.002197265625, // Level 8
+    0.0010986328125, // Level 9
+  ];
+
+  return L.CRS.EPSG4326;
+}
+
+export function MapViewer({
+  images,
+  onImageClick,
+  selectedImage,
+  height = '500px',
+  gibsLayers = [],
+  projectionMode = 'streetMap'
+}: MapViewerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const gibsLayersRef = useRef<Map<string, L.TileLayer>>(new Map());
   const baseLayerRef = useRef<L.TileLayer | null>(null);
+  const initialViewSet = useRef(false);
+  const currentModeRef = useRef<ProjectionMode>(projectionMode);
 
-  // Initialize map once
+  // Initialize or reinitialize map when projection mode changes
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current) return;
 
-    mapRef.current = L.map(containerRef.current).setView([0, 0], 2);
+    // If map exists and mode changed, destroy it first
+    if (mapRef.current && currentModeRef.current !== projectionMode) {
+      mapRef.current.remove();
+      mapRef.current = null;
+      gibsLayersRef.current.clear();
+      baseLayerRef.current = null;
+      initialViewSet.current = false;
+    }
 
-    baseLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    });
+    currentModeRef.current = projectionMode;
+
+    // Don't recreate if already exists
+    if (mapRef.current) return;
+
+    const isNasaMode = projectionMode === 'nasaMode';
+
+    // Create map with appropriate CRS
+    const mapOptions: L.MapOptions = {
+      maxZoom: isNasaMode ? 9 : 18,
+      minZoom: 1,
+    };
+
+    if (isNasaMode) {
+      mapOptions.crs = L.CRS.EPSG4326;
+      mapOptions.maxBounds = [[-90, -180], [90, 180]];
+    }
+
+    mapRef.current = L.map(containerRef.current, mapOptions).setView([0, 0], 2);
+
+    // Add appropriate base layer
+    if (isNasaMode) {
+      // Use NASA Blue Marble as base layer for EPSG:4326
+      const yesterday = getYesterday();
+      baseLayerRef.current = L.tileLayer(
+        `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_NextGeneration/default/EPSG4326_500m/{z}/{y}/{x}.jpeg`,
+        {
+          attribution: 'NASA Blue Marble',
+          maxZoom: 8,
+          tileSize: 512,
+          noWrap: true,
+        }
+      );
+    } else {
+      // Use OpenStreetMap for EPSG:3857
+      baseLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18,
+      });
+    }
     baseLayerRef.current.addTo(mapRef.current);
 
-    // CRITICAL: Destroy map on unmount to prevent memory leak
+    // Set initial view if we have images
+    if (images.length > 0) {
+      const firstImageWithBounds = images.find(img => img.bounds);
+      if (firstImageWithBounds?.bounds) {
+        const b = firstImageWithBounds.bounds;
+        mapRef.current.fitBounds([
+          [b.south, b.west],
+          [b.north, b.east]
+        ], { maxZoom: 8, padding: [20, 20] });
+        initialViewSet.current = true;
+      } else if (images[0].centerPoint) {
+        mapRef.current.setView([images[0].centerPoint.lat, images[0].centerPoint.lon], 6);
+        initialViewSet.current = true;
+      }
+    }
+
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
         gibsLayersRef.current.clear();
         baseLayerRef.current = null;
+        initialViewSet.current = false;
       }
     };
-  }, []);
+  }, [projectionMode, images]);
 
   // Handle GIBS layers
   useEffect(() => {
@@ -96,31 +218,39 @@ export function MapViewer({ images, onImageClick, selectedImage, height = '500px
     // Add or update enabled layers
     gibsLayers.forEach(config => {
       const date = config.date || getYesterday();
-      const layerKey = `${config.id}_${date}`;
 
-      // Check if layer already exists with same date
+      // Check if layer already exists
       const existingLayer = gibsLayersRef.current.get(config.id);
       if (existingLayer) {
-        // Update opacity if needed
         existingLayer.setOpacity(config.opacity ?? 0.7);
         return;
       }
 
       // Create new GIBS layer
-      const tileUrl = getGibsTileUrl(config.id, date);
-      const layer = L.tileLayer(tileUrl, {
-        tileSize: 256,
-        bounds: [[-90, -180], [90, 180]],
-        minZoom: 1,
-        maxZoom: 9,
+      const { url: tileUrl, maxZoom } = getGibsTileUrl(config.id, date, projectionMode);
+
+      const layerOptions: L.TileLayerOptions = {
+        tileSize: projectionMode === 'nasaMode' ? 512 : 256,
+        minZoom: 0,
+        maxZoom: projectionMode === 'nasaMode' ? 9 : 18,
+        maxNativeZoom: maxZoom,
         opacity: config.opacity ?? 0.7,
         attribution: 'NASA GIBS',
-      });
+        crossOrigin: 'anonymous',
+        errorTileUrl: '',
+      };
+
+      if (projectionMode === 'nasaMode') {
+        layerOptions.noWrap = true;
+      }
+
+      const layer = L.tileLayer(tileUrl, layerOptions);
 
       layer.addTo(map);
+      layer.bringToFront();
       gibsLayersRef.current.set(config.id, layer);
     });
-  }, [gibsLayers]);
+  }, [gibsLayers, projectionMode]);
 
   // Handle image markers and bounds
   useEffect(() => {
@@ -173,27 +303,34 @@ export function MapViewer({ images, onImageClick, selectedImage, height = '500px
       }
     });
 
-    // Fit map to markers
-    if (bounds.length > 0) {
-      map.fitBounds(bounds);
+    // Only fit bounds on FIRST load
+    if (!initialViewSet.current && bounds.length > 0) {
+      const firstImageWithBounds = images.find(img => img.bounds);
+      if (firstImageWithBounds?.bounds) {
+        const b = firstImageWithBounds.bounds;
+        map.fitBounds([
+          [b.south, b.west],
+          [b.north, b.east]
+        ], { maxZoom: 8, padding: [20, 20] });
+      } else {
+        map.fitBounds(bounds, { maxZoom: 8 });
+      }
+      initialViewSet.current = true;
     }
   }, [images, onImageClick]);
 
-  function getYesterday(): string {
-    const date = new Date();
-    date.setDate(date.getDate() - 1);
-    return date.toISOString().split('T')[0];
-  }
-
   // Highlight selected image
   useEffect(() => {
-    if (selectedImage?.centerPoint && mapRef.current) {
-      mapRef.current.setView(
-        [selectedImage.centerPoint.lat, selectedImage.centerPoint.lon],
-        6,
-        { animate: true }
-      );
+    if (!selectedImage?.centerPoint || !mapRef.current || initialViewSet.current) {
+      return;
     }
+
+    mapRef.current.setView(
+      [selectedImage.centerPoint.lat, selectedImage.centerPoint.lon],
+      6,
+      { animate: true }
+    );
+    initialViewSet.current = true;
   }, [selectedImage]);
 
   return (

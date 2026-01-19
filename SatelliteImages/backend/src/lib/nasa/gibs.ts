@@ -13,16 +13,19 @@ export interface GIBSLayer {
   tileMatrixSet: string;
   hasTime: boolean;
   startDate?: string; // First available date
+  requiresNasaMode?: boolean; // True if layer only works in EPSG:4326 (NASA Mode)
 }
 
 // GIBS WMTS base URL
 const GIBS_BASE_URL = 'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best';
 
-// Supported layers
+// Supported layers - includes both EPSG:3857 and EPSG:4326 only layers
+// Layers with requiresNasaMode: true only work in NASA Mode (EPSG:4326)
 export const GIBS_LAYERS: GIBSLayer[] = [
+  // === TRUE COLOR LAYERS (work in both modes) ===
   {
     id: 'MODIS_Terra_CorrectedReflectance_TrueColor',
-    name: 'MODIS True Color',
+    name: 'MODIS Terra True Color',
     description: 'Daily true color imagery from MODIS Terra',
     category: 'trueColor',
     format: 'jpg',
@@ -42,7 +45,7 @@ export const GIBS_LAYERS: GIBSLayer[] = [
   },
   {
     id: 'VIIRS_NOAA20_CorrectedReflectance_TrueColor',
-    name: 'VIIRS True Color',
+    name: 'VIIRS NOAA-20 True Color',
     description: 'Daily true color from VIIRS NOAA-20 (higher resolution)',
     category: 'trueColor',
     format: 'jpg',
@@ -50,6 +53,17 @@ export const GIBS_LAYERS: GIBSLayer[] = [
     hasTime: true,
     startDate: '2018-01-01',
   },
+  {
+    id: 'VIIRS_SNPP_CorrectedReflectance_TrueColor',
+    name: 'VIIRS SNPP True Color',
+    description: 'Daily true color from VIIRS Suomi NPP',
+    category: 'trueColor',
+    format: 'jpg',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2015-11-24',
+  },
+  // === VEGETATION LAYERS (work in both modes) ===
   {
     id: 'MODIS_Terra_NDVI_8Day',
     name: 'NDVI Vegetation',
@@ -60,6 +74,7 @@ export const GIBS_LAYERS: GIBSLayer[] = [
     hasTime: true,
     startDate: '2000-02-18',
   },
+  // === THERMAL LAYERS (work in both modes) ===
   {
     id: 'MODIS_Terra_Land_Surface_Temp_Day',
     name: 'Surface Temperature (Day)',
@@ -70,35 +85,73 @@ export const GIBS_LAYERS: GIBSLayer[] = [
     hasTime: true,
     startDate: '2000-02-24',
   },
+  // === FIRE DETECTION LAYERS (NASA Mode only - EPSG:4326) ===
+  {
+    id: 'MODIS_Terra_Thermal_Anomalies_All',
+    name: 'MODIS Terra Fire Detection',
+    description: 'Fire and thermal anomaly detections from Terra (NASA Mode only)',
+    category: 'thermal',
+    format: 'png',
+    tileMatrixSet: '1km',
+    hasTime: true,
+    startDate: '2000-02-24',
+    requiresNasaMode: true,
+  },
+  {
+    id: 'MODIS_Aqua_Thermal_Anomalies_All',
+    name: 'MODIS Aqua Fire Detection',
+    description: 'Fire and thermal anomaly detections from Aqua (NASA Mode only)',
+    category: 'thermal',
+    format: 'png',
+    tileMatrixSet: '1km',
+    hasTime: true,
+    startDate: '2002-07-04',
+    requiresNasaMode: true,
+  },
   {
     id: 'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
-    name: 'Thermal Anomalies',
-    description: 'Fire and thermal anomaly detections',
+    name: 'VIIRS NOAA-20 Fire Detection',
+    description: 'High-resolution fire detection from VIIRS (NASA Mode only)',
     category: 'thermal',
     format: 'png',
     tileMatrixSet: '250m',
     hasTime: true,
     startDate: '2018-01-01',
+    requiresNasaMode: true,
   },
+  {
+    id: 'VIIRS_SNPP_Thermal_Anomalies_375m_All',
+    name: 'VIIRS SNPP Fire Detection',
+    description: 'High-resolution fire detection from VIIRS Suomi NPP (NASA Mode only)',
+    category: 'thermal',
+    format: 'png',
+    tileMatrixSet: '250m',
+    hasTime: true,
+    startDate: '2012-01-19',
+    requiresNasaMode: true,
+  },
+  // === ATMOSPHERE LAYERS (NASA Mode only - EPSG:4326) ===
   {
     id: 'MODIS_Terra_Aerosol_Optical_Depth',
     name: 'Aerosol Optical Depth',
-    description: 'Atmospheric aerosol concentration',
+    description: 'Atmospheric aerosol concentration (NASA Mode only)',
     category: 'atmosphere',
     format: 'png',
     tileMatrixSet: '2km',
     hasTime: true,
     startDate: '2000-02-24',
+    requiresNasaMode: true,
   },
   {
     id: 'MODIS_Terra_Cloud_Top_Temp_Day',
     name: 'Cloud Top Temperature',
-    description: 'Temperature of cloud tops',
+    description: 'Temperature of cloud tops (NASA Mode only)',
     category: 'atmosphere',
     format: 'png',
     tileMatrixSet: '2km',
     hasTime: true,
     startDate: '2000-02-24',
+    requiresNasaMode: true,
   },
 ];
 

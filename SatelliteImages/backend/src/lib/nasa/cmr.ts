@@ -85,18 +85,25 @@ export async function searchCMR(params: CMRSearchParams): Promise<CMRSearchResul
     queryParams.temporal = `${start},${end}`;
   }
 
-  // Add collection filter if satellite specified
-  // Note: For multiple collection IDs, axios will serialize array as repeated params
-  let collectionIds: string[] | undefined;
+  // CMR requires collection filtering - can't search all collections at once
+  // Use specified satellite collections or default to common ones
+  let collectionIds: string[];
   if (satellite && COLLECTION_IDS[satellite]) {
     collectionIds = COLLECTION_IDS[satellite];
+  } else {
+    // Default: search Landsat 8/9, Sentinel-2, and MODIS
+    collectionIds = [
+      ...COLLECTION_IDS.LANDSAT_8,
+      ...COLLECTION_IDS.LANDSAT_9,
+      ...COLLECTION_IDS.SENTINEL_2,
+    ];
   }
 
   try {
-    const params: Record<string, any> = { ...queryParams };
-    if (collectionIds && collectionIds.length > 0) {
-      params.collection_concept_id = collectionIds;
-    }
+    const params: Record<string, any> = {
+      ...queryParams,
+      collection_concept_id: collectionIds,
+    };
 
     const response = await axios.get(`${CMR_BASE_URL}/granules.json`, {
       params,

@@ -12,14 +12,16 @@ import {
   CloudOff,
   Satellite as SatelliteIcon,
   Share2,
-  Plus
+  Plus,
+  Map,
+  Globe2
 } from 'lucide-react';
 import { imagesApi } from '@/lib/api';
 import { formatDate, formatBytes, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { MapViewer } from '@/components/MapViewer';
+import { MapViewer, type ProjectionMode } from '@/components/MapViewer';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { TIFFViewer } from '@/components/TIFFViewer';
@@ -33,6 +35,7 @@ export function ImageDetailPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '', tags: '' });
   const [enabledLayers, setEnabledLayers] = useState<string[]>([]);
+  const [projectionMode, setProjectionMode] = useState<ProjectionMode>('streetMap');
   const [layerDate, setLayerDate] = useState<string>(() => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -181,19 +184,54 @@ export function ImageDetailPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span>Location</span>
-                    {enabledLayers.length > 0 && (
-                      <span className="text-xs text-gray-500 font-normal">
-                        {enabledLayers.length} NASA layer{enabledLayers.length > 1 ? 's' : ''} active
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {enabledLayers.length > 0 && (
+                        <span className="text-xs text-gray-500 font-normal">
+                          {enabledLayers.length} layer{enabledLayers.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {/* Projection Mode Toggle */}
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                        <button
+                          onClick={() => setProjectionMode('streetMap')}
+                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
+                            projectionMode === 'streetMap'
+                              ? 'bg-primary text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title="Street Map mode - OpenStreetMap base, limited NASA layers"
+                        >
+                          <Map className="w-3 h-3" />
+                          Street
+                        </button>
+                        <button
+                          onClick={() => setProjectionMode('nasaMode')}
+                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
+                            projectionMode === 'nasaMode'
+                              ? 'bg-primary text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title="NASA mode - Blue Marble base, ALL NASA layers including fire detection"
+                        >
+                          <Globe2 className="w-3 h-3" />
+                          NASA
+                        </button>
+                      </div>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {projectionMode === 'nasaMode' && (
+                    <div className="mb-2 p-2 bg-blue-50 text-blue-700 text-xs rounded">
+                      NASA Mode: All layers available including fire detection. Uses NASA Blue Marble base map.
+                    </div>
+                  )}
                   <MapViewer
                     images={[image]}
                     selectedImage={image}
                     height="400px"
                     gibsLayers={enabledLayers.map(id => ({ id, date: layerDate }))}
+                    projectionMode={projectionMode}
                   />
                 </CardContent>
               </Card>
