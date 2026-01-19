@@ -329,6 +329,65 @@ export interface ImageEnrichment {
   };
 }
 
+// AI Analysis Types
+export interface AIAnalysisFinding {
+  category: string;
+  description: string;
+  confidence: number;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  location?: string;
+  area?: string;
+}
+
+export interface AIAnalysisResult {
+  analysisType: 'general' | 'disaster' | 'landuse' | 'change';
+  timestamp: string;
+  summary: string;
+  confidence: number;
+  findings: AIAnalysisFinding[];
+  recommendations: string[];
+  rawAnalysis?: string;
+  // Disaster-specific fields
+  disasterType?: 'fire' | 'flood' | 'storm' | 'earthquake' | 'drought' | 'none';
+  affectedArea?: string;
+  severity?: 'none' | 'low' | 'moderate' | 'high' | 'extreme';
+  urgency?: 'none' | 'low' | 'medium' | 'high' | 'critical';
+  // Land use-specific fields
+  classifications?: {
+    type: 'urban' | 'agricultural' | 'forest' | 'water' | 'barren' | 'wetland' | 'grassland' | 'snow';
+    percentage: number;
+    confidence: number;
+  }[];
+  dominantType?: string;
+}
+
+export type AnalysisType = 'general' | 'disaster' | 'landuse';
+
+// AI Analysis API
+export const aiApi = {
+  analyzeImage: async (
+    imageId: string,
+    analysisType: AnalysisType = 'general'
+  ): Promise<AIAnalysisResult> => {
+    const { data } = await api.post<ApiResponse<AIAnalysisResult>>(
+      `/ai/analyze/${imageId}`,
+      { analysisType }
+    );
+    return data.data!;
+  },
+
+  compareImages: async (
+    imageId1: string,
+    imageId2: string
+  ): Promise<AIAnalysisResult> => {
+    const { data } = await api.post<ApiResponse<AIAnalysisResult>>('/ai/compare', {
+      imageId1,
+      imageId2,
+    });
+    return data.data!;
+  },
+};
+
 export const nasaApi = {
   // Search NASA CMR for satellite imagery coverage
   searchCoverage: async (
@@ -415,6 +474,206 @@ export const nasaApi = {
   // Enrich an image with NASA data
   enrichImage: async (imageId: string): Promise<ImageEnrichment> => {
     const { data } = await api.post<ApiResponse<ImageEnrichment>>(`/nasa/enrich/${imageId}`);
+    return data.data!;
+  },
+};
+
+// Disaster Monitoring Types
+export interface HazardPoint {
+  id: string;
+  type: 'earthquake' | 'fire' | 'flood' | 'cyclone' | 'volcano' | 'wildfire' | 'other';
+  title: string;
+  latitude: number;
+  longitude: number;
+  severity: 'low' | 'moderate' | 'high' | 'extreme';
+  timestamp: string;
+  details: {
+    magnitude?: number;
+    depth?: number;
+    alertLevel?: string;
+    country?: string;
+    url?: string;
+    [key: string]: any;
+  };
+}
+
+export interface DisasterSummary {
+  timestamp: string;
+  counts: {
+    earthquakes: number;
+    fires: number;
+    floods: number;
+    cyclones: number;
+    volcanoes: number;
+    total: number;
+  };
+  recentSignificant: HazardPoint[];
+  alerts: {
+    red: number;
+    orange: number;
+  };
+}
+
+export interface Earthquake {
+  id: string;
+  title: string;
+  magnitude: number;
+  place: string;
+  time: string;
+  latitude: number;
+  longitude: number;
+  depth: number;
+  url: string;
+  tsunami: boolean;
+  alert?: 'green' | 'yellow' | 'orange' | 'red';
+}
+
+export interface DisasterAlert {
+  id: string;
+  title: string;
+  description: string;
+  hazardType: 'EQ' | 'TC' | 'FL' | 'VO' | 'DR' | 'WF';
+  hazardName: string;
+  alertLevel: 'Green' | 'Orange' | 'Red';
+  severity: number;
+  country: string;
+  latitude: number;
+  longitude: number;
+  startDate: string;
+  url: string;
+}
+
+// Multi-Sensor Fusion Types
+export type TimelineSource = 'satellite' | 'weather' | 'fire' | 'pass' | 'earthquake';
+
+export interface TimelineEntry {
+  id: string;
+  timestamp: string;
+  source: TimelineSource;
+  title: string;
+  description: string;
+  icon: string;
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  data: Record<string, any>;
+}
+
+export interface TimelineResult {
+  entries: TimelineEntry[];
+  dateRange: { start: string; end: string };
+  sources: TimelineSource[];
+  location?: { lat: number; lon: number };
+}
+
+export interface IntelligenceReport {
+  generatedAt: string;
+  location: { lat: number; lon: number };
+  dateRange: { start: string; end: string };
+  summary: string;
+  sections: {
+    title: string;
+    content: string;
+    data?: any;
+  }[];
+  recommendations: string[];
+  riskLevel: 'low' | 'moderate' | 'high' | 'critical';
+  timeline: TimelineEntry[];
+}
+
+// Multi-Sensor Fusion API
+export const fusionApi = {
+  getTimeline: async (
+    lat: number,
+    lon: number,
+    startDate?: string,
+    endDate?: string,
+    sources?: TimelineSource[]
+  ): Promise<TimelineResult> => {
+    const { data } = await api.post<ApiResponse<TimelineResult>>('/fusion/timeline', {
+      lat,
+      lon,
+      startDate,
+      endDate,
+      sources,
+    });
+    return data.data!;
+  },
+
+  getReportForImage: async (imageId: string): Promise<IntelligenceReport> => {
+    const { data } = await api.post<ApiResponse<IntelligenceReport>>(
+      `/fusion/report/${imageId}`
+    );
+    return data.data!;
+  },
+
+  getReportForLocation: async (
+    lat: number,
+    lon: number,
+    date?: string
+  ): Promise<IntelligenceReport> => {
+    const { data } = await api.post<ApiResponse<IntelligenceReport>>('/fusion/report', {
+      lat,
+      lon,
+      date,
+    });
+    return data.data!;
+  },
+};
+
+// Disaster Monitoring API
+export const disastersApi = {
+  getSummary: async (): Promise<DisasterSummary> => {
+    const { data } = await api.get<ApiResponse<DisasterSummary>>('/disasters/summary');
+    return data.data!;
+  },
+
+  getEarthquakes: async (
+    minMagnitude = 2.5,
+    days = 7,
+    limit = 100
+  ): Promise<Earthquake[]> => {
+    const { data } = await api.get<ApiResponse<Earthquake[]>>(
+      `/disasters/earthquakes?minMagnitude=${minMagnitude}&days=${days}&limit=${limit}`
+    );
+    return data.data!;
+  },
+
+  getEarthquakesInBbox: async (
+    bbox: BoundingBox,
+    days = 7,
+    minMagnitude = 2.5
+  ): Promise<Earthquake[]> => {
+    const { data } = await api.post<ApiResponse<Earthquake[]>>(
+      '/disasters/earthquakes/bbox',
+      { bbox, days, minMagnitude }
+    );
+    return data.data!;
+  },
+
+  getFloods: async (limit = 50): Promise<DisasterAlert[]> => {
+    const { data } = await api.get<ApiResponse<DisasterAlert[]>>(
+      `/disasters/floods?limit=${limit}`
+    );
+    return data.data!;
+  },
+
+  getStorms: async (limit = 50): Promise<DisasterAlert[]> => {
+    const { data } = await api.get<ApiResponse<DisasterAlert[]>>(
+      `/disasters/storms?limit=${limit}`
+    );
+    return data.data!;
+  },
+
+  getAlerts: async (limit = 100): Promise<DisasterAlert[]> => {
+    const { data } = await api.get<ApiResponse<DisasterAlert[]>>(
+      `/disasters/alerts?limit=${limit}`
+    );
+    return data.data!;
+  },
+
+  getAllHazards: async (minMagnitude = 2.5, days = 7): Promise<HazardPoint[]> => {
+    const { data } = await api.get<ApiResponse<HazardPoint[]>>(
+      `/disasters/all?minMagnitude=${minMagnitude}&days=${days}`
+    );
     return data.data!;
   },
 };

@@ -20,6 +20,18 @@ import {
   getSatellitePasses,
   enrichImageWithNasaData,
 } from './lib/nasa';
+import { analyzeImage, detectDisasters, classifyLandUse, detectChanges } from './lib/analysis/claude-analysis';
+import {
+  getRecentEarthquakes,
+  getEarthquakesInBbox,
+  getEarthquakeStats,
+  getActiveAlerts,
+  getFloodAlerts,
+  getCycloneAlerts,
+  getDisasterSummary,
+  getAllHazards,
+} from './lib/disasters';
+import { generateTimeline, generateIntelReport } from './lib/fusion';
 import type { SatelliteImage, Collection, SearchFilters, SearchResult, UserStatistics, ImagingRequest } from '@shared/types';
 
 const app = express();
@@ -736,6 +748,301 @@ app.post('/api/nasa/enrich/:imageId', async (req: Request, res: Response) => {
     success(res, enrichment);
   } catch (err: any) {
     console.error('Error enriching image:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ AI ANALYSIS ROUTES ============
+
+// Analyze an image using Claude AI
+app.post('/api/ai/analyze/:imageId', async (req: Request, res: Response) => {
+  try {
+    const { imageId } = req.params;
+    const { analysisType = 'general' } = req.body;
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return error(res, 'AI analysis not configured (ANTHROPIC_API_KEY missing)', 503);
+    }
+
+    // Get image from database
+    const result = await pool.query('SELECT * FROM images WHERE id = $1', [imageId]);
+    const image = rowToImage(result.rows[0]);
+
+    if (!image) {
+      return error(res, 'Image not found', 404);
+    }
+
+    // Get the actual file path
+    const filePath = getFilePath(image.filePath || image.s3Key);
+
+    if (!filePath) {
+      return error(res, 'Image file path not available', 400);
+    }
+
+    // Run AI analysis
+    const analysisResult = await analyzeImage(filePath, analysisType);
+
+    // Store analysis result in database
+    await pool.query(
+      'UPDATE images SET analysis = $1 WHERE id = $2',
+      [JSON.stringify(analysisResult), imageId]
+    );
+
+    success(res, analysisResult);
+  } catch (err: any) {
+    console.error('Error analyzing image:', err);
+    error(res, err.message);
+  }
+});
+
+// Change detection between two images
+app.post('/api/ai/compare', async (req: Request, res: Response) => {
+  try {
+    const { imageId1, imageId2 } = req.body;
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return error(res, 'AI analysis not configured (ANTHROPIC_API_KEY missing)', 503);
+    }
+
+    if (!imageId1 || !imageId2) {
+      return error(res, 'Both imageId1 and imageId2 are required', 400);
+    }
+
+    // Get both images from database
+    const [result1, result2] = await Promise.all([
+      pool.query('SELECT * FROM images WHERE id = $1', [imageId1]),
+      pool.query('SELECT * FROM images WHERE id = $1', [imageId2]),
+    ]);
+
+    const image1 = rowToImage(result1.rows[0]);
+    const image2 = rowToImage(result2.rows[0]);
+
+    if (!image1 || !image2) {
+      return error(res, 'One or both images not found', 404);
+    }
+
+    const filePath1 = getFilePath(image1.filePath || image1.s3Key);
+    const filePath2 = getFilePath(image2.filePath || image2.s3Key);
+
+    if (!filePath1 || !filePath2) {
+      return error(res, 'Image file paths not available', 400);
+    }
+
+    // Run change detection
+    const changeResult = await detectChanges(filePath1, filePath2, {
+      date1: image1.capturedAt?.split('T')[0],
+      date2: image2.capturedAt?.split('T')[0],
+    });
+
+    success(res, changeResult);
+  } catch (err: any) {
+    console.error('Error comparing images:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ DISASTER MONITORING ROUTES ============
+
+// Get disaster summary (global stats)
+app.get('/api/disasters/summary', async (req: Request, res: Response) => {
+  try {
+    // Get fire count from FIRMS if API key available
+    let fireCount = 0;
+    if (process.env.NASA_FIRMS_API_KEY) {
+      try {
+        const fireData = await getFireData(process.env.NASA_FIRMS_API_KEY, {
+          north: 90, south: -90, east: 180, west: -180
+        }, 1, 'VIIRS_NOAA20_NRT');
+        fireCount = fireData.total;
+      } catch {
+        // Ignore fire fetch errors for summary
+      }
+    }
+
+    const summary = await getDisasterSummary(fireCount);
+    success(res, summary);
+  } catch (err: any) {
+    console.error('Error getting disaster summary:', err);
+    error(res, err.message);
+  }
+});
+
+// Get recent earthquakes
+app.get('/api/disasters/earthquakes', async (req: Request, res: Response) => {
+  try {
+    const { minMagnitude = '2.5', days = '7', limit = '100' } = req.query;
+    const earthquakes = await getRecentEarthquakes(
+      parseFloat(minMagnitude as string),
+      parseInt(days as string),
+      parseInt(limit as string)
+    );
+    success(res, earthquakes);
+  } catch (err: any) {
+    console.error('Error getting earthquakes:', err);
+    error(res, err.message);
+  }
+});
+
+// Get earthquakes in a bounding box
+app.post('/api/disasters/earthquakes/bbox', async (req: Request, res: Response) => {
+  try {
+    const { bbox, days = 7, minMagnitude = 2.5, limit = 100 } = req.body;
+
+    if (!bbox || !bbox.north || !bbox.south || !bbox.east || !bbox.west) {
+      return error(res, 'Bounding box (bbox) with north, south, east, west is required', 400);
+    }
+
+    const earthquakes = await getEarthquakesInBbox(bbox, days, minMagnitude, limit);
+    success(res, earthquakes);
+  } catch (err: any) {
+    console.error('Error getting earthquakes in bbox:', err);
+    error(res, err.message);
+  }
+});
+
+// Get earthquake statistics
+app.get('/api/disasters/earthquakes/stats', async (req: Request, res: Response) => {
+  try {
+    const { days = '7' } = req.query;
+    const stats = await getEarthquakeStats(parseInt(days as string));
+    success(res, stats);
+  } catch (err: any) {
+    console.error('Error getting earthquake stats:', err);
+    error(res, err.message);
+  }
+});
+
+// Get flood alerts from GDACS
+app.get('/api/disasters/floods', async (req: Request, res: Response) => {
+  try {
+    const { limit = '50' } = req.query;
+    const floods = await getFloodAlerts(parseInt(limit as string));
+    success(res, floods);
+  } catch (err: any) {
+    console.error('Error getting flood alerts:', err);
+    error(res, err.message);
+  }
+});
+
+// Get active storms/cyclones from GDACS
+app.get('/api/disasters/storms', async (req: Request, res: Response) => {
+  try {
+    const { limit = '50' } = req.query;
+    const storms = await getCycloneAlerts(parseInt(limit as string));
+    success(res, storms);
+  } catch (err: any) {
+    console.error('Error getting storm alerts:', err);
+    error(res, err.message);
+  }
+});
+
+// Get all active GDACS alerts
+app.get('/api/disasters/alerts', async (req: Request, res: Response) => {
+  try {
+    const { limit = '100' } = req.query;
+    const alerts = await getActiveAlerts(parseInt(limit as string));
+    success(res, alerts);
+  } catch (err: any) {
+    console.error('Error getting GDACS alerts:', err);
+    error(res, err.message);
+  }
+});
+
+// Get all hazards combined for map display
+app.get('/api/disasters/all', async (req: Request, res: Response) => {
+  try {
+    const { minMagnitude = '2.5', days = '7' } = req.query;
+    const hazards = await getAllHazards({
+      minMagnitude: parseFloat(minMagnitude as string),
+      days: parseInt(days as string),
+    });
+    success(res, hazards);
+  } catch (err: any) {
+    console.error('Error getting all hazards:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ MULTI-SENSOR FUSION ROUTES ============
+
+// Generate timeline for a location
+app.post('/api/fusion/timeline', async (req: Request, res: Response) => {
+  try {
+    const { lat, lon, startDate, endDate, sources } = req.body;
+
+    if (lat === undefined || lon === undefined) {
+      return error(res, 'lat and lon are required', 400);
+    }
+
+    // Default date range: last 30 days
+    const end = endDate || new Date().toISOString().split('T')[0];
+    const startObj = new Date(end);
+    startObj.setDate(startObj.getDate() - 30);
+    const start = startDate || startObj.toISOString().split('T')[0];
+
+    const timeline = await generateTimeline(lat, lon, start, end, sources, {
+      firmsApiKey: process.env.NASA_FIRMS_API_KEY,
+      n2yoApiKey: process.env.N2YO_API_KEY,
+    });
+
+    success(res, timeline);
+  } catch (err: any) {
+    console.error('Error generating timeline:', err);
+    error(res, err.message);
+  }
+});
+
+// Generate intelligence report for an image
+app.post('/api/fusion/report/:imageId', async (req: Request, res: Response) => {
+  try {
+    const { imageId } = req.params;
+
+    // Get image from database
+    const result = await pool.query('SELECT * FROM images WHERE id = $1', [imageId]);
+    const image = rowToImage(result.rows[0]);
+
+    if (!image) {
+      return error(res, 'Image not found', 404);
+    }
+
+    if (!image.centerPoint) {
+      return error(res, 'Image has no location data', 400);
+    }
+
+    const report = await generateIntelReport(
+      image.centerPoint.lat,
+      image.centerPoint.lon,
+      image.capturedAt,
+      {
+        firmsApiKey: process.env.NASA_FIRMS_API_KEY,
+        n2yoApiKey: process.env.N2YO_API_KEY,
+      }
+    );
+
+    success(res, report);
+  } catch (err: any) {
+    console.error('Error generating intel report:', err);
+    error(res, err.message);
+  }
+});
+
+// Generate intelligence report for a location (not tied to image)
+app.post('/api/fusion/report', async (req: Request, res: Response) => {
+  try {
+    const { lat, lon, date } = req.body;
+
+    if (lat === undefined || lon === undefined) {
+      return error(res, 'lat and lon are required', 400);
+    }
+
+    const report = await generateIntelReport(lat, lon, date, {
+      firmsApiKey: process.env.NASA_FIRMS_API_KEY,
+      n2yoApiKey: process.env.N2YO_API_KEY,
+    });
+
+    success(res, report);
+  } catch (err: any) {
+    console.error('Error generating intel report:', err);
     error(res, err.message);
   }
 });

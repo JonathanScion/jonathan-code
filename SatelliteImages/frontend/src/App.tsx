@@ -9,6 +9,7 @@ import { CollectionsPage } from './pages/CollectionsPage';
 import { CollectionDetailPage } from './pages/CollectionDetailPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { ComparePage } from './pages/ComparePage';
+import { DisasterDashboardPage } from './pages/DisasterDashboardPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/collection/:id" element={<CollectionDetailPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/compare" element={<ComparePage />} />
+          <Route path="/disasters" element={<DisasterDashboardPage />} />
         </Routes>
       </Layout>
     </Router>

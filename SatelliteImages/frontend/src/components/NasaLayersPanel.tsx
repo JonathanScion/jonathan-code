@@ -29,6 +29,7 @@ interface NasaLayersPanelProps {
   enrichment?: ImageEnrichment;
   onLayerToggle?: (layerId: string, enabled: boolean, date?: string) => void;
   enabledLayers?: string[];
+  projectionMode?: 'streetMap' | 'nasaMode';
 }
 
 export function NasaLayersPanel({
@@ -39,6 +40,7 @@ export function NasaLayersPanel({
   enrichment,
   onLayerToggle,
   enabledLayers = [],
+  projectionMode = 'streetMap',
 }: NasaLayersPanelProps) {
   const queryClient = useQueryClient();
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
@@ -265,27 +267,46 @@ export function NasaLayersPanel({
                       className="text-sm border rounded px-2 py-1"
                     />
                   </div>
-                  {gibsLayers?.map(layer => (
-                    <label
-                      key={layer.id}
-                      className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={enabledLayers.includes(layer.id)}
-                        onChange={() => handleLayerToggle(layer.id)}
-                        className="rounded text-primary"
-                      />
-                      <span className="flex items-center gap-1">
-                        {layer.name}
-                        {(layer as any).requiresNasaMode && (
-                          <span className="text-[10px] px-1 py-0.5 bg-blue-100 text-blue-700 rounded" title="Requires NASA Mode">
-                            NASA
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
+                  {gibsLayers?.map(layer => {
+                    const requiresNasa = (layer as any).requiresNasaMode;
+                    const isDisabled = requiresNasa && projectionMode === 'streetMap';
+                    const isChecked = enabledLayers.includes(layer.id);
+
+                    return (
+                      <label
+                        key={layer.id}
+                        className={`flex items-center space-x-2 text-sm p-1 rounded ${
+                          isDisabled
+                            ? 'opacity-50 cursor-not-allowed'
+                            : 'cursor-pointer hover:bg-gray-50'
+                        }`}
+                        title={isDisabled ? 'Switch to NASA mode to use this layer' : layer.description}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked && !isDisabled}
+                          onChange={() => !isDisabled && handleLayerToggle(layer.id)}
+                          disabled={isDisabled}
+                          className="rounded text-primary disabled:opacity-50"
+                        />
+                        <span className="flex items-center gap-1">
+                          {layer.name}
+                          {requiresNasa && (
+                            <span
+                              className={`text-[10px] px-1 py-0.5 rounded ${
+                                isDisabled
+                                  ? 'bg-gray-200 text-gray-500'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                              title={isDisabled ? 'Switch to NASA mode' : 'Available in NASA Mode'}
+                            >
+                              NASA
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </motion.div>
             )}

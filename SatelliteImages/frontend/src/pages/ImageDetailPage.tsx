@@ -27,6 +27,8 @@ import { Input } from '@/components/ui/Input';
 import { TIFFViewer } from '@/components/TIFFViewer';
 import { NasaLayersPanel } from '@/components/NasaLayersPanel';
 import { NasaTimeline } from '@/components/NasaTimeline';
+import { AIAnalysisPanel } from '@/components/AIAnalysisPanel';
+import { FusionTimeline } from '@/components/FusionTimeline';
 
 export function ImageDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +43,25 @@ export function ImageDetailPage() {
     yesterday.setDate(yesterday.getDate() - 1);
     return yesterday.toISOString().split('T')[0];
   });
+
+  // Layers that only work in NASA mode (EPSG:4326)
+  const nasaOnlyLayers = new Set([
+    'MODIS_Terra_Thermal_Anomalies_All',
+    'MODIS_Aqua_Thermal_Anomalies_All',
+    'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
+    'VIIRS_SNPP_Thermal_Anomalies_375m_All',
+    'MODIS_Terra_Aerosol_Optical_Depth',
+    'MODIS_Terra_Cloud_Top_Temp_Day',
+  ]);
+
+  // Auto-clear NASA-only layers when switching to Street mode
+  const handleModeChange = (newMode: ProjectionMode) => {
+    if (newMode === 'streetMap') {
+      // Remove any NASA-only layers that are currently enabled
+      setEnabledLayers(prev => prev.filter(id => !nasaOnlyLayers.has(id)));
+    }
+    setProjectionMode(newMode);
+  };
 
   const handleLayerToggle = (layerId: string, enabled: boolean, date?: string) => {
     if (enabled) {
@@ -193,7 +214,7 @@ export function ImageDetailPage() {
                       {/* Projection Mode Toggle */}
                       <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                         <button
-                          onClick={() => setProjectionMode('streetMap')}
+                          onClick={() => handleModeChange('streetMap')}
                           className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
                             projectionMode === 'streetMap'
                               ? 'bg-primary text-white'
@@ -205,7 +226,7 @@ export function ImageDetailPage() {
                           Street
                         </button>
                         <button
-                          onClick={() => setProjectionMode('nasaMode')}
+                          onClick={() => handleModeChange('nasaMode')}
                           className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
                             projectionMode === 'nasaMode'
                               ? 'bg-primary text-white'
@@ -394,6 +415,19 @@ export function ImageDetailPage() {
               </CardContent>
             </Card>
 
+            {/* AI Analysis Panel */}
+            <AIAnalysisPanel
+              imageId={image.id}
+              existingAnalysis={(image as any).analysis}
+            />
+
+            {/* Multi-Sensor Fusion Timeline */}
+            <FusionTimeline
+              imageId={image.id}
+              centerPoint={image.centerPoint}
+              capturedAt={image.capturedAt}
+            />
+
             {/* NASA Layers Panel */}
             <NasaLayersPanel
               imageId={image.id}
@@ -403,6 +437,7 @@ export function ImageDetailPage() {
               enrichment={(image as any).nasaEnrichment}
               onLayerToggle={handleLayerToggle}
               enabledLayers={enabledLayers}
+              projectionMode={projectionMode}
             />
           </div>
         </div>

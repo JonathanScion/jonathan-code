@@ -118,6 +118,11 @@ export function MapViewer({
   const initialViewSet = useRef(false);
   const currentModeRef = useRef<ProjectionMode>(projectionMode);
 
+  // Store the first image's bounds/center for initial view (avoid array reference issues)
+  const firstImage = images[0];
+  const firstImageBounds = firstImage?.bounds;
+  const firstImageCenter = firstImage?.centerPoint;
+
   // Initialize or reinitialize map when projection mode changes
   useEffect(() => {
     if (!containerRef.current) return;
@@ -154,14 +159,15 @@ export function MapViewer({
     // Add appropriate base layer
     if (isNasaMode) {
       // Use NASA Blue Marble as base layer for EPSG:4326
-      const yesterday = getYesterday();
+      // Blue Marble is a static layer (no time dimension)
       baseLayerRef.current = L.tileLayer(
-        `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_NextGeneration/default/EPSG4326_500m/{z}/{y}/{x}.jpeg`,
+        'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/EPSG4326_500m/{z}/{y}/{x}.jpeg',
         {
           attribution: 'NASA Blue Marble',
           maxZoom: 8,
           tileSize: 512,
           noWrap: true,
+          bounds: [[-90, -180], [90, 180]],
         }
       );
     } else {
@@ -173,20 +179,16 @@ export function MapViewer({
     }
     baseLayerRef.current.addTo(mapRef.current);
 
-    // Set initial view if we have images
-    if (images.length > 0) {
-      const firstImageWithBounds = images.find(img => img.bounds);
-      if (firstImageWithBounds?.bounds) {
-        const b = firstImageWithBounds.bounds;
-        mapRef.current.fitBounds([
-          [b.south, b.west],
-          [b.north, b.east]
-        ], { maxZoom: 8, padding: [20, 20] });
-        initialViewSet.current = true;
-      } else if (images[0].centerPoint) {
-        mapRef.current.setView([images[0].centerPoint.lat, images[0].centerPoint.lon], 6);
-        initialViewSet.current = true;
-      }
+    // Set initial view based on first image
+    if (firstImageBounds) {
+      mapRef.current.fitBounds([
+        [firstImageBounds.south, firstImageBounds.west],
+        [firstImageBounds.north, firstImageBounds.east]
+      ], { maxZoom: 8, padding: [20, 20] });
+      initialViewSet.current = true;
+    } else if (firstImageCenter) {
+      mapRef.current.setView([firstImageCenter.lat, firstImageCenter.lon], 6);
+      initialViewSet.current = true;
     }
 
     return () => {
@@ -198,13 +200,19 @@ export function MapViewer({
         initialViewSet.current = false;
       }
     };
-  }, [projectionMode, images]);
+  // Only depend on projectionMode and the actual bounds/center values, not the array reference
+  }, [projectionMode, firstImageBounds, firstImageCenter]);
 
-  // Handle GIBS layers
+  // Handle GIBS layers - preserve view during layer operations
   useEffect(() => {
     if (!mapRef.current) return;
 
     const map = mapRef.current;
+
+    // Save current view to restore after layer changes
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+
     const currentLayerIds = new Set(gibsLayers.map(l => l.id));
 
     // Remove layers that are no longer enabled
@@ -250,6 +258,15 @@ export function MapViewer({
       layer.bringToFront();
       gibsLayersRef.current.set(config.id, layer);
     });
+
+    // Restore view if it was changed (belt and suspenders)
+    if (initialViewSet.current) {
+      const newCenter = map.getCenter();
+      const newZoom = map.getZoom();
+      if (newCenter.lat !== currentCenter.lat || newCenter.lng !== currentCenter.lng || newZoom !== currentZoom) {
+        map.setView(currentCenter, currentZoom, { animate: false });
+      }
+    }
   }, [gibsLayers, projectionMode]);
 
   // Handle image markers and bounds
