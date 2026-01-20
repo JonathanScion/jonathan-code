@@ -4,8 +4,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
+import sharp from 'sharp';
 
 // Analysis result types
 export interface AIAnalysisResult {
@@ -52,7 +53,7 @@ function getClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-// Convert image file to base64
+// Convert image file to base64 (with TIF conversion for Claude compatibility)
 async function imageToBase64(imagePath: string): Promise<{ data: string; mediaType: string }> {
   const absolutePath = path.isAbsolute(imagePath) ? imagePath : path.resolve(imagePath);
 
@@ -60,19 +61,40 @@ async function imageToBase64(imagePath: string): Promise<{ data: string; mediaTy
     throw new Error(`Image file not found: ${absolutePath}`);
   }
 
+  const ext = path.extname(imagePath).toLowerCase();
+
+  // TIF/TIFF files need to be converted to PNG for Claude API
+  if (ext === '.tif' || ext === '.tiff') {
+    console.log('Converting TIF to PNG for Claude API...');
+    try {
+      // Use sharp with limitInputPixels: false for large satellite images
+      // Resize to reasonable size for API (max 2000x2000)
+      const pngBuffer = await sharp(absolutePath, { limitInputPixels: false })
+        .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
+        .png({ quality: 90 })
+        .toBuffer();
+
+      console.log(`Converted TIF to PNG: ${(pngBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+      return {
+        data: pngBuffer.toString('base64'),
+        mediaType: 'image/png',
+      };
+    } catch (err: any) {
+      console.error('TIF conversion error:', err.message);
+      throw new Error(`Failed to convert TIF image: ${err.message}`);
+    }
+  }
+
+  // For other formats, read directly
   const fileBuffer = fs.readFileSync(absolutePath);
   const base64Data = fileBuffer.toString('base64');
 
-  // Determine media type from extension
-  const ext = path.extname(imagePath).toLowerCase();
   const mediaTypes: Record<string, string> = {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
-    '.tif': 'image/tiff',
-    '.tiff': 'image/tiff',
   };
 
   const mediaType = mediaTypes[ext] || 'image/jpeg';

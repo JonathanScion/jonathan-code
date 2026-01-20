@@ -32,6 +32,7 @@ import {
   getAllHazards,
 } from './lib/disasters';
 import { generateTimeline, generateIntelReport } from './lib/fusion';
+import { extractLocalGeoTIFFMetadata } from './lib/geotiff-utils';
 import type { SatelliteImage, Collection, SearchFilters, SearchResult, UserStatistics, ImagingRequest } from '@shared/types';
 
 const app = express();
@@ -180,14 +181,115 @@ app.post('/api/images/:id/confirm', async (req: Request, res: Response) => {
       updates.cloud_coverage = Math.floor(Math.random() * 30);
     }
 
-    if (!image.centerPoint || !image.bounds) {
-      // Demo coordinates for Cyprus region
-      updates.center_lat = 34.77 + (Math.random() - 0.5) * 0.5;
-      updates.center_lon = 32.87 + (Math.random() - 0.5) * 0.5;
-      updates.bounds_north = 35.0 + (Math.random() - 0.5) * 0.2;
-      updates.bounds_south = 34.5 + (Math.random() - 0.5) * 0.2;
-      updates.bounds_east = 33.1 + (Math.random() - 0.5) * 0.2;
-      updates.bounds_west = 32.6 + (Math.random() - 0.5) * 0.2;
+    // Check if we need to extract/fix coordinates
+    // Coordinates need extraction if: missing OR invalid (outside lat/lon range - likely UTM)
+    const hasValidCoords = image.centerPoint &&
+      image.centerPoint.lat >= -90 && image.centerPoint.lat <= 90 &&
+      image.centerPoint.lon >= -180 && image.centerPoint.lon <= 180;
+
+    if (!hasValidCoords) {
+      console.log('Coordinates missing or invalid, extracting from GeoTIFF...');
+      console.log('Current centerPoint:', image.centerPoint);
+
+      // Try to extract GeoTIFF metadata for location
+      const filePath = getFilePath(image.filePath || image.s3Key);
+      const ext = path.extname(filePath || '').toLowerCase();
+
+      if (filePath && (ext === '.tif' || ext === '.tiff')) {
+        try {
+          console.log('Extracting GeoTIFF metadata from:', filePath);
+          const geoMetadata = await extractLocalGeoTIFFMetadata(filePath);
+
+          if (geoMetadata.centerPoint) {
+            updates.center_lat = geoMetadata.centerPoint.lat;
+            updates.center_lon = geoMetadata.centerPoint.lon;
+            console.log('Extracted center point:', geoMetadata.centerPoint);
+          }
+          if (geoMetadata.bounds) {
+            updates.bounds_north = geoMetadata.bounds.north;
+            updates.bounds_south = geoMetadata.bounds.south;
+            updates.bounds_east = geoMetadata.bounds.east;
+            updates.bounds_west = geoMetadata.bounds.west;
+            console.log('Extracted bounds:', geoMetadata.bounds);
+          }
+          if (geoMetadata.width) {
+            updates.width = geoMetadata.width;
+          }
+          if (geoMetadata.height) {
+            updates.height = geoMetadata.height;
+          }
+          if (geoMetadata.bands) {
+            updates.bands = geoMetadata.bands;
+          }
+          if (geoMetadata.bitDepth) {
+            updates.bit_depth = geoMetadata.bitDepth;
+          }
+        } catch (geoErr: any) {
+          console.error('Failed to extract GeoTIFF metadata:', geoErr.message);
+          // Fall back to demo coordinates if extraction fails
+          updates.center_lat = 34.77 + (Math.random() - 0.5) * 0.5;
+          updates.center_lon = 32.87 + (Math.random() - 0.5) * 0.5;
+          updates.bounds_north = 35.0 + (Math.random() - 0.5) * 0.2;
+          updates.bounds_south = 34.5 + (Math.random() - 0.5) * 0.2;
+          updates.bounds_east = 33.1 + (Math.random() - 0.5) * 0.2;
+          updates.bounds_west = 32.6 + (Math.random() - 0.5) * 0.2;
+        }
+      } else {
+        // Non-GeoTIFF file - use demo coordinates
+        updates.center_lat = 34.77 + (Math.random() - 0.5) * 0.5;
+        updates.center_lon = 32.87 + (Math.random() - 0.5) * 0.5;
+        updates.bounds_north = 35.0 + (Math.random() - 0.5) * 0.2;
+        updates.bounds_south = 34.5 + (Math.random() - 0.5) * 0.2;
+        updates.bounds_east = 33.1 + (Math.random() - 0.5) * 0.2;
+        updates.bounds_west = 32.6 + (Math.random() - 0.5) * 0.2;
+      }
+    }
+
+    // Log final coordinates for debugging
+    if (updates.center_lat !== undefined) {
+      console.log('Final coordinates to save:', { lat: updates.center_lat, lon: updates.center_lon });
+    }
+
+    // Generate thumbnail for large images (especially TIF files)
+    const originalFilePath = getFilePath(image.filePath || image.s3Key);
+    if (originalFilePath) {
+      const ext = path.extname(originalFilePath).toLowerCase();
+      if (ext === '.tif' || ext === '.tiff') {
+        try {
+          const sharp = (await import('sharp')).default;
+          const thumbnailFilename = `thumbnail.png`;
+          const previewFilename = `preview.png`;
+          const imageDir = path.dirname(originalFilePath);
+          const thumbnailPath = path.join(imageDir, thumbnailFilename);
+          const previewPath = path.join(imageDir, previewFilename);
+
+          console.log('Generating thumbnail and preview for large TIF...');
+
+          // Generate small thumbnail (300px) for gallery
+          await sharp(originalFilePath, { limitInputPixels: false })
+            .resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+            .png({ quality: 80 })
+            .toFile(thumbnailPath);
+
+          // Generate larger preview (1200px) for detail page
+          await sharp(originalFilePath, { limitInputPixels: false })
+            .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+            .png({ quality: 85 })
+            .toFile(previewPath);
+
+          // Store relative paths for the thumbnail and preview
+          const relThumbnailPath = path.join('images', imageId, thumbnailFilename).replace(/\\/g, '/');
+          const relPreviewPath = path.join('images', imageId, previewFilename).replace(/\\/g, '/');
+
+          updates.thumbnail_path = relThumbnailPath;
+          updates.preview_path = relPreviewPath;
+
+          console.log('Generated thumbnail:', thumbnailPath);
+          console.log('Generated preview:', previewPath);
+        } catch (thumbErr: any) {
+          console.error('Failed to generate thumbnail:', thumbErr.message);
+        }
+      }
     }
 
     // Build dynamic UPDATE query
@@ -312,9 +414,10 @@ app.post('/api/images/search', async (req: Request, res: Response) => {
 
     const images = result.rows.map((row: any) => {
       const img = rowToImage(row);
-      // Add preview URL
+      // Add preview URL - for gallery list, prefer thumbnail (smaller), then preview, then original
       if (img) {
-        img.previewUrl = getDownloadUrl(img.thumbnailUrl || img.filePath || img.s3Key);
+        const previewSource = img.thumbnailUrl || img.previewUrl || img.filePath || img.s3Key;
+        img.previewUrl = getDownloadUrl(previewSource);
       }
       return img;
     });
@@ -343,8 +446,10 @@ app.get('/api/images/:id', async (req: Request, res: Response) => {
       return error(res, 'Image not found', 404);
     }
 
-    // Add preview URL
-    image.previewUrl = getDownloadUrl(image.thumbnailUrl || image.filePath || image.s3Key);
+    // Add preview URL - prefer larger preview, then thumbnail, then original file
+    // previewUrl from DB contains preview_path (1200px), thumbnailUrl contains thumbnail_path (300px)
+    const previewSource = image.previewUrl || image.thumbnailUrl || image.filePath || image.s3Key;
+    image.previewUrl = getDownloadUrl(previewSource);
 
     success(res, image);
   } catch (err: any) {

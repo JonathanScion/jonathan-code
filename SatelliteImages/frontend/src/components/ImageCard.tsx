@@ -43,11 +43,19 @@ export function ImageCard({ image, onSelect, isSelected, showCheckbox }: ImageCa
           {/* Thumbnail */}
           <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 relative overflow-hidden">
             {image.previewUrl ? (
-              <TIFFViewer
-                url={image.previewUrl}
-                className="w-full h-full"
-                maxDimension={400}
-              />
+              image.previewUrl.toLowerCase().endsWith('.tif') || image.previewUrl.toLowerCase().endsWith('.tiff') ? (
+                <TIFFViewer
+                  url={image.previewUrl}
+                  className="w-full h-full"
+                  maxDimension={400}
+                />
+              ) : (
+                <img
+                  src={image.previewUrl}
+                  alt={image.title || image.filename}
+                  className="w-full h-full object-cover"
+                />
+              )
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <Layers className="w-16 h-16 text-gray-400 mb-2" />
