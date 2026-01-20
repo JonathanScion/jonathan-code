@@ -243,6 +243,96 @@ npm run dev
 
 > "The results show [summary]. Confidence is [X]%. The AI detected [findings] and recommends [recommendations]. This analysis is stored with the image for future reference."
 
+### Use Case Scenarios
+
+#### Scenario 1: General Analysis - Land Survey
+A real estate developer uploads a satellite image of a potential development site. The AI identifies:
+- "Urban area in the northeast quadrant with residential structures"
+- "Undeveloped agricultural land (approximately 60% of image)"
+- "Water body in southwest corner - appears to be a retention pond"
+- **Recommendation:** "Survey the drainage patterns before development"
+
+#### Scenario 2: Disaster Detection - Wildfire Response
+An emergency manager uploads imagery of a forest region. The AI returns:
+- **Disaster Type:** Fire
+- **Severity:** HIGH
+- **Urgency:** CRITICAL
+- "Active burn detected in northwest sector, approximately 2,400 hectares"
+- "Burn scar extending southeast suggests fire spread direction"
+- **Recommendation:** "Evacuate settlements within 10km of active fire front"
+
+#### Scenario 3: Disaster Detection - Flood Assessment
+After heavy rains, an insurance company uploads imagery. The AI identifies:
+- **Disaster Type:** Flood
+- **Severity:** MODERATE
+- "Standing water visible in agricultural fields"
+- "River appears to have breached banks in 3 locations"
+- "Urban area shows flooded streets in low-lying sections"
+- **Recommendation:** "Assess structural damage to buildings in flood zone"
+
+#### Scenario 4: Land Use Classification - Environmental Monitoring
+A conservation organization tracks deforestation. The AI returns:
+```
+Forest:        45% (confidence: 92%)
+Agricultural:  30% (confidence: 88%)
+Urban:         15% (confidence: 95%)
+Water:          5% (confidence: 97%)
+Barren:         5% (confidence: 85%)
+```
+Comparing to last year's analysis shows forest decreased from 55% to 45%.
+
+#### Scenario 5: Land Use Classification - Urban Planning
+A city planner analyzing growth patterns:
+- "Urban sprawl detected extending 3km beyond previous boundary"
+- "Agricultural land conversion rate: approximately 500 hectares"
+- **Recommendation:** "Update zoning maps to reflect actual land use"
+
+#### Scenario 6: Change Detection - Construction Monitoring
+Compare images from January and June:
+- "New building construction detected - 3 structures"
+- "Road extension visible, approximately 2km"
+- "Vegetation clearing in southeast quadrant"
+
+#### Scenario 7: Change Detection - Damage Assessment
+Compare pre-hurricane and post-hurricane imagery:
+- "47 structures show roof damage"
+- "Debris field detected along coastal road"
+- "Flooding extent: approximately 15 square km"
+- **Recommendation:** "Prioritize rescue operations in flooded residential area"
+
+### Demo Walkthrough Examples
+
+**Example A: Agricultural Client Demo**
+1. Upload satellite image of farmland
+2. Run **Land Use Classification**
+3. Show breakdown: crops, fallow land, irrigation
+4. Run **General Analysis** to identify crop health patterns
+5. Generate **Intelligence Report** showing weather data correlation
+
+**Example B: Emergency Management Demo**
+1. Upload image of disaster area
+2. Run **Disaster Detection**
+3. Show severity and urgency levels
+4. Switch to **Disaster Dashboard** to show regional context
+5. Generate **Intelligence Report** with recommendations
+
+**Example C: Insurance/Claims Demo**
+1. Upload pre-event image
+2. Upload post-event image
+3. Run **Change Detection** between them
+4. AI identifies and quantifies damage
+5. Export findings for claims processing
+
+### Why This Matters (Talking Points)
+
+| Capability | Traditional Approach | With AI Analysis |
+|------------|---------------------|------------------|
+| Initial Assessment | Hours (manual review) | Seconds |
+| Analyst Required | Yes, trained specialist | No, automated |
+| Consistency | Varies by analyst | Consistent every time |
+| Scalability | Limited by staff | Thousands of images |
+| Output | Raw observations | Actionable recommendations |
+
 ### Technical Notes
 - Powered by Claude (Anthropic)
 - Requires `ANTHROPIC_API_KEY` in backend
@@ -489,10 +579,68 @@ Click "Generate Intelligence Report" to create comprehensive analysis:
 
 ---
 
+## Demo Images (Pre-Downloaded)
+
+Sample satellite images are included in the `demo-images/` folder:
+
+| Image | Event | Best Demo Use | Tested Result |
+|-------|-------|---------------|---------------|
+| `LA-Fire-2025-before.tif` | LA Fires (Dec 14, 2024) | Change detection baseline | Use with after image |
+| `LA-Fire-2025-after.tif` | LA Fires (Jan 9, 2025) | **BEST: Disaster detection, change detection** | ✓ Fire detected, 78% confidence |
+| `Maui-Lahaina-Fire-2023.tif` | Maui Lahaina (Aug 2023) | Land use classification | Shows green terrain |
+| `Spain-Flood-2024.tif` | Valencia Floods (Oct 2024) | Disaster detection - flood | Untested |
+
+**Source:** [Maxar Open Data Program](https://www.maxar.com/open-data) (CC-BY-NC-4.0)
+
+### Tested AI Analysis Results
+
+**LA-Fire-2025-after.tif (Disaster Detection):**
+- Disaster Type: Fire
+- Severity: Moderate
+- Confidence: 78%
+- Findings: Burn scars, erosion patterns, vegetation damage
+- Recommendations: Monitor for debris flows, assess watershed stability
+
+**LA Fire Before/After (Change Detection) - BEST DEMO:**
+- Confidence: **95%**
+- Summary: "Severe wildfire damage with widespread vegetation loss and burn scarring"
+- All findings rated HIGH severity (90-98% confidence)
+- Excellent actionable recommendations
+
+### Recommended Demo Flow
+
+**Demo 1: Fire Disaster Detection (5 min) - RECOMMENDED**
+1. Upload `LA-Fire-2025-after.tif`
+2. Wait for auto-enrichment
+3. Run AI Analysis → Disaster Detection
+4. **Expected results:** Fire detected, moderate severity, 78% confidence
+5. Show findings: burn scars, erosion, vegetation damage
+6. Enable NASA fire detection layers in NASA Mode
+
+**Demo 2: Change Detection (5 min) - MOST IMPRESSIVE**
+1. Upload `LA-Fire-2025-before.tif` (December - before fires)
+2. Upload `LA-Fire-2025-after.tif` (January - after fires)
+3. Go to Compare page, select both images
+4. Run AI Change Detection
+5. **Expected results:** 95% confidence, severe wildfire damage detected
+6. Show: vegetation loss (98%), fire damage (95%), terrain changes (90%)
+
+**Demo 3: Flood Analysis (3 min)**
+1. Upload `Spain-Flood-2024.tif`
+2. Run AI Analysis → Disaster Detection
+3. Show flood detection results
+4. Switch to Disaster Dashboard → show Spain floods in global context
+
+**Demo 4: Intelligence Report (3 min)**
+1. On any uploaded image, open Multi-Sensor Fusion Timeline
+2. Show timeline with multiple data sources
+3. Click "Generate Intelligence Report"
+4. Walk through: risk level, findings, recommendations
+
 ## Demo Tips
 
-1. **Pre-upload sample images** - Have 5-10 satellite images ready with interesting features
-2. **Choose dramatic examples** - Use images with visible fires, floods, or urban areas
+1. **Use the pre-downloaded images** - They're chosen for dramatic, clear results
+2. **Pre-upload before the demo** - Upload images beforehand to save time
 3. **Pre-generate reports** - AI analysis and intel reports take a few seconds
 4. **Check API keys** - Ensure all services are configured before demo
 5. **Use NASA Mode** - Show fire detection layers for maximum impact
@@ -509,6 +657,42 @@ Click "Generate Intelligence Report" to create comprehensive analysis:
 | No fire data | Verify NASA_FIRMS_API_KEY is set |
 | Map blank in NASA mode | Allow a moment for Blue Marble tiles to load |
 | Disaster data empty | GDACS may be temporarily unavailable, USGS should always work |
+
+---
+
+## Value Proposition for Intelligence Clients
+
+### Why This Platform Stands Out
+
+For organizations doing AI-driven autonomous ISR collection across multiple sensors, this platform demonstrates:
+
+| Capability | What It Proves |
+|------------|----------------|
+| **Automated Intelligence** | No analyst needed for initial assessment - AI provides immediate, actionable insights |
+| **Multi-Source Fusion** | Combines satellite imagery with NASA data, weather, fire detection, seismic data into unified intelligence |
+| **Scalability** | Architecture supports processing thousands of images automatically |
+| **Actionable Output** | Not just raw data - recommendations, risk levels, and prioritized findings |
+| **Real-Time Awareness** | Global disaster dashboard with live feeds from USGS, NASA FIRMS, GDACS |
+| **Speed** | Seconds for AI analysis vs hours for manual review |
+
+### Integration Capabilities
+
+The platform demonstrates integration with:
+- **12+ NASA data sources** (GIBS, CMR, FIRMS, POWER)
+- **USGS earthquake feeds** (real-time)
+- **GDACS disaster alerts** (global coverage)
+- **Claude AI** (vision analysis)
+- **Satellite pass prediction** (N2YO)
+
+All APIs are modular and can be extended to additional sensor types and data sources.
+
+### Key Differentiators
+
+1. **Dual Projection Support** - Works with both standard web maps (EPSG:3857) and NASA's native format (EPSG:4326)
+2. **Intelligence Reports** - Automated generation of multi-source intelligence briefs
+3. **Timeline Fusion** - Chronological view across all data sources for pattern analysis
+4. **Risk Assessment** - Automated LOW/MODERATE/HIGH/CRITICAL classification
+5. **Change Detection** - AI-powered before/after comparison for damage assessment
 
 ---
 

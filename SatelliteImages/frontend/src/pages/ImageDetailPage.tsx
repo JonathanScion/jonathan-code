@@ -163,10 +163,19 @@ export function ImageDetailPage() {
             <Card>
               {image.previewUrl ? (
                 <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 relative overflow-hidden">
-                  <TIFFViewer
-                    url={image.previewUrl}
-                    className="w-full h-full"
-                  />
+                  {/* Use img tag for PNG/JPG previews, TIFFViewer only for TIF files */}
+                  {image.previewUrl.toLowerCase().endsWith('.tif') || image.previewUrl.toLowerCase().endsWith('.tiff') ? (
+                    <TIFFViewer
+                      url={image.previewUrl}
+                      className="w-full h-full"
+                    />
+                  ) : (
+                    <img
+                      src={image.previewUrl}
+                      alt={image.title || image.filename}
+                      className="w-full h-full object-contain"
+                    />
+                  )}
                   <div className="absolute bottom-4 right-4">
                     <Button
                       onClick={() => window.open(image.previewUrl, '_blank')}
