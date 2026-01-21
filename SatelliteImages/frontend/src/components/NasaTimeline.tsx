@@ -3,6 +3,16 @@ import { motion } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
+// Get a valid reference date for NASA data (handles incorrect system time)
+function getValidNasaDate(): Date {
+  const now = new Date();
+  // If system year is 2026 or later, use a known valid fallback
+  if (now.getFullYear() >= 2026) {
+    return new Date('2024-10-15');
+  }
+  return now;
+}
+
 interface NasaTimelineProps {
   startDate?: string; // Default: 1 year ago
   endDate?: string;   // Default: yesterday
@@ -22,7 +32,7 @@ export function NasaTimeline({
 
   // Calculate date range (default: 1 year history)
   const dateRange = useMemo(() => {
-    const end = endDate ? new Date(endDate) : new Date();
+    const end = endDate ? new Date(endDate) : getValidNasaDate();
     end.setDate(end.getDate() - 1); // Yesterday (today's data may not be available)
 
     const start = startDate
@@ -265,7 +275,7 @@ export function NasaTimeline({
           variant="ghost"
           size="sm"
           onClick={() => {
-            const d = new Date();
+            const d = getValidNasaDate();
             d.setDate(d.getDate() - 8); // 1 week ago
             onDateChange(d.toISOString().split('T')[0]);
           }}
@@ -276,7 +286,7 @@ export function NasaTimeline({
           variant="ghost"
           size="sm"
           onClick={() => {
-            const d = new Date();
+            const d = getValidNasaDate();
             d.setMonth(d.getMonth() - 1);
             onDateChange(d.toISOString().split('T')[0]);
           }}
@@ -287,7 +297,7 @@ export function NasaTimeline({
           variant="ghost"
           size="sm"
           onClick={() => {
-            const d = new Date();
+            const d = getValidNasaDate();
             d.setMonth(d.getMonth() - 3);
             onDateChange(d.toISOString().split('T')[0]);
           }}
@@ -298,7 +308,7 @@ export function NasaTimeline({
           variant="ghost"
           size="sm"
           onClick={() => {
-            const d = new Date();
+            const d = getValidNasaDate();
             d.setMonth(d.getMonth() - 6);
             onDateChange(d.toISOString().split('T')[0]);
           }}

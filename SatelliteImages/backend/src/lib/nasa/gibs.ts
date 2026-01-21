@@ -63,16 +63,17 @@ export const GIBS_LAYERS: GIBSLayer[] = [
     hasTime: true,
     startDate: '2015-11-24',
   },
-  // === VEGETATION LAYERS (work in both modes) ===
+  // === VEGETATION LAYERS (NASA Mode only - EPSG:4326) ===
   {
     id: 'MODIS_Terra_NDVI_8Day',
     name: 'NDVI Vegetation',
-    description: '8-day NDVI vegetation index',
+    description: '8-day NDVI vegetation index (NASA Mode only)',
     category: 'vegetation',
     format: 'png',
-    tileMatrixSet: '250m',
+    tileMatrixSet: '1km',
     hasTime: true,
     startDate: '2000-02-18',
+    requiresNasaMode: true,
   },
   // === THERMAL LAYERS (work in both modes) ===
   {

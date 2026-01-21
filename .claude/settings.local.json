@@ -33,7 +33,13 @@
       "WebFetch(domain:github.com)",
       "Bash(npx tsx:*)",
       "Bash(where:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(cmd /c:*)",
+      "Bash(git -C \"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\" status --short)",
+      "Bash(findstr:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell \"[System.IO.File]::Delete\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\nul''\\)\")",
+      "Bash(powershell \"[System.IO.File]::Delete\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\nul''\\)\")"
     ]
   }
 }

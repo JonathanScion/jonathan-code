@@ -434,18 +434,18 @@ export function DisasterDashboardPage() {
             </Card>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* Sidebar - height matches map card (500px map + ~116px header/legend/padding) */}
+          <div className="flex flex-col gap-6 lg:h-[616px]">
             {/* Recent Significant Events */}
-            <Card>
-              <CardHeader>
+            <Card className="flex flex-col flex-grow min-h-0 overflow-hidden">
+              <CardHeader className="flex-shrink-0">
                 <CardTitle className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-orange-500" />
                   Significant Events
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              <CardContent className="flex-grow min-h-0 overflow-hidden">
+                <div className="space-y-3 h-full overflow-y-auto">
                   {summary?.recentSignificant.length ? (
                     summary.recentSignificant.map((hazard) => (
                       <div
@@ -493,7 +493,7 @@ export function DisasterDashboardPage() {
 
             {/* Selected Hazard Details */}
             {selectedHazard && (
-              <Card>
+              <Card className="flex-shrink-0">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     {getHazardIcon(selectedHazard.type)}
@@ -550,7 +550,7 @@ export function DisasterDashboardPage() {
             )}
 
             {/* Data Sources */}
-            <Card>
+            <Card className="flex-shrink-0">
               <CardHeader>
                 <CardTitle className="text-sm">Data Sources</CardTitle>
               </CardHeader>

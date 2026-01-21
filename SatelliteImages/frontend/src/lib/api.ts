@@ -678,4 +678,347 @@ export const disastersApi = {
   },
 };
 
+// ============ AGRICULTURAL INTELLIGENCE TYPES ============
+
+export interface CropType {
+  id: string;
+  name: string;
+}
+
+export interface CropHealthScore {
+  overall: number;
+  ndviScore: number;
+  moistureScore: number;
+  temperatureScore: number;
+  category: 'critical' | 'poor' | 'fair' | 'good' | 'excellent';
+  trend: 'declining' | 'stable' | 'improving';
+}
+
+export interface DroughtIndex {
+  level: 'none' | 'abnormally_dry' | 'moderate' | 'severe' | 'extreme' | 'exceptional';
+  value: number;
+  precipitationDeficit: number;
+  daysWithoutRain: number;
+  soilMoistureEstimate: 'very_low' | 'low' | 'moderate' | 'adequate' | 'high';
+}
+
+export interface YieldPrediction {
+  estimatedYieldPercent: number;
+  confidence: number;
+  factors: {
+    name: string;
+    impact: 'positive' | 'negative' | 'neutral';
+    description: string;
+  }[];
+  riskLevel: 'low' | 'moderate' | 'high' | 'critical';
+}
+
+export interface AgriculturalAnalysis {
+  location: { lat: number; lon: number };
+  analysisDate: string;
+  cropType: string;
+  cropHealth: CropHealthScore;
+  droughtIndex: DroughtIndex;
+  yieldPrediction: YieldPrediction;
+  weatherSummary: {
+    avgTemp: number;
+    totalPrecip: number;
+    avgHumidity: number;
+    growingDegreeDays: number;
+  };
+  recommendations: string[];
+  alerts: {
+    type: 'drought' | 'frost' | 'heat' | 'excess_rain' | 'pest_risk';
+    severity: 'low' | 'medium' | 'high';
+    message: string;
+  }[];
+  seasonalComparison?: {
+    currentNDVI: number;
+    historicalAvgNDVI: number;
+    deviation: number;
+  };
+}
+
+export interface NDVIClassification {
+  category: string;
+  description: string;
+  color: string;
+}
+
+// Agricultural Intelligence API
+export const agricultureApi = {
+  getCropTypes: async (): Promise<CropType[]> => {
+    const { data } = await api.get<ApiResponse<CropType[]>>('/agriculture/crop-types');
+    return data.data!;
+  },
+
+  analyze: async (
+    lat: number,
+    lon: number,
+    ndviValue?: number,
+    cropType?: string,
+    historicalNDVI?: number[]
+  ): Promise<AgriculturalAnalysis> => {
+    const { data } = await api.post<ApiResponse<AgriculturalAnalysis>>('/agriculture/analyze', {
+      lat,
+      lon,
+      ndviValue,
+      cropType,
+      historicalNDVI,
+    });
+    return data.data!;
+  },
+
+  analyzeImage: async (
+    imageId: string,
+    cropType?: string,
+    ndviValue?: number
+  ): Promise<AgriculturalAnalysis> => {
+    const { data } = await api.post<ApiResponse<AgriculturalAnalysis>>(
+      `/agriculture/analyze/${imageId}`,
+      { cropType, ndviValue }
+    );
+    return data.data!;
+  },
+
+  classifyNDVI: async (value: number): Promise<NDVIClassification> => {
+    const { data } = await api.get<ApiResponse<NDVIClassification>>(
+      `/agriculture/ndvi-classify?value=${value}`
+    );
+    return data.data!;
+  },
+};
+
+// ============ AUTOMATED TASKING TYPES ============
+
+export interface CollectionWindow {
+  startTime: string;
+  endTime: string;
+  satellite: string;
+  score: number;
+  cloudCoverage: number;
+  maxElevation: number;
+  sunElevation: number;
+  factors: {
+    name: string;
+    value: number;
+    weight: number;
+    description: string;
+  }[];
+  recommended: boolean;
+}
+
+export interface TaskingRecommendation {
+  location: { lat: number; lon: number };
+  analysisDate: string;
+  optimalWindows: CollectionWindow[];
+  nextBestWindow: CollectionWindow | null;
+  cloudForecast: {
+    date: string;
+    expectedCoverage: number;
+    confidence: number;
+  }[];
+  satelliteSchedule: {
+    satellite: string;
+    nextPass: string;
+    frequency: string;
+  }[];
+  priorities: {
+    urgencyScore: number;
+    factors: string[];
+    recommendedAction: string;
+  };
+}
+
+export interface TaskingCriteria {
+  maxCloudCoverage?: number;
+  minElevation?: number;
+  preferredSatellites?: string[];
+  timeOfDay?: 'morning' | 'midday' | 'afternoon' | 'any';
+  urgency?: 'low' | 'medium' | 'high' | 'critical';
+  sensorType?: 'optical' | 'sar' | 'any';
+}
+
+export interface CloudFreeWindows {
+  windows: { date: string; cloudCoverage: number; suitable: boolean }[];
+  nextClearDay: string | null;
+  avgCloudCoverage: number;
+}
+
+export interface TaskingScore {
+  score: number;
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  recommendation: string;
+}
+
+// Automated Tasking API
+export const taskingApi = {
+  getOptimalWindows: async (
+    lat: number,
+    lon: number,
+    criteria?: TaskingCriteria
+  ): Promise<TaskingRecommendation> => {
+    const { data } = await api.post<ApiResponse<TaskingRecommendation>>(
+      '/tasking/optimal-windows',
+      { lat, lon, criteria }
+    );
+    return data.data!;
+  },
+
+  findCloudFreeWindows: async (
+    lat: number,
+    lon: number,
+    maxCloudCoverage = 15,
+    daysAhead = 7
+  ): Promise<CloudFreeWindows> => {
+    const { data } = await api.post<ApiResponse<CloudFreeWindows>>('/tasking/cloud-free', {
+      lat,
+      lon,
+      maxCloudCoverage,
+      daysAhead,
+    });
+    return data.data!;
+  },
+
+  scoreRequest: async (
+    cloudCoverage: number,
+    elevation: number,
+    timeUntilPass: number,
+    urgency?: 'low' | 'medium' | 'high' | 'critical'
+  ): Promise<TaskingScore> => {
+    const { data } = await api.post<ApiResponse<TaskingScore>>('/tasking/score', {
+      cloudCoverage,
+      elevation,
+      timeUntilPass,
+      urgency,
+    });
+    return data.data!;
+  },
+
+  getRecommendationsForImage: async (
+    imageId: string,
+    criteria?: TaskingCriteria
+  ): Promise<TaskingRecommendation> => {
+    const { data } = await api.post<ApiResponse<TaskingRecommendation>>(
+      `/tasking/recommend/${imageId}`,
+      { criteria }
+    );
+    return data.data!;
+  },
+};
+
+// ============ MARITIME/ASSET TRACKING TYPES ============
+
+export interface Vessel {
+  mmsi: string;
+  name: string;
+  callsign?: string;
+  imo?: string;
+  type: string;
+  typeCode: number;
+  flag?: string;
+  destination?: string;
+  eta?: string;
+  position: { lat: number; lon: number };
+  course: number;
+  speed: number;
+  heading?: number;
+  draught?: number;
+  length?: number;
+  width?: number;
+  lastUpdate: string;
+  status?: string;
+}
+
+export interface Aircraft {
+  icao24: string;
+  callsign?: string;
+  originCountry: string;
+  position: { lat: number; lon: number; altitude: number };
+  velocity: number;
+  heading: number;
+  verticalRate?: number;
+  onGround: boolean;
+  lastUpdate: string;
+  squawk?: string;
+  category?: string;
+}
+
+export interface VesselTrackingResult {
+  data: Vessel[];
+  total: number;
+  timestamp: string;
+  source: string;
+  bounds: BoundingBox;
+}
+
+export interface AircraftTrackingResult {
+  data: Aircraft[];
+  total: number;
+  timestamp: string;
+  source: string;
+  bounds: BoundingBox;
+}
+
+export interface AssetCorrelation {
+  imageId: string;
+  imageBounds: BoundingBox;
+  capturedAt: string;
+  vessels: {
+    vessel: Vessel;
+    distanceKm: number;
+    inFrame: boolean;
+  }[];
+  aircraft: {
+    aircraft: Aircraft;
+    distanceKm: number;
+    inFrame: boolean;
+  }[];
+  summary: {
+    vesselsInFrame: number;
+    vesselTypes: Record<string, number>;
+    aircraftInFrame: number;
+    nearbyPorts: string[];
+  };
+}
+
+// Maritime/Asset Tracking API
+export const maritimeApi = {
+  getVessels: async (bounds: BoundingBox): Promise<VesselTrackingResult> => {
+    const { data } = await api.post<ApiResponse<VesselTrackingResult>>('/maritime/vessels', {
+      bounds,
+    });
+    return data.data!;
+  },
+
+  getAircraft: async (bounds: BoundingBox): Promise<AircraftTrackingResult> => {
+    const { data } = await api.post<ApiResponse<AircraftTrackingResult>>('/maritime/aircraft', {
+      bounds,
+    });
+    return data.data!;
+  },
+
+  correlateWithImage: async (imageId: string): Promise<AssetCorrelation> => {
+    const { data } = await api.post<ApiResponse<AssetCorrelation>>(
+      `/maritime/correlate/${imageId}`
+    );
+    return data.data!;
+  },
+
+  getAllAssets: async (bounds: BoundingBox): Promise<{
+    vessels: VesselTrackingResult;
+    aircraft: AircraftTrackingResult;
+    timestamp: string;
+    bounds: BoundingBox;
+  }> => {
+    const { data } = await api.post<ApiResponse<{
+      vessels: VesselTrackingResult;
+      aircraft: AircraftTrackingResult;
+      timestamp: string;
+      bounds: BoundingBox;
+    }>>('/maritime/all', { bounds });
+    return data.data!;
+  },
+};
+
 export default api;

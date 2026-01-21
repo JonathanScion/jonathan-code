@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Satellite, Upload, FolderOpen, BarChart3, GitCompare, Calendar, AlertTriangle } from 'lucide-react';
+import { Satellite, Upload, FolderOpen, BarChart3, GitCompare, Calendar, AlertTriangle, Ship } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Header() {
@@ -10,6 +10,7 @@ export function Header() {
     { path: '/gallery', label: 'Gallery', icon: FolderOpen },
     { path: '/upload', label: 'Upload', icon: Upload },
     { path: '/disasters', label: 'Disasters', icon: AlertTriangle },
+    { path: '/maritime', label: 'Maritime', icon: Ship },
     { path: '/scheduling', label: 'Scheduling', icon: Calendar },
     { path: '/collections', label: 'Collections', icon: FolderOpen },
     { path: '/compare', label: 'Compare', icon: GitCompare },

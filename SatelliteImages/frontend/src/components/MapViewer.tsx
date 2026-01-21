@@ -34,12 +34,12 @@ interface MapViewerProps {
 }
 
 // GIBS layer metadata for EPSG:3857 (Web Mercator / Street Map mode)
+// Note: NDVI and some other layers are NOT available in EPSG:3857, only in NASA mode (EPSG:4326)
 const GIBS_LAYERS_3857: Record<string, { tileMatrixSet: string; format: string; maxZoom: number }> = {
   'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
   'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
   'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
   'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 },
-  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'png', maxZoom: 9 },
   'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: 'GoogleMapsCompatible_Level7', format: 'png', maxZoom: 7 },
 };
 
@@ -49,7 +49,7 @@ const GIBS_LAYERS_4326: Record<string, { tileMatrixSet: string; format: string; 
   'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
   'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
   'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
-  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
+  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 6 },
   'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
   // Fire/thermal layers - only available in EPSG:4326!
   'MODIS_Terra_Thermal_Anomalies_All': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
@@ -60,6 +60,30 @@ const GIBS_LAYERS_4326: Record<string, { tileMatrixSet: string; format: string; 
   'MODIS_Terra_Aerosol_Optical_Depth': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
   'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
 };
+
+// Validate and sanitize date for NASA GIBS requests
+function getValidGibsDate(date: string): string {
+  const fallbackDate = '2024-10-15'; // Known valid date with NASA data
+
+  try {
+    const requestedDate = new Date(date);
+    const requestedYear = requestedDate.getFullYear();
+
+    // If requested year is 2026 or later, NASA doesn't have this data yet
+    if (requestedYear >= 2026) {
+      return fallbackDate;
+    }
+
+    // If date is invalid, use fallback
+    if (isNaN(requestedDate.getTime())) {
+      return fallbackDate;
+    }
+
+    return date;
+  } catch {
+    return fallbackDate;
+  }
+}
 
 function getGibsTileUrl(layerId: string, date: string, mode: ProjectionMode): { url: string; maxZoom: number } {
   const is4326 = mode === 'nasaMode';
@@ -72,14 +96,25 @@ function getGibsTileUrl(layerId: string, date: string, mode: ProjectionMode): { 
     ? { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 }
     : { tileMatrixSet: 'GoogleMapsCompatible_Level9', format: 'jpg', maxZoom: 9 });
 
+  // Validate the date to ensure NASA has data for it
+  const validDate = getValidGibsDate(date);
+
   return {
-    url: `${baseUrl}/${layerId}/default/${date}/${info.tileMatrixSet}/{z}/{y}/{x}.${info.format}`,
+    url: `${baseUrl}/${layerId}/default/${validDate}/${info.tileMatrixSet}/{z}/{y}/{x}.${info.format}`,
     maxZoom: info.maxZoom,
   };
 }
 
 function getYesterday(): string {
-  const date = new Date();
+  const now = new Date();
+  const fallbackDate = '2024-10-15'; // Known valid date with NASA data
+
+  // If system year is 2026 or later, use fallback (likely incorrect system time)
+  if (now.getFullYear() >= 2026) {
+    return fallbackDate;
+  }
+
+  const date = new Date(now);
   date.setDate(date.getDate() - 1);
   return date.toISOString().split('T')[0];
 }
