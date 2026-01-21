@@ -10,6 +10,7 @@ import { CollectionDetailPage } from './pages/CollectionDetailPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { ComparePage } from './pages/ComparePage';
 import { DisasterDashboardPage } from './pages/DisasterDashboardPage';
+import { MaritimeDashboardPage } from './pages/MaritimeDashboardPage';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/compare" element={<ComparePage />} />
           <Route path="/disasters" element={<DisasterDashboardPage />} />
+          <Route path="/maritime" element={<MaritimeDashboardPage />} />
         </Routes>
       </Layout>
     </Router>

@@ -33,6 +33,9 @@ import {
 } from './lib/disasters';
 import { generateTimeline, generateIntelReport } from './lib/fusion';
 import { extractLocalGeoTIFFMetadata } from './lib/geotiff-utils';
+import { analyzeAgriculture, classifyNDVI, getCropTypes } from './lib/agriculture';
+import { getOptimalCollectionWindows, findCloudFreeWindows, scoreCollectionRequest } from './lib/tasking';
+import { getVesselsInArea, getAircraftInArea, correlateAssetsWithImage } from './lib/maritime';
 import type { SatelliteImage, Collection, SearchFilters, SearchResult, UserStatistics, ImagingRequest } from '@shared/types';
 
 const app = express();
@@ -1148,6 +1151,278 @@ app.post('/api/fusion/report', async (req: Request, res: Response) => {
     success(res, report);
   } catch (err: any) {
     console.error('Error generating intel report:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ AGRICULTURE ROUTES ============
+
+// Get available crop types
+app.get('/api/agriculture/crop-types', (req: Request, res: Response) => {
+  try {
+    const cropTypes = getCropTypes();
+    success(res, cropTypes);
+  } catch (err: any) {
+    console.error('Error fetching crop types:', err);
+    error(res, err.message);
+  }
+});
+
+// Perform comprehensive agricultural analysis
+app.post('/api/agriculture/analyze', async (req: Request, res: Response) => {
+  try {
+    const { lat, lon, ndviValue, cropType, historicalNDVI } = req.body;
+
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      return error(res, 'lat and lon are required and must be numbers', 400);
+    }
+
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return error(res, 'Invalid coordinates', 400);
+    }
+
+    const analysis = await analyzeAgriculture(
+      lat,
+      lon,
+      ndviValue,
+      cropType || 'generic',
+      historicalNDVI
+    );
+
+    success(res, analysis);
+  } catch (err: any) {
+    console.error('Agricultural analysis error:', err);
+    error(res, err.message);
+  }
+});
+
+// Classify an NDVI value
+app.get('/api/agriculture/ndvi-classify', (req: Request, res: Response) => {
+  try {
+    const value = parseFloat(req.query.value as string);
+
+    if (isNaN(value) || value < -1 || value > 1) {
+      return error(res, 'value must be a number between -1 and 1', 400);
+    }
+
+    const classification = classifyNDVI(value);
+    success(res, classification);
+  } catch (err: any) {
+    console.error('NDVI classification error:', err);
+    error(res, err.message);
+  }
+});
+
+// Agricultural analysis for an image
+app.post('/api/agriculture/analyze/:imageId', async (req: Request, res: Response) => {
+  try {
+    const { imageId } = req.params;
+    const { cropType, ndviValue } = req.body;
+
+    // Get image from database
+    const result = await pool.query('SELECT * FROM images WHERE id = $1', [imageId]);
+    const image = rowToImage(result.rows[0]);
+
+    if (!image) {
+      return error(res, 'Image not found', 404);
+    }
+
+    if (!image.centerPoint) {
+      return error(res, 'Image has no location data', 400);
+    }
+
+    const analysis = await analyzeAgriculture(
+      image.centerPoint.lat,
+      image.centerPoint.lon,
+      ndviValue,
+      cropType || 'generic'
+    );
+
+    success(res, analysis);
+  } catch (err: any) {
+    console.error('Agricultural image analysis error:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ AUTOMATED TASKING ROUTES ============
+
+// Get optimal collection windows for a location
+app.post('/api/tasking/optimal-windows', async (req: Request, res: Response) => {
+  try {
+    const { lat, lon, criteria } = req.body;
+
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      return error(res, 'lat and lon are required', 400);
+    }
+
+    const recommendation = await getOptimalCollectionWindows(
+      lat,
+      lon,
+      criteria || {},
+      process.env.N2YO_API_KEY
+    );
+
+    success(res, recommendation);
+  } catch (err: any) {
+    console.error('Tasking recommendation error:', err);
+    error(res, err.message);
+  }
+});
+
+// Find cloud-free collection windows
+app.post('/api/tasking/cloud-free', async (req: Request, res: Response) => {
+  try {
+    const { lat, lon, maxCloudCoverage = 15, daysAhead = 7 } = req.body;
+
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      return error(res, 'lat and lon are required', 400);
+    }
+
+    const windows = await findCloudFreeWindows(lat, lon, maxCloudCoverage, daysAhead);
+    success(res, windows);
+  } catch (err: any) {
+    console.error('Cloud-free windows error:', err);
+    error(res, err.message);
+  }
+});
+
+// Score a collection request
+app.post('/api/tasking/score', (req: Request, res: Response) => {
+  try {
+    const { cloudCoverage, elevation, timeUntilPass, urgency = 'medium' } = req.body;
+
+    if (cloudCoverage === undefined || elevation === undefined || timeUntilPass === undefined) {
+      return error(res, 'cloudCoverage, elevation, and timeUntilPass are required', 400);
+    }
+
+    const score = scoreCollectionRequest(cloudCoverage, elevation, timeUntilPass, urgency);
+    success(res, score);
+  } catch (err: any) {
+    console.error('Tasking score error:', err);
+    error(res, err.message);
+  }
+});
+
+// Get tasking recommendations for an image location
+app.post('/api/tasking/recommend/:imageId', async (req: Request, res: Response) => {
+  try {
+    const { imageId } = req.params;
+    const { criteria } = req.body;
+
+    const result = await pool.query('SELECT * FROM images WHERE id = $1', [imageId]);
+    const image = rowToImage(result.rows[0]);
+
+    if (!image) {
+      return error(res, 'Image not found', 404);
+    }
+
+    if (!image.centerPoint) {
+      return error(res, 'Image has no location data', 400);
+    }
+
+    const recommendation = await getOptimalCollectionWindows(
+      image.centerPoint.lat,
+      image.centerPoint.lon,
+      criteria || {},
+      process.env.N2YO_API_KEY
+    );
+
+    success(res, recommendation);
+  } catch (err: any) {
+    console.error('Image tasking recommendation error:', err);
+    error(res, err.message);
+  }
+});
+
+// ============ MARITIME/ASSET TRACKING ROUTES ============
+
+// Get vessels in an area
+app.post('/api/maritime/vessels', async (req: Request, res: Response) => {
+  try {
+    const { bounds } = req.body;
+
+    if (!bounds || !bounds.north || !bounds.south || !bounds.east || !bounds.west) {
+      return error(res, 'Bounding box (bounds) with north, south, east, west is required', 400);
+    }
+
+    const vessels = await getVesselsInArea(bounds, process.env.AIS_API_KEY);
+    success(res, vessels);
+  } catch (err: any) {
+    console.error('Vessel tracking error:', err);
+    error(res, err.message);
+  }
+});
+
+// Get aircraft in an area (OpenSky Network - free, no API key)
+app.post('/api/maritime/aircraft', async (req: Request, res: Response) => {
+  try {
+    const { bounds } = req.body;
+
+    if (!bounds || !bounds.north || !bounds.south || !bounds.east || !bounds.west) {
+      return error(res, 'Bounding box (bounds) with north, south, east, west is required', 400);
+    }
+
+    const aircraft = await getAircraftInArea(bounds);
+    success(res, aircraft);
+  } catch (err: any) {
+    console.error('Aircraft tracking error:', err);
+    error(res, err.message);
+  }
+});
+
+// Correlate assets with an image
+app.post('/api/maritime/correlate/:imageId', async (req: Request, res: Response) => {
+  try {
+    const { imageId } = req.params;
+
+    const result = await pool.query('SELECT * FROM images WHERE id = $1', [imageId]);
+    const image = rowToImage(result.rows[0]);
+
+    if (!image) {
+      return error(res, 'Image not found', 404);
+    }
+
+    if (!image.bounds) {
+      return error(res, 'Image has no bounds data', 400);
+    }
+
+    const correlation = await correlateAssetsWithImage(
+      imageId,
+      image.bounds,
+      image.capturedAt || new Date().toISOString(),
+      process.env.AIS_API_KEY
+    );
+
+    success(res, correlation);
+  } catch (err: any) {
+    console.error('Asset correlation error:', err);
+    error(res, err.message);
+  }
+});
+
+// Get all assets (vessels + aircraft) in an area
+app.post('/api/maritime/all', async (req: Request, res: Response) => {
+  try {
+    const { bounds } = req.body;
+
+    if (!bounds || !bounds.north || !bounds.south || !bounds.east || !bounds.west) {
+      return error(res, 'Bounding box (bounds) with north, south, east, west is required', 400);
+    }
+
+    const [vessels, aircraft] = await Promise.all([
+      getVesselsInArea(bounds, process.env.AIS_API_KEY),
+      getAircraftInArea(bounds),
+    ]);
+
+    success(res, {
+      vessels,
+      aircraft,
+      timestamp: new Date().toISOString(),
+      bounds,
+    });
+  } catch (err: any) {
+    console.error('Asset tracking error:', err);
     error(res, err.message);
   }
 });

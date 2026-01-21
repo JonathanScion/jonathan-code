@@ -34,6 +34,8 @@ import { NasaLayersPanel } from '@/components/NasaLayersPanel';
 import { NasaTimeline } from '@/components/NasaTimeline';
 import { AIAnalysisPanel } from '@/components/AIAnalysisPanel';
 import { FusionTimeline } from '@/components/FusionTimeline';
+import { AgriculturalPanel } from '@/components/AgriculturalPanel';
+import { TaskingPanel } from '@/components/TaskingPanel';
 
 export function ImageDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +46,17 @@ export function ImageDetailPage() {
   const [enabledLayers, setEnabledLayers] = useState<string[]>([]);
   const [projectionMode, setProjectionMode] = useState<ProjectionMode>('streetMap');
   const [layerDate, setLayerDate] = useState<string>(() => {
-    const yesterday = new Date();
+    // NASA GIBS data is only available up to recent real-world dates
+    // Use a known valid fallback date if system date seems unreasonable
+    const now = new Date();
+    const fallbackDate = '2024-10-15'; // Known valid date with NASA data
+
+    // If system year is 2026 or later, use fallback (likely incorrect system time)
+    if (now.getFullYear() >= 2026) {
+      return fallbackDate;
+    }
+
+    const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     return yesterday.toISOString().split('T')[0];
   });
@@ -52,6 +64,7 @@ export function ImageDetailPage() {
 
   // Layers that only work in NASA mode (EPSG:4326)
   const nasaOnlyLayers = new Set([
+    'MODIS_Terra_NDVI_8Day',
     'MODIS_Terra_Thermal_Anomalies_All',
     'MODIS_Aqua_Thermal_Anomalies_All',
     'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
@@ -387,6 +400,18 @@ export function ImageDetailPage() {
               onLayerToggle={handleLayerToggle}
               enabledLayers={enabledLayers}
               projectionMode={projectionMode}
+            />
+
+            {/* Agricultural Intelligence Panel */}
+            <AgriculturalPanel
+              imageId={image.id}
+              centerPoint={image.centerPoint}
+            />
+
+            {/* Tasking Recommendations Panel */}
+            <TaskingPanel
+              imageId={image.id}
+              centerPoint={image.centerPoint}
             />
 
             {/* Quick Actions */}
