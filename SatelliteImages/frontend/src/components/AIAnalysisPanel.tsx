@@ -35,7 +35,7 @@ export function AIAnalysisPanel({
   existingAnalysis,
   onAnalysisComplete,
 }: AIAnalysisPanelProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [selectedType, setSelectedType] = useState<AnalysisType>('general');
   const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(existingAnalysis || null);
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -12,6 +13,8 @@ import {
   ExternalLink,
   Filter,
   MapPin,
+  X,
+  ImageIcon,
 } from 'lucide-react';
 import { disastersApi, nasaApi, type HazardPoint, type DisasterSummary, type BoundingBox } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -37,12 +40,42 @@ const SEVERITY_SIZES: Record<string, number> = {
   low: 6,
 };
 
+// Helper to calculate distance between two points (in km)
+function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export function DisasterDashboardPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<L.CircleMarker[]>([]);
+  const imageMarkerRef = useRef<L.Marker | null>(null);
+  const radiusCircleRef = useRef<L.Circle | null>(null);
   const [filter, setFilter] = useState<HazardFilter>('all');
   const [selectedHazard, setSelectedHazard] = useState<HazardPoint | null>(null);
+
+  // Read location filter from URL params
+  const locationFilter = {
+    lat: searchParams.get('lat') ? parseFloat(searchParams.get('lat')!) : null,
+    lon: searchParams.get('lon') ? parseFloat(searchParams.get('lon')!) : null,
+    radius: searchParams.get('radius') ? parseFloat(searchParams.get('radius')!) : 100, // default 100km
+    imageId: searchParams.get('imageId') || null,
+    imageName: searchParams.get('imageName') || null,
+  };
+  const hasLocationFilter = locationFilter.lat !== null && locationFilter.lon !== null;
+
+  const clearLocationFilter = () => {
+    navigate('/disasters');
+  };
 
   // Fetch disaster summary
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery({
@@ -62,9 +95,15 @@ export function DisasterDashboardPage() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    // If location filter, center on that; otherwise show world
+    const initialCenter: [number, number] = hasLocationFilter
+      ? [locationFilter.lat!, locationFilter.lon!]
+      : [20, 0];
+    const initialZoom = hasLocationFilter ? 7 : 2;
+
     mapRef.current = L.map(containerRef.current, {
-      center: [20, 0],
-      zoom: 2,
+      center: initialCenter,
+      zoom: initialZoom,
       minZoom: 2,
       maxZoom: 12,
     });
@@ -81,6 +120,58 @@ export function DisasterDashboardPage() {
     };
   }, []);
 
+  // Update map view and add image marker when location filter changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Clear previous image marker and radius circle
+    if (imageMarkerRef.current) {
+      imageMarkerRef.current.remove();
+      imageMarkerRef.current = null;
+    }
+    if (radiusCircleRef.current) {
+      radiusCircleRef.current.remove();
+      radiusCircleRef.current = null;
+    }
+
+    if (hasLocationFilter) {
+      // Center map on location
+      mapRef.current.setView([locationFilter.lat!, locationFilter.lon!], 7);
+
+      // Add marker for image location
+      const imageIcon = L.divIcon({
+        className: 'custom-image-marker',
+        html: `<div style="background: #10B981; border: 3px solid white; border-radius: 50%; width: 20px; height: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <circle cx="9" cy="9" r="2"/>
+            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+          </svg>
+        </div>`,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+
+      imageMarkerRef.current = L.marker([locationFilter.lat!, locationFilter.lon!], { icon: imageIcon })
+        .addTo(mapRef.current)
+        .bindPopup(`<div class="p-2">
+          <p class="font-semibold text-sm">${locationFilter.imageName || 'Image Location'}</p>
+          <p class="text-xs text-gray-500">${locationFilter.lat!.toFixed(4)}, ${locationFilter.lon!.toFixed(4)}</p>
+          <p class="text-xs text-gray-500">Showing disasters within ${locationFilter.radius}km</p>
+        </div>`);
+
+      // Add radius circle
+      radiusCircleRef.current = L.circle([locationFilter.lat!, locationFilter.lon!], {
+        radius: locationFilter.radius * 1000, // Convert km to meters
+        color: '#10B981',
+        fillColor: '#10B981',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '5, 5',
+      }).addTo(mapRef.current);
+    }
+  }, [hasLocationFilter, locationFilter.lat, locationFilter.lon, locationFilter.radius, locationFilter.imageName]);
+
   // Update markers when hazards or filter changes
   useEffect(() => {
     if (!mapRef.current || !hazards) return;
@@ -89,10 +180,18 @@ export function DisasterDashboardPage() {
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    // Filter hazards
-    const filteredHazards = filter === 'all'
+    // Filter hazards by type
+    let filteredHazards = filter === 'all'
       ? hazards
       : hazards.filter(h => h.type === filter || (filter === 'fire' && h.type === 'wildfire'));
+
+    // Filter by location if location filter is active
+    if (hasLocationFilter) {
+      filteredHazards = filteredHazards.filter(h => {
+        const distance = getDistanceKm(locationFilter.lat!, locationFilter.lon!, h.latitude, h.longitude);
+        return distance <= locationFilter.radius;
+      });
+    }
 
     // Add new markers
     filteredHazards.forEach(hazard => {
@@ -126,7 +225,7 @@ export function DisasterDashboardPage() {
       marker.addTo(mapRef.current!);
       markersRef.current.push(marker);
     });
-  }, [hazards, filter]);
+  }, [hazards, filter, hasLocationFilter, locationFilter.lat, locationFilter.lon, locationFilter.radius]);
 
   const handleRefresh = () => {
     refetchSummary();
@@ -248,6 +347,29 @@ export function DisasterDashboardPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Location Filter Banner */}
+        {hasLocationFilter && (
+          <div className="flex items-center justify-between gap-4 mb-6 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 rounded-full">
+                <ImageIcon className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="font-medium text-green-800">
+                  Filtering disasters near: {locationFilter.imageName || 'Image'}
+                </p>
+                <p className="text-sm text-green-600">
+                  Showing hazards within {locationFilter.radius}km of {locationFilter.lat!.toFixed(4)}, {locationFilter.lon!.toFixed(4)}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={clearLocationFilter}>
+              <X className="w-4 h-4 mr-1" />
+              Clear Filter
+            </Button>
+          </div>
+        )}
 
         {/* Alert Level Indicators */}
         {summary && (summary.alerts.red > 0 || summary.alerts.orange > 0) && (

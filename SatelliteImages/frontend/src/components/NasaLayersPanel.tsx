@@ -43,6 +43,7 @@ export function NasaLayersPanel({
   projectionMode = 'streetMap',
 }: NasaLayersPanelProps) {
   const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     coverage: false,
     layers: true,
@@ -151,23 +152,43 @@ export function NasaLayersPanel({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between">
-          <span className="flex items-center">
+          <button
+            className="flex items-center w-full text-left"
+            onClick={() => setExpanded(!expanded)}
+          >
             <Satellite className="w-5 h-5 mr-2 text-primary" />
-            NASA Layers
-          </span>
-          {!enrichment && (
+            <span>NASA Layers</span>
+            {expanded ? (
+              <ChevronDown className="w-4 h-4 ml-auto" />
+            ) : (
+              <ChevronRight className="w-4 h-4 ml-auto" />
+            )}
+          </button>
+          {!enrichment && expanded && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => enrichMutation.mutate()}
+              onClick={(e) => {
+                e.stopPropagation();
+                enrichMutation.mutate();
+              }}
               disabled={enrichMutation.isPending}
+              className="ml-2"
             >
               <RefreshCw className={`w-4 h-4 ${enrichMutation.isPending ? 'animate-spin' : ''}`} />
             </Button>
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <CardContent className="space-y-4">
         {/* NASA Coverage Section */}
         <div className="border-b border-gray-200 pb-3">
           <button
@@ -524,6 +545,9 @@ export function NasaLayersPanel({
           </AnimatePresence>
         </div>
       </CardContent>
+    </motion.div>
+  )}
+</AnimatePresence>
     </Card>
   );
 }

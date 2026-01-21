@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
   Download,
@@ -14,7 +15,11 @@ import {
   Share2,
   Plus,
   Map,
-  Globe2
+  Globe2,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+  AlertTriangle
 } from 'lucide-react';
 import { imagesApi } from '@/lib/api';
 import { formatDate, formatBytes, formatDateTime } from '@/lib/utils';
@@ -43,6 +48,7 @@ export function ImageDetailPage() {
     yesterday.setDate(yesterday.getDate() - 1);
     return yesterday.toISOString().split('T')[0];
   });
+  const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
 
   // Layers that only work in NASA mode (EPSG:4326)
   const nasaOnlyLayers = new Set([
@@ -156,11 +162,11 @@ export function ImageDetailPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Image Viewer */}
-            <Card>
+        {/* Top Section: Image + Metadata aligned top and bottom */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Image Viewer */}
+          <div className="lg:col-span-2">
+            <Card className="h-full">
               {image.previewUrl ? (
                 <div className="aspect-video bg-gradient-to-br from-gray-200 to-gray-300 relative overflow-hidden">
                   {/* Use img tag for PNG/JPG previews, TIFFViewer only for TIF files */}
@@ -198,96 +204,16 @@ export function ImageDetailPage() {
                 </div>
               )}
             </Card>
-
-            {/* NASA Timeline - shows when layers are enabled */}
-            {enabledLayers.length > 0 && (
-              <NasaTimeline
-                selectedDate={layerDate || new Date(Date.now() - 86400000).toISOString().split('T')[0]}
-                onDateChange={setLayerDate}
-                capturedAt={image.capturedAt}
-              />
-            )}
-
-            {/* Map */}
-            {image.centerPoint && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Location</span>
-                    <div className="flex items-center gap-2">
-                      {enabledLayers.length > 0 && (
-                        <span className="text-xs text-gray-500 font-normal">
-                          {enabledLayers.length} layer{enabledLayers.length > 1 ? 's' : ''}
-                        </span>
-                      )}
-                      {/* Projection Mode Toggle */}
-                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                        <button
-                          onClick={() => handleModeChange('streetMap')}
-                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
-                            projectionMode === 'streetMap'
-                              ? 'bg-primary text-white'
-                              : 'bg-white text-gray-600 hover:bg-gray-50'
-                          }`}
-                          title="Street Map mode - OpenStreetMap base, limited NASA layers"
-                        >
-                          <Map className="w-3 h-3" />
-                          Street
-                        </button>
-                        <button
-                          onClick={() => handleModeChange('nasaMode')}
-                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
-                            projectionMode === 'nasaMode'
-                              ? 'bg-primary text-white'
-                              : 'bg-white text-gray-600 hover:bg-gray-50'
-                          }`}
-                          title="NASA mode - Blue Marble base, ALL NASA layers including fire detection"
-                        >
-                          <Globe2 className="w-3 h-3" />
-                          NASA
-                        </button>
-                      </div>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {projectionMode === 'nasaMode' && (
-                    <div className="mb-2 p-2 bg-blue-50 text-blue-700 text-xs rounded">
-                      NASA Mode: All layers available including fire detection. Uses NASA Blue Marble base map.
-                    </div>
-                  )}
-                  <MapViewer
-                    images={[image]}
-                    selectedImage={image}
-                    height="400px"
-                    gibsLayers={enabledLayers.map(id => ({ id, date: layerDate }))}
-                    projectionMode={projectionMode}
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Description */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-dark-light">
-                  {image.description || 'No description available.'}
-                </p>
-              </CardContent>
-            </Card>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
+          {/* Metadata (aligned with image) */}
+          <div className="flex flex-col gap-6 h-full">
             {/* Metadata */}
-            <Card>
+            <Card className="flex-1 flex flex-col">
               <CardHeader>
                 <CardTitle>{image.title || image.filename}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 flex-1">
                 <div>
                   <Badge variant={image.status === 'READY' ? 'success' : 'warning'}>
                     {image.status}
@@ -345,85 +271,99 @@ export function ImageDetailPage() {
                     </div>
                   )}
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Technical Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Technical Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-dark-light">File Size</span>
-                  <span className="text-dark font-medium">{formatBytes(image.fileSize)}</span>
-                </div>
-                {image.width && image.height && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-light">Dimensions</span>
-                    <span className="text-dark font-medium">{image.width} × {image.height}</span>
-                  </div>
-                )}
-                {image.resolution && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-light">Resolution</span>
-                    <span className="text-dark font-medium">{image.resolution} m/px</span>
-                  </div>
-                )}
-                {image.bands && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-light">Bands</span>
-                    <span className="text-dark font-medium">
-                      {typeof image.bands === 'number' ? image.bands : 'N/A'}
-                    </span>
-                  </div>
-                )}
-                {image.bitDepth && (
-                  <div className="flex justify-between">
-                    <span className="text-dark-light">Bit Depth</span>
-                    <span className="text-dark font-medium">
-                      {typeof image.bitDepth === 'number' ? image.bitDepth : Array.isArray(image.bitDepth) ? image.bitDepth[0] : 'N/A'} bit
-                    </span>
+                {/* Tags */}
+                {image.tags && image.tags.length > 0 && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <div className="text-dark-light text-xs mb-2">Tags</div>
+                    <div className="flex flex-wrap gap-2">
+                      {image.tags.map(tag => (
+                        <Badge key={tag} variant="secondary">{tag}</Badge>
+                      ))}
+                    </div>
                   </div>
                 )}
               </CardContent>
             </Card>
+          </div>
+        </div>
 
-            {/* Tags */}
-            {image.tags && image.tags.length > 0 && (
+        {/* NASA Timeline - full width when layers are enabled */}
+        {enabledLayers.length > 0 && (
+          <div className="mb-6">
+            <NasaTimeline
+              selectedDate={layerDate || new Date(Date.now() - 86400000).toISOString().split('T')[0]}
+              onDateChange={setLayerDate}
+              capturedAt={image.capturedAt}
+            />
+          </div>
+        )}
+
+        {/* Location + Sidebar Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 items-start">
+          {/* Location */}
+          <div className="lg:col-span-2">
+            {image.centerPoint && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Tags</CardTitle>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Location</span>
+                    <div className="flex items-center gap-2">
+                      {enabledLayers.length > 0 && (
+                        <span className="text-xs text-gray-500 font-normal">
+                          {enabledLayers.length} layer{enabledLayers.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {/* Projection Mode Toggle */}
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                        <button
+                          onClick={() => handleModeChange('streetMap')}
+                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
+                            projectionMode === 'streetMap'
+                              ? 'bg-primary text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title="Street Map mode - OpenStreetMap base, limited NASA layers"
+                        >
+                          <Map className="w-3 h-3" />
+                          Street
+                        </button>
+                        <button
+                          onClick={() => handleModeChange('nasaMode')}
+                          className={`px-2 py-1 text-xs flex items-center gap-1 transition-colors ${
+                            projectionMode === 'nasaMode'
+                              ? 'bg-primary text-white'
+                              : 'bg-white text-gray-600 hover:bg-gray-50'
+                          }`}
+                          title="NASA mode - Blue Marble base, ALL NASA layers including fire detection"
+                        >
+                          <Globe2 className="w-3 h-3" />
+                          NASA
+                        </button>
+                      </div>
+                    </div>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {image.tags.map(tag => (
-                      <Badge key={tag} variant="secondary">{tag}</Badge>
-                    ))}
-                  </div>
+                  {projectionMode === 'nasaMode' && (
+                    <div className="mb-2 p-2 bg-blue-50 text-blue-700 text-xs rounded">
+                      NASA Mode: All layers available including fire detection. Uses NASA Blue Marble base map.
+                    </div>
+                  )}
+                  <MapViewer
+                    images={[image]}
+                    selectedImage={image}
+                    height="400px"
+                    gibsLayers={enabledLayers.map(id => ({ id, date: layerDate }))}
+                    projectionMode={projectionMode}
+                  />
                 </CardContent>
               </Card>
             )}
+          </div>
 
-            {/* Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button variant="outline" className="w-full justify-start">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add to Collection
-                </Button>
-                <Link to={`/compare?image1=${image.id}`} className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Layers className="w-4 h-4 mr-2" />
-                    Compare with Another
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-
+          {/* Right Column: AI Analysis + Other Panels */}
+          <div className="space-y-6">
             {/* AI Analysis Panel */}
             <AIAnalysisPanel
               imageId={image.id}
@@ -448,6 +388,120 @@ export function ImageDetailPage() {
               enabledLayers={enabledLayers}
               projectionMode={projectionMode}
             />
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between">
+                  <button
+                    className="flex items-center w-full text-left"
+                    onClick={() => setQuickActionsExpanded(!quickActionsExpanded)}
+                  >
+                    <Zap className="w-5 h-5 mr-2 text-yellow-500" />
+                    <span>Quick Actions</span>
+                    {quickActionsExpanded ? (
+                      <ChevronDown className="w-4 h-4 ml-auto" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 ml-auto" />
+                    )}
+                  </button>
+                </CardTitle>
+              </CardHeader>
+              <AnimatePresence>
+                {quickActionsExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <CardContent className="space-y-2">
+                      <Button variant="outline" className="w-full justify-start">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add to Collection
+                      </Button>
+                      <Link to={`/compare?image1=${image.id}`} className="block">
+                        <Button variant="outline" className="w-full justify-start">
+                          <Layers className="w-4 h-4 mr-2" />
+                          Compare with Another
+                        </Button>
+                      </Link>
+                      {image.centerPoint && (
+                        <Link
+                          to={`/disasters?lat=${image.centerPoint.lat}&lon=${image.centerPoint.lon}&radius=100&imageId=${image.id}&imageName=${encodeURIComponent(image.title || image.filename)}`}
+                          className="block"
+                        >
+                          <Button variant="outline" className="w-full justify-start">
+                            <AlertTriangle className="w-4 h-4 mr-2" />
+                            View Nearby Disasters
+                          </Button>
+                        </Link>
+                      )}
+                    </CardContent>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Card>
+          </div>
+        </div>
+
+        {/* Description & Technical Details - below the main grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Description */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-dark-light">
+                  {image.description || 'No description available.'}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Technical Details - horizontal layout */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Technical Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-sm">
+                  <div>
+                    <div className="text-dark-light">File Size</div>
+                    <div className="text-dark font-medium">{formatBytes(image.fileSize)}</div>
+                  </div>
+                  {image.width && image.height && (
+                    <div>
+                      <div className="text-dark-light">Dimensions</div>
+                      <div className="text-dark font-medium">{image.width} × {image.height}</div>
+                    </div>
+                  )}
+                  {image.resolution && (
+                    <div>
+                      <div className="text-dark-light">Resolution</div>
+                      <div className="text-dark font-medium">{image.resolution} m/px</div>
+                    </div>
+                  )}
+                  {image.bands && (
+                    <div>
+                      <div className="text-dark-light">Bands</div>
+                      <div className="text-dark font-medium">
+                        {typeof image.bands === 'number' ? image.bands : 'N/A'}
+                      </div>
+                    </div>
+                  )}
+                  {image.bitDepth && (
+                    <div>
+                      <div className="text-dark-light">Bit Depth</div>
+                      <div className="text-dark font-medium">
+                        {typeof image.bitDepth === 'number' ? image.bitDepth : Array.isArray(image.bitDepth) ? image.bitDepth[0] : 'N/A'} bit
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
