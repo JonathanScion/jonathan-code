@@ -55,7 +55,7 @@ export function FusionTimeline({
   capturedAt,
   onReportGenerated,
 }: FusionTimelineProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [enabledSources, setEnabledSources] = useState<Set<TimelineSource>>(
     new Set(['satellite', 'weather', 'fire', 'pass', 'earthquake'])
   );
