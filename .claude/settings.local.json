@@ -19,7 +19,21 @@
       "Bash(dir:*)",
       "Bash(ls:*)",
       "Bash(pyinstaller:*)",
-      "Bash(/c/Users/jonat/source/repos/jonathan-code/ContextFreeSQL/venv/Scripts/pyinstaller.exe:*)"
+      "Bash(/c/Users/jonat/source/repos/jonathan-code/ContextFreeSQL/venv/Scripts/pyinstaller.exe:*)",
+      "WebSearch",
+      "Bash(cat:*)",
+      "WebFetch(domain:www.earthdata.nasa.gov)",
+      "WebFetch(domain:nasa-gibs.github.io)",
+      "WebFetch(domain:firms.modaps.eosdis.nasa.gov)",
+      "WebFetch(domain:power.larc.nasa.gov)",
+      "WebFetch(domain:www.n2yo.com)",
+      "WebFetch(domain:cmr.earthdata.nasa.gov)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(npx tsx:*)",
+      "Bash(where:*)",
+      "Bash(node:*)"
     ]
   }
 }
