@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronRight,
   Zap,
-  AlertTriangle
+  AlertTriangle,
+  Ship
 } from 'lucide-react';
 import { imagesApi } from '@/lib/api';
 import { formatDate, formatBytes, formatDateTime } from '@/lib/utils';
@@ -314,8 +315,8 @@ export function ImageDetailPage() {
 
         {/* Location + Sidebar Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 items-start">
-          {/* Location */}
-          <div className="lg:col-span-2">
+          {/* Left Column: Location + Description + Technical Details */}
+          <div className="lg:col-span-2 space-y-6">
             {image.centerPoint && (
               <Card>
                 <CardHeader>
@@ -373,6 +374,61 @@ export function ImageDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Description */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-dark-light">
+                  {image.description || 'No description available.'}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Technical Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Technical Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <div className="text-dark-light">File Size</div>
+                    <div className="text-dark font-medium">{formatBytes(image.fileSize)}</div>
+                  </div>
+                  {image.width && image.height && (
+                    <div>
+                      <div className="text-dark-light">Dimensions</div>
+                      <div className="text-dark font-medium">{image.width} × {image.height}</div>
+                    </div>
+                  )}
+                  {image.resolution && (
+                    <div>
+                      <div className="text-dark-light">Resolution</div>
+                      <div className="text-dark font-medium">{image.resolution} m/px</div>
+                    </div>
+                  )}
+                  {image.bands && (
+                    <div>
+                      <div className="text-dark-light">Bands</div>
+                      <div className="text-dark font-medium">
+                        {typeof image.bands === 'number' ? image.bands : 'N/A'}
+                      </div>
+                    </div>
+                  )}
+                  {image.bitDepth && (
+                    <div>
+                      <div className="text-dark-light">Bit Depth</div>
+                      <div className="text-dark font-medium">
+                        {typeof image.bitDepth === 'number' ? image.bitDepth : Array.isArray(image.bitDepth) ? image.bitDepth[0] : 'N/A'} bit
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Column: AI Analysis + Other Panels */}
@@ -452,15 +508,26 @@ export function ImageDetailPage() {
                         </Button>
                       </Link>
                       {image.centerPoint && (
-                        <Link
-                          to={`/disasters?lat=${image.centerPoint.lat}&lon=${image.centerPoint.lon}&radius=100&imageId=${image.id}&imageName=${encodeURIComponent(image.title || image.filename)}`}
-                          className="block"
-                        >
-                          <Button variant="outline" className="w-full justify-start">
-                            <AlertTriangle className="w-4 h-4 mr-2" />
-                            View Nearby Disasters
-                          </Button>
-                        </Link>
+                        <>
+                          <Link
+                            to={`/disasters?lat=${image.centerPoint.lat}&lon=${image.centerPoint.lon}&radius=100&imageId=${image.id}&imageName=${encodeURIComponent(image.title || image.filename)}`}
+                            className="block"
+                          >
+                            <Button variant="outline" className="w-full justify-start">
+                              <AlertTriangle className="w-4 h-4 mr-2" />
+                              View Nearby Disasters
+                            </Button>
+                          </Link>
+                          <Link
+                            to={`/maritime?lat=${image.centerPoint.lat}&lon=${image.centerPoint.lon}&imageId=${image.id}&imageName=${encodeURIComponent(image.title || image.filename)}${image.capturedAt ? `&capturedAt=${encodeURIComponent(image.capturedAt)}` : ''}`}
+                            className="block"
+                          >
+                            <Button variant="outline" className="w-full justify-start">
+                              <Ship className="w-4 h-4 mr-2" />
+                              View Maritime Assets
+                            </Button>
+                          </Link>
+                        </>
                       )}
                     </CardContent>
                   </motion.div>
@@ -470,65 +537,6 @@ export function ImageDetailPage() {
           </div>
         </div>
 
-        {/* Description & Technical Details - below the main grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Description */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-dark-light">
-                  {image.description || 'No description available.'}
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Technical Details - horizontal layout */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Technical Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 text-sm">
-                  <div>
-                    <div className="text-dark-light">File Size</div>
-                    <div className="text-dark font-medium">{formatBytes(image.fileSize)}</div>
-                  </div>
-                  {image.width && image.height && (
-                    <div>
-                      <div className="text-dark-light">Dimensions</div>
-                      <div className="text-dark font-medium">{image.width} × {image.height}</div>
-                    </div>
-                  )}
-                  {image.resolution && (
-                    <div>
-                      <div className="text-dark-light">Resolution</div>
-                      <div className="text-dark font-medium">{image.resolution} m/px</div>
-                    </div>
-                  )}
-                  {image.bands && (
-                    <div>
-                      <div className="text-dark-light">Bands</div>
-                      <div className="text-dark font-medium">
-                        {typeof image.bands === 'number' ? image.bands : 'N/A'}
-                      </div>
-                    </div>
-                  )}
-                  {image.bitDepth && (
-                    <div>
-                      <div className="text-dark-light">Bit Depth</div>
-                      <div className="text-dark font-medium">
-                        {typeof image.bitDepth === 'number' ? image.bitDepth : Array.isArray(image.bitDepth) ? image.bitDepth[0] : 'N/A'} bit
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
       </div>
 
       {/* Edit Modal */}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams, Link } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -13,6 +14,9 @@ import {
   Anchor,
   ChevronDown,
   ChevronRight,
+  MapPin,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { maritimeApi, type Vessel, type Aircraft, type BoundingBox } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -32,17 +36,40 @@ const VESSEL_TYPE_COLORS: Record<string, string> = {
 };
 
 export function MaritimeDashboardPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const vesselMarkersRef = useRef<L.LayerGroup | null>(null);
   const aircraftMarkersRef = useRef<L.LayerGroup | null>(null);
+  const imageMarkerRef = useRef<L.Marker | null>(null);
 
-  const [bounds, setBounds] = useState<BoundingBox>({
-    north: 52,
-    south: 48,
-    east: 5,
-    west: -5,
-  });
+  // Get query params for image context
+  const imageId = searchParams.get('imageId');
+  const imageName = searchParams.get('imageName');
+  const imageLat = searchParams.get('lat') ? parseFloat(searchParams.get('lat')!) : null;
+  const imageLon = searchParams.get('lon') ? parseFloat(searchParams.get('lon')!) : null;
+  const capturedAt = searchParams.get('capturedAt');
+
+  // Calculate initial bounds based on query params or default
+  const getInitialBounds = (): BoundingBox => {
+    if (imageLat !== null && imageLon !== null) {
+      // Create bounds around the image location (roughly 2 degrees each direction)
+      return {
+        north: imageLat + 2,
+        south: imageLat - 2,
+        east: imageLon + 3,
+        west: imageLon - 3,
+      };
+    }
+    return {
+      north: 52,
+      south: 48,
+      east: 5,
+      west: -5,
+    };
+  };
+
+  const [bounds, setBounds] = useState<BoundingBox>(getInitialBounds);
 
   const [showVessels, setShowVessels] = useState(true);
   const [showAircraft, setShowAircraft] = useState(true);
@@ -79,7 +106,13 @@ export function MaritimeDashboardPage() {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    mapRef.current = L.map(containerRef.current).setView([50, 0], 5);
+    // Set initial view based on image location or default
+    const initialCenter: [number, number] = imageLat !== null && imageLon !== null
+      ? [imageLat, imageLon]
+      : [50, 0];
+    const initialZoom = imageLat !== null && imageLon !== null ? 8 : 5;
+
+    mapRef.current = L.map(containerRef.current).setView(initialCenter, initialZoom);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
@@ -88,6 +121,46 @@ export function MaritimeDashboardPage() {
     // Create layer groups
     vesselMarkersRef.current = L.layerGroup().addTo(mapRef.current);
     aircraftMarkersRef.current = L.layerGroup().addTo(mapRef.current);
+
+    // Add marker for image location if provided
+    if (imageLat !== null && imageLon !== null) {
+      const imageIcon = L.divIcon({
+        className: 'image-location-marker',
+        html: `<div style="
+          width: 24px;
+          height: 24px;
+          background: #EF4444;
+          border: 3px solid white;
+          border-radius: 50%;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </div>`,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+
+      imageMarkerRef.current = L.marker([imageLat, imageLon], { icon: imageIcon })
+        .addTo(mapRef.current)
+        .bindPopup(`
+          <div class="p-2">
+            <h3 class="font-bold">Image Location</h3>
+            <p class="text-sm text-gray-600">${imageName || 'Satellite Image'}</p>
+            <div class="text-xs mt-1">
+              <div>Lat: ${imageLat.toFixed(4)}</div>
+              <div>Lon: ${imageLon.toFixed(4)}</div>
+              ${capturedAt ? `<div>Captured: ${new Date(capturedAt).toLocaleDateString()}</div>` : ''}
+            </div>
+          </div>
+        `);
+    }
 
     // Update bounds on map move
     mapRef.current.on('moveend', () => {
@@ -247,6 +320,37 @@ export function MaritimeDashboardPage() {
 
           {sidebarExpanded && (
             <div className="p-4 space-y-4 overflow-y-auto h-[calc(100vh-80px)]">
+              {/* Image Context Banner */}
+              {imageId && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 relative">
+                  <button
+                    onClick={() => setSearchParams({})}
+                    className="absolute top-2 right-2 text-red-400 hover:text-red-600"
+                    title="Clear image filter"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-start gap-2">
+                    <ImageIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <div className="font-medium text-red-800">Viewing assets near image</div>
+                      <div className="text-red-600 truncate max-w-[180px]">{imageName || 'Satellite Image'}</div>
+                      {capturedAt && (
+                        <div className="text-xs text-red-500 mt-1">
+                          Captured: {new Date(capturedAt).toLocaleDateString()}
+                        </div>
+                      )}
+                      <Link
+                        to={`/images/${imageId}`}
+                        className="text-xs text-red-600 hover:text-red-800 underline mt-1 inline-block"
+                      >
+                        Back to image
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Controls */}
               <div className="space-y-3">
                 <Button onClick={handleRefresh} variant="outline" className="w-full">
