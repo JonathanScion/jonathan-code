@@ -227,6 +227,7 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
                 case cnst.contype when 'u' then 1 else 0 end as is_unique_constraint, --! is there such in pg?
                 cnst.contype  as is_unique_constraint1,
                 ix.indkey,
+                ix.indoption,
                 am.amname as index_type,
                 NULL as is_padded ,
                 0 as is_disabled, --! can index be disabled in postgres?
@@ -296,17 +297,37 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
     if tbl_indexes.empty:
         return pd.DataFrame(output)
 
-    # Convert indkey to list of integers and explode
+    # Convert indkey and indoption to lists of integers
     index_cols = tbl_indexes.copy()
     index_cols['indkey'] = index_cols['indkey'].apply(lambda x: [int(i) for i in str(x).split()])
-    index_cols = index_cols.explode('indkey').reset_index()
-    
+    # indoption contains flags: bit 0 = DESC (value 1), bit 1 = NULLS FIRST (value 2)
+    index_cols['indoption'] = index_cols['indoption'].apply(lambda x: [int(i) for i in str(x).split()] if x is not None else [])
+
+    # Explode both columns together - create tuples first
+    def zip_key_option(row):
+        keys = row['indkey']
+        opts = row['indoption'] if row['indoption'] else [0] * len(keys)
+        # Pad opts with 0s if shorter than keys
+        while len(opts) < len(keys):
+            opts.append(0)
+        return list(zip(keys, opts))
+
+    index_cols['key_opt_pairs'] = index_cols.apply(zip_key_option, axis=1)
+    index_cols = index_cols.explode('key_opt_pairs').reset_index()
+
+    # Split the tuples back into separate columns
+    index_cols['indkey'] = index_cols['key_opt_pairs'].apply(lambda x: x[0] if x else 0)
+    index_cols['indoption_val'] = index_cols['key_opt_pairs'].apply(lambda x: x[1] if x else 0)
+
     # Convert indkey to int64 to match column_id type
     index_cols['indkey'] = index_cols['indkey'].astype('int64')
-    
+
+    # Compute is_descending_key from indoption (bit 0 = DESC)
+    index_cols['is_descending_key'] = index_cols['indoption_val'].apply(lambda x: bool(int(x) & 1))
+
     # Ensure column_id is int64
     tbl_cols['column_id'] = pd.to_numeric(tbl_cols['column_id'], errors='coerce').astype('int64')
-    
+
     # Add ordinal position (1-based)
     index_cols['ordinal'] = index_cols.groupby('index')['indkey'].cumcount() + 1
     
@@ -333,7 +354,7 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
         'name': result['col_name'],
         'user_type_name': result['user_type_name'],
         'index_column_id': result['ordinal'],
-        'is_descending_key': False,
+        'is_descending_key': result['is_descending_key'],
         'column_id': result['column_id'],
         'key_ordinal': result['ordinal'],
         'is_included_column': False,
