@@ -16,7 +16,7 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput):
         sql_buffer.write("\t\tscript_code_escaped text;\n")
         sql_buffer.write("\t\tdb_code_escaped text;\n")
         sql_buffer.write(f"\t\tdiff_template_path text := '{input_output.diff_template_path}';\n")
-        sql_buffer.write(f"\t\tdiff_output_dir text := '{input_output.diff_output_dir}';\n")
+        sql_buffer.write(f"\t\tdiff_output_dir text := basePath;\n")
         sql_buffer.write("\t\tdiff_rec RECORD;\n")
         sql_buffer.write("\tBEGIN\n")
         sql_buffer.write("\t\t-- Read the diff template file\n")

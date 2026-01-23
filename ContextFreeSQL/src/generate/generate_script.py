@@ -35,7 +35,15 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
 
     # 1. Add header
     script_filename = os.path.basename(input_output.output_sql)
-    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename=script_filename)
+    # Determine if file-based features are needed (for basePath variable)
+    needs_base_path = (
+        sql_script_params.html_report or
+        sql_script_params.export_csv or
+        (tables_data is not None and tables_data.from_file)
+    )
+    # Get base path for CSV files (directory where HTML output goes)
+    base_path = os.path.dirname(input_output.html_output_path).replace("\\", "/") if (needs_base_path and input_output.html_output_path) else ""
+    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename=script_filename, base_path=base_path, include_base_path=needs_base_path)
     buffer.write(header)
 
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
@@ -360,7 +368,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     return result
 
 
-def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_script_params: SQLScriptParams, filename: str) -> str:
+def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_script_params: SQLScriptParams, filename: str, base_path: str = "", include_base_path: bool = False) -> str:
     header = StringIO()
 
     # Helper to convert Python bool to SQL boolean value
@@ -386,6 +394,9 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_sc
     header.write(f"{db_syntax.set_operator} {bool_to_sql(sql_script_params.html_report)}; -- Generate HTML comparison report for data differences\n")
     header.write(f"\t{db_syntax.var_prefix}exportCsv {db_syntax.boolean_type} ")
     header.write(f"{db_syntax.set_operator} {bool_to_sql(sql_script_params.export_csv)}; -- Export source/target data to CSV files\n")
+    if include_base_path:
+        header.write(f"\t{db_syntax.var_prefix}basePath TEXT ")
+        header.write(f"{db_syntax.set_operator} '{base_path}'; -- Base path for CSV/HTML files. MODIFY THIS if you move the script!\n")
     header.write("\t-------------------------------------------------------------------------------------\n")
     header.write("\n")
 
