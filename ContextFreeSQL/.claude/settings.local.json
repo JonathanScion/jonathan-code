@@ -104,7 +104,8 @@
       "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_script import build_script_header, generate_all_script; print\\(''Import successful''\\)\")",
       "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; print\\(''Import successful''\\)\")",
       "Bash(venvScriptsactivate)",
-      "Bash(source venv/Scripts/activate)"
+      "Bash(source venv/Scripts/activate)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
