@@ -224,8 +224,8 @@ where DB.ent_name Is null
 {align});
 """)
     
-    # Add entities that need to be dropped
-    if not script_ops.remove_all_extra_ents:
+    # Add entities that need to be dropped (only when remove_all_extra_ents is enabled)
+    if script_ops.remove_all_extra_ents:
         script_builder.write(f"{align}\n--Entities only on DB (need to drop)\n")
         
         if db_type == DBType.MSSQL:

@@ -102,7 +102,9 @@
       "Bash(\"./venv/Scripts/python.exe\":*)",
       "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; from src.generate.generate_final_html_report import generate_html_report; from src.generate.generate_final_code_diffs import generate_code_diffs; print\\(''All imports successful''\\)\")",
       "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_script import build_script_header, generate_all_script; print\\(''Import successful''\\)\")",
-      "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; print\\(''Import successful''\\)\")"
+      "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; print\\(''Import successful''\\)\")",
+      "Bash(venvScriptsactivate)",
+      "Bash(source venv/Scripts/activate)"
     ],
     "deny": [],
     "ask": []
