@@ -12,7 +12,7 @@ from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_i
 from src.generate.generate_final_tables import generate_add_tables, generate_drop_tables
 from src.generate.generate_final_columns import generate_add_alter_drop_cols
 from src.generate.generate_final_data import script_data
-from src.generate.generate_final_coded_ents import generate_coded_ents
+from src.generate.generate_final_coded_ents import generate_drop_coded_ents, generate_add_coded_ents
 from src.generate.generate_final_html_report  import generate_html_report
 from src.generate.generate_final_code_diffs import generate_code_diffs
 from src.generate.generate_final_security import (
@@ -110,19 +110,22 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     j2_ccs_add = StringIO()
     drop_tables = StringIO()
     add_tables = StringIO()
-    coded_ents = StringIO()
+    drop_coded_ents = StringIO()  # DROP views/functions BEFORE column changes
+    add_coded_ents = StringIO()   # CREATE views/functions AFTER column changes
     html_report = StringIO()
 
-    generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add, 
-                                          j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add, 
+    generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add,
+                                          j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add,
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
     if scrpt_ops.remove_all_extra_ents:
         generate_drop_tables(db_type=db_type, sql_buffer=drop_tables)
     generate_add_tables(db_type=db_type, sql_buffer=add_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
-    generate_coded_ents(db_type=db_type, sql_buffer=coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
-    generate_html_report(db_type=db_type, sql_buffer=coded_ents, input_output=input_output)
-    generate_code_diffs(db_type=db_type, sql_buffer=coded_ents, input_output=input_output)
+    # Split coded entities: DROP before columns, CREATE after columns
+    generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
+    generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables)
+    generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output)
+    generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output)
 
 
     # Bad data check StringBuilders
@@ -223,7 +226,13 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\t--Pre-Dropping Indexes (some might be added later)---------------------------------------------------------------\n")
         buffer.write(j2_index_pre_drop.getvalue())
         buffer.write("\n\n")
-    
+
+    # Write DROP coded entities BEFORE column changes (views may depend on columns being dropped)
+    if drop_coded_ents.getvalue():
+        buffer.write("--Dropping Coded Entities (views, functions, etc.) - must happen before column changes-------\n")
+        buffer.write(drop_coded_ents.getvalue())
+        buffer.write("\n")
+
     # Write defaults drop if needed
     if j2_defaults_drop.getvalue():
         buffer.write("\t--Dropping Defaults (some might be added later)---------------------------------------------------------------\n")
@@ -291,10 +300,10 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Skip to label
     # Label: SkipTillGotFullTablesData in VB.NET
     
-    # Write coded entities if needed
-    if coded_ents.getvalue():
-        buffer.write("--Coded Entities---------------------------------------------------------------\n")
-        buffer.write(coded_ents.getvalue())
+    # Write ADD coded entities (CREATE views/functions after column changes are complete)
+    if add_coded_ents.getvalue():
+        buffer.write("--Adding Coded Entities (views, functions, etc.)---------------------------------------------------------------\n")
+        buffer.write(add_coded_ents.getvalue())
         buffer.write("\n")
 
     # PHASE 3: Grant function permissions (after coded entities exist)
