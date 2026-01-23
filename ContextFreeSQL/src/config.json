@@ -1,7 +1,7 @@
 {
   "database": {
     "host": "localhost",
-    "db_name": "ContextFreeTest1",
+    "db_name": "satellite_images",
     "user": "postgres",
     "password": "yonision",
     "port": "5432"
@@ -13,7 +13,7 @@
     "pre_add_constraints_data_checks": false,
     "script_schemas": true,
     "all_schemas": true,
-    "script_security": true,
+    "script_security": false,
     "code_compare_no_whitespace": false,
     "data_scripting_leave_report_fields_updated": true,
     "data_scripting_leave_report_fields_updated_save_old_value": true,
@@ -48,7 +48,7 @@
     "print": true,
     "print_exec": true,
     "exec_code": false,
-    "html_report": true,
+    "html_report": false,
     "export_csv": false
   }
 }

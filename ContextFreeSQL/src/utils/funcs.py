@@ -2,8 +2,9 @@ import pandas as pd
 from src.defs.script_defs import DBType
 from io import StringIO
 from typing import Any
-from typing import Optional , Union, Any 
+from typing import Optional , Union, Any
 import math
+import json
 
 def quote_str_or_null(value: Any) -> str:
     if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -32,12 +33,21 @@ def format_value_for_sql(value: Any) -> str:
     - Other numbers -> quoted as-is
     - Strings -> quoted with escaped single quotes
     - Booleans -> 'true'/'false'
+    - Dicts/Lists (JSON/JSONB) -> proper JSON serialization with double quotes
     """
     if value is None or (isinstance(value, float) and math.isnan(value)):
         return "NULL"
 
     if isinstance(value, bool):
         return "'true'" if value else "'false'"
+
+    # Handle dict and list types (JSON/JSONB columns)
+    # Must check before other types since we need proper JSON serialization
+    if isinstance(value, (dict, list)):
+        json_str = json.dumps(value)
+        # Escape single quotes for SQL
+        json_str = json_str.replace("'", "''")
+        return f"'{json_str}'"
 
     if isinstance(value, float):
         # Convert whole number floats to integers (42.0 -> 42)
