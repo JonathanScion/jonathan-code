@@ -6,6 +6,7 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
+from src.generate.generate_db_ent_types.generate_state_tables.tables_check_constraints import create_db_state_check_constraints
 from src.utils import code_funcs
 
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
@@ -84,7 +85,25 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
             script_ops = scrpt_ops,
             schema_tables = schema_tables
         )
-    
+
+    # Compute overall_table_schema_name_in_scripting for check constraints state table
+    # This is a comma-separated list of 'schema_name + table_name' for filtering
+    overall_table_schema_name_in_scripting = None
+    filtered_tables = tbl_ents[(tbl_ents['enttype'] == 'Table') & (tbl_ents['scriptschema'] == True)]
+    if not filtered_tables.empty:
+        table_list = []
+        for _, row in filtered_tables.iterrows():
+            table_list.append(f"'{row['entschema']}{row['entname']}'")
+        if table_list:
+            overall_table_schema_name_in_scripting = ", ".join(table_list)
+
+    script_db_state_check_constraints: StringIO = create_db_state_check_constraints(
+            schema_tables=schema_tables,
+            tbl_ents_to_script=tbl_ents,
+            db_type=db_type,
+            overall_table_schema_name_in_scripting=overall_table_schema_name_in_scripting
+        )
+
     buffer.write("\t--Iterate tables, generate all code----------------\n")
 
     # Create StringBuilders for schema objects
@@ -116,6 +135,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
 
     generate_pre_drop_post_add_indexes_fks(db_type = db_type, j2_index_pre_drop  =j2_index_pre_drop, j2_index_post_add = j2_index_post_add,
                                           j2_fk_pre_drop=j2_fk_pre_drop, j2_fk_post_add=j2_fk_post_add,
+                                          j2_cc_pre_drop=j2_ccs_drop, j2_cc_post_add=j2_ccs_add,
                                           pre_add_constraints_data_checks = scrpt_ops.pre_add_constraints_data_checks)
     if scrpt_ops.remove_all_extra_ents:
         generate_drop_tables(db_type=db_type, sql_buffer=drop_tables)
@@ -160,10 +180,12 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write(create_schemas.getvalue())
         buffer.write("\n\n")
 
-    # Write DB state tables: for tables, for coded, for security. all state tables
+    # Write DB state tables: for tables, for coded, for check constraints, for security. all state tables
     buffer.write(script_db_state_tables.getvalue())
     buffer.write("\n\n")
     buffer.write(script_db_state_coded.getvalue())
+    buffer.write("\n\n")
+    buffer.write(script_db_state_check_constraints.getvalue())
     buffer.write("\n\n")
 
     # Security state tables (if security scripting is enabled)

@@ -19,7 +19,7 @@ class DBSchema(BaseModel):
     index_cols: pd.DataFrame
     fks: pd.DataFrame
     fk_cols: pd.DataFrame
-    #check_constraints: Optional[pd.DataFrame] = None #!TBD
+    check_constraints: pd.DataFrame = Field(default_factory=pd.DataFrame)
     tables_data: Dict[str, pd.DataFrame] = Field(default_factory=dict)
     coded_ents: pd.DataFrame
     # Security-related DataFrames
@@ -47,6 +47,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
     index_cols = _process_index_cols_pg(columns, indexes)
     fks = _load_tables_foreign_keys(conn_settings)
     fk_cols = _process_fk_cols_pg(columns, fks)
+    check_constraints = _load_check_constraints(conn_settings)
     coded_ents = _load_coded_ents(conn_settings)
     #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format.
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
@@ -80,6 +81,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         index_cols = index_cols,
         fks = fks,
         fk_cols = fk_cols,
+        check_constraints = check_constraints,
         coded_ents = coded_ents,
         roles = roles,
         role_memberships = role_memberships,
@@ -478,6 +480,46 @@ def _process_fk_cols_pg(tbl_cols, tbl_fks) -> pd.DataFrame:
 
 #def load_tables_defaults():
      #!implement (did not have it in .net... does PG needs it? where are its defaults? we didn't query already at this point?)
+
+def _load_check_constraints(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Load check constraints from PostgreSQL database."""
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Query check constraints from pg_constraint
+        # contype='c' means check constraint
+        sql = """
+            SELECT
+                ns.nspname AS table_schema,
+                t.relname AS table_name,
+                con.conname AS constraint_name,
+                pg_get_constraintdef(con.oid) AS constraint_definition,
+                con.oid AS constraint_id
+            FROM pg_constraint con
+            INNER JOIN pg_class t ON con.conrelid = t.oid
+            INNER JOIN pg_namespace ns ON t.relnamespace = ns.oid
+            WHERE con.contype = 'c'
+              AND ns.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              AND ns.nspname NOT LIKE 'pg_temp%'
+            ORDER BY ns.nspname, t.relname, con.conname
+        """
+        cur.execute(sql)
+        results = cur.fetchall()
+
+        return pd.DataFrame(results)
+
+    except Exception as e:
+        print(f"Error loading check constraints: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None

@@ -2,8 +2,9 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
 # GeneratePreDropPostAddIndexesFKs
-def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j2_index_post_add, 
-                                          j2_fk_pre_drop, j2_fk_post_add, 
+def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j2_index_post_add,
+                                          j2_fk_pre_drop, j2_fk_post_add,
+                                          j2_cc_pre_drop, j2_cc_post_add,
                                           pre_add_constraints_data_checks):
     """Generate SQL statements for dropping and adding indexes and foreign keys."""
     
@@ -298,3 +299,95 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
         j2_fk_post_add.write("\tEND;\n")
 
     j2_fk_post_add.write("\n")
+
+    # Check Constraints pre-drop
+    j2_cc_pre_drop.write("--Dropping check constraints that are different or extra\n")
+
+    if db_type == DBType.MSSQL:
+        j2_cc_pre_drop.write("DECLARE preDropCCs CURSOR FAST_FORWARD \n")
+        j2_cc_pre_drop.write("FOR \n")
+        j2_cc_pre_drop.write("\tSELECT CC.table_schema, \n")
+        j2_cc_pre_drop.write("\t\tCC.table_name, \n")
+        j2_cc_pre_drop.write("\t\tCC.constraint_name \n")
+        j2_cc_pre_drop.write("\tFROM #ScriptCheckConstraints CC \n")
+        j2_cc_pre_drop.write("\tINNER JOIN #ScriptTables T ON CC.table_schema = T.table_schema AND CC.table_name = T.table_name \n")
+        j2_cc_pre_drop.write("\tWHERE ccStat IN (2, 3) AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL) \n")
+        j2_cc_pre_drop.write("\t\tOPEN preDropCCs \n")
+        j2_cc_pre_drop.write("FETCH NEXT FROM preDropCCs INTO @table_schema, @table_name, @constraint_name \n")
+        j2_cc_pre_drop.write("WHILE @@FETCH_STATUS = 0 \n")
+        j2_cc_pre_drop.write("\tBEGIN \n")
+        utils.add_print(db_type, 1, j2_cc_pre_drop, "'Table ['+@table_schema+'].['+@table_name+']: dropping check constraint ['+@constraint_name+']'")
+        j2_cc_pre_drop.write("\t\tSET @sqlCode = 'ALTER TABLE ['+@table_schema+'].['+@table_name+'] DROP CONSTRAINT ['+@constraint_name+'];'\n")
+        utils.add_exec_sql(db_type, 1, j2_cc_pre_drop)
+        j2_cc_pre_drop.write("\n")
+        j2_cc_pre_drop.write("\tFETCH NEXT FROM preDropCCs INTO @table_schema, @table_name, @constraint_name \n")
+        j2_cc_pre_drop.write("END\n")
+        j2_cc_pre_drop.write("\n")
+        j2_cc_pre_drop.write("CLOSE preDropCCs\n")
+        j2_cc_pre_drop.write("DEALLOCATE preDropCCs\n")
+
+    elif db_type == DBType.PostgreSQL:
+        j2_cc_pre_drop.write("\tdeclare temprow record;\n")
+        j2_cc_pre_drop.write("\tBEGIN\n")
+        j2_cc_pre_drop.write("\t\tFOR temprow IN\n")
+        j2_cc_pre_drop.write("\t\t\tSELECT CC.table_schema,\n")
+        j2_cc_pre_drop.write("\t\t\t\tCC.table_name,\n")
+        j2_cc_pre_drop.write("\t\t\t\tCC.constraint_name\n")
+        j2_cc_pre_drop.write("\t\t\tFROM ScriptCheckConstraints CC\n")
+        j2_cc_pre_drop.write("\t\t\tINNER JOIN ScriptTables T ON LOWER(CC.table_schema) = LOWER(T.table_schema) AND LOWER(CC.table_name) = LOWER(T.table_name)\n")
+        j2_cc_pre_drop.write("\t\t\tWHERE ccStat IN (2, 3) AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL)\n")
+        j2_cc_pre_drop.write("\t\tLOOP\n")
+        utils.add_print(db_type, 3, j2_cc_pre_drop, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': dropping check constraint ' || temprow.constraint_name")
+        j2_cc_pre_drop.write("\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' DROP CONSTRAINT ' || temprow.constraint_name || ';';\n")
+        utils.add_exec_sql(db_type, 3, j2_cc_pre_drop)
+        j2_cc_pre_drop.write("\t\tEND LOOP;\n")
+        j2_cc_pre_drop.write("\tEND;\n")
+
+    j2_cc_pre_drop.write("\n")
+
+    # Check Constraints post-add
+    j2_cc_post_add.write("--Adding check constraints: new or ones dropped before because they were different\n")
+
+    if db_type == DBType.MSSQL:
+        j2_cc_post_add.write("DECLARE postAddCCs CURSOR FAST_FORWARD \n")
+        j2_cc_post_add.write("FOR \n")
+        j2_cc_post_add.write("\tSELECT CC.table_schema, \n")
+        j2_cc_post_add.write("\t\tCC.table_name, \n")
+        j2_cc_post_add.write("\t\tCC.constraint_name, \n")
+        j2_cc_post_add.write("\t\tCC.constraint_definition \n")
+        j2_cc_post_add.write("\tFROM #ScriptCheckConstraints CC \n")
+        j2_cc_post_add.write("\tINNER JOIN #ScriptTables T ON CC.table_schema = T.table_schema AND CC.table_name = T.table_name \n")
+        j2_cc_post_add.write("\tWHERE ccStat IN (1, 3) AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL) \n")
+        j2_cc_post_add.write("\t\tOPEN postAddCCs \n")
+        j2_cc_post_add.write("FETCH NEXT FROM postAddCCs INTO @table_schema, @table_name, @constraint_name, @constraint_definition \n")
+        j2_cc_post_add.write("WHILE @@FETCH_STATUS = 0 \n")
+        j2_cc_post_add.write("\tBEGIN \n")
+        utils.add_print(db_type, 1, j2_cc_post_add, "'Table ['+@table_schema+'].['+@table_name+']: adding check constraint ['+@constraint_name+']'")
+        j2_cc_post_add.write("\t\tSET @sqlCode = 'ALTER TABLE ['+@table_schema+'].['+@table_name+'] ADD CONSTRAINT ['+@constraint_name+'] '+@constraint_definition\n")
+        utils.add_exec_sql(db_type, 1, j2_cc_post_add)
+        j2_cc_post_add.write("\n")
+        j2_cc_post_add.write("\tFETCH NEXT FROM postAddCCs INTO @table_schema, @table_name, @constraint_name, @constraint_definition \n")
+        j2_cc_post_add.write("END\n")
+        j2_cc_post_add.write("\n")
+        j2_cc_post_add.write("CLOSE postAddCCs\n")
+        j2_cc_post_add.write("DEALLOCATE postAddCCs\n")
+
+    elif db_type == DBType.PostgreSQL:
+        j2_cc_post_add.write("\tdeclare temprow record;\n")
+        j2_cc_post_add.write("\tBEGIN\n")
+        j2_cc_post_add.write("\t\tFOR temprow IN\n")
+        j2_cc_post_add.write("\t\t\tSELECT CC.table_schema,\n")
+        j2_cc_post_add.write("\t\t\t\tCC.table_name,\n")
+        j2_cc_post_add.write("\t\t\t\tCC.constraint_name,\n")
+        j2_cc_post_add.write("\t\t\t\tCC.constraint_definition\n")
+        j2_cc_post_add.write("\t\t\tFROM ScriptCheckConstraints CC\n")
+        j2_cc_post_add.write("\t\t\tINNER JOIN ScriptTables T ON LOWER(CC.table_schema) = LOWER(T.table_schema) AND LOWER(CC.table_name) = LOWER(T.table_name)\n")
+        j2_cc_post_add.write("\t\t\tWHERE ccStat IN (1, 3) AND (T.tableStat NOT IN (2) OR T.tableStat IS NULL)\n")
+        j2_cc_post_add.write("\t\tLOOP\n")
+        utils.add_print(db_type, 3, j2_cc_post_add, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': adding check constraint ' || temprow.constraint_name")
+        j2_cc_post_add.write("\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' ADD CONSTRAINT ' || temprow.constraint_name || ' ' || temprow.constraint_definition || ';';\n")
+        utils.add_exec_sql(db_type, 3, j2_cc_post_add)
+        j2_cc_post_add.write("\t\tEND LOOP;\n")
+        j2_cc_post_add.write("\tEND;\n")
+
+    j2_cc_post_add.write("\n")
