@@ -355,7 +355,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         else:
                             out_buffer.write("''")
                             if isinstance(o_val, (datetime.datetime, datetime.date)):
-                                out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                                out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f"))
                             else:
                                 out_buffer.write(str(o_val).replace("'", "''"))
                             out_buffer.write("''")
@@ -379,12 +379,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
                 if tables_data and tables_data.from_file:
                     # Print the COPY command user can execute to load from CSV
-                    csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
-                    csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+                    csv_filename = f"{drow_ent['entschema']}_{drow_ent['entname']}.csv"
                     col_names = ", ".join(ar_cols)
-                    copy_cmd = f"COPY {s_ent_full_name_sql} ({col_names}) FROM ''{csv_file_path}'' WITH (FORMAT CSV, HEADER);"
                     out_buffer.write(f"\t\t\tINSERT INTO scriptoutput (SQLText)\n")
-                    out_buffer.write(f"\t\t\t\tVALUES ('{copy_cmd}');\n")
+                    out_buffer.write(f"\t\t\t\tVALUES ('COPY {s_ent_full_name_sql} ({col_names}) FROM ''' || basePath || '/{csv_filename}'' WITH (FORMAT CSV, HEADER);');\n")
                 else:
                     # Generate INSERT statements for PostgreSQL
                     i_count = 0
@@ -409,7 +407,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                                 s_insert_into.append("NULL")
                             elif isinstance(o_val, (datetime.datetime, datetime.date)):
                                 s_insert_into.append("''")
-                                s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                                s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f"))
                                 s_insert_into.append("''")
                             else:
                                 # Use helper to handle float-to-int conversion and proper quoting
@@ -478,7 +476,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         if tables_data and tables_data.from_file and db_type == DBType.PostgreSQL:
             # Write CSV file from Python and use COPY FROM to load it
             csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
-            csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+            csv_filename = f"{drow_ent['entschema']}_{drow_ent['entname']}.csv"
+            csv_file_path = f"{csv_output_dir}/{csv_filename}"
 
             # Create directory if it doesn't exist
             os.makedirs(csv_output_dir, exist_ok=True)
@@ -487,8 +486,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             tbl_data[ar_cols].to_csv(csv_file_path, index=False)
 
             col_names = ", ".join(ar_cols)
-            out_buffer.write(f"\t\t-- Loading data from CSV file: {csv_file_path}\n")
-            out_buffer.write(f"\t\tEXECUTE format('COPY {s_temp_table_name} ({col_names}) FROM %L WITH (FORMAT CSV, HEADER)', '{csv_file_path}');\n")
+            out_buffer.write(f"\t\t-- Loading data from CSV file: {csv_filename}\n")
+            out_buffer.write(f"\t\tEXECUTE format('COPY {s_temp_table_name} ({col_names}) FROM %L WITH (FORMAT CSV, HEADER)', basePath || '/{csv_filename}');\n")
         else:
             # Even when not loading from file, write CSV for HTML comparison if html_report is enabled
             if sql_script_params and sql_script_params.html_report and db_type == DBType.PostgreSQL:
@@ -530,7 +529,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         out_buffer.write("NULL")
                     elif isinstance(o_val, (datetime.datetime, datetime.date)):
                         out_buffer.write("'")
-                        out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                        out_buffer.write(o_val.strftime("%Y-%m-%d %H:%M:%S.%f"))
                         out_buffer.write("'")
                     else:
                         # Use helper to handle float-to-int conversion and proper quoting
@@ -867,8 +866,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         
         out_buffer.write("\n")
 
-    # Second round: DELETES and UPDATES: most dependent to least dependent
-    drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
+    # Second round: DELETES and UPDATES: most dependent to least dependent (reverse order of INSERTs)
+    drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder", ascending=False).to_dict('records')
     for drow_ent in drows_ents:
         s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname'].replace("'", "''")}"
         if s_ent_full_name in ar_no_script:
@@ -1803,7 +1802,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
             s_ent_full_name_sql = f"{drow_ent['entschema']}.{drow_ent['entname']}"
             col_names = ", ".join(table_columns_map[s_ent_full_name])
-            csv_file_indb = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}_indb.csv"
+            csv_filename_indb = f"{drow_ent['entschema']}_{drow_ent['entname']}_indb.csv"
 
             # Export if exportCsv=True OR (htmlReport=True AND this table has data differences)
             out_buffer.write(f"IF (exportCsv = True OR (htmlReport = True AND EXISTS(SELECT 1 FROM ScriptTables WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}') AND ScriptTables.dataStat = 3))) THEN\n")
@@ -1820,9 +1819,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\tEND LOOP;\n")
             out_buffer.write("\t\tIF v_csv_cols <> '' THEN\n")
             out_buffer.write(f"\t\t\tEXECUTE 'CREATE TEMP TABLE temp_csv_export AS SELECT ' || v_csv_cols || ' FROM {s_ent_full_name_sql}';\n")
-            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', '{csv_file_indb}');\n")
+            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_csv_export TO %L WITH (FORMAT CSV, HEADER)', basePath || '/{csv_filename_indb}');\n")
             out_buffer.write(f"\t\t\tDROP TABLE temp_csv_export;\n")
-            out_buffer.write(f"\t\t\tRAISE NOTICE 'CSV file created: {csv_file_indb}';\n")
+            out_buffer.write(f"\t\t\tRAISE NOTICE 'CSV file created: %', basePath || '/{csv_filename_indb}';\n")
             out_buffer.write("\t\tEND IF;\n")
             out_buffer.write("\tEND;\n")
             out_buffer.write("END IF;\n\n")
@@ -1834,7 +1833,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write("\n--Generate HTML comparison files for tables with data differences------------\n")
         out_buffer.write("IF (htmlReport = True) THEN\n")
 
-        csv_compare_template = f"{csv_output_dir}/csv_compare_standalone.html"
+        csv_compare_template_filename = "csv_compare_standalone.html"
 
         for drow_ent in drows_ents:
             s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
@@ -1843,8 +1842,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 continue
 
             table_file_prefix = f"{drow_ent['entschema']}_{drow_ent['entname']}"
-            source_csv_file = f"{csv_output_dir}/{table_file_prefix}.csv"
-            compare_html_file = f"{csv_output_dir}/compare_{table_file_prefix}.html"
+            source_csv_filename = f"{table_file_prefix}.csv"
+            compare_html_filename = f"compare_{table_file_prefix}.html"
+            indb_csv_filename = f"{table_file_prefix}_indb.csv"
             col_names = ", ".join(table_columns_map[s_ent_full_name])
             key_cols = table_key_columns_map.get(s_ent_full_name, [])
             key_cols_sql_array = "ARRAY[" + ", ".join([f"'{k}'" for k in key_cols]) + "]::text[]"
@@ -1860,11 +1860,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\t\tinjected_script text;\n")
             out_buffer.write("\t\tBEGIN\n")
             out_buffer.write(f"\t\t\t-- Read template and source CSV\n")
-            out_buffer.write(f"\t\t\tSELECT pg_read_file('{csv_compare_template}') INTO template_content;\n")
-            out_buffer.write(f"\t\t\tSELECT pg_read_file('{source_csv_file}') INTO source_csv;\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{csv_compare_template_filename}') INTO template_content;\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{source_csv_filename}') INTO source_csv;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Read target CSV from the _indb file we already exported\n")
-            out_buffer.write(f"\t\t\tSELECT pg_read_file('{csv_output_dir}/{table_file_prefix}_indb.csv') INTO target_csv;\n")
+            out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{indb_csv_filename}') INTO target_csv;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Create JavaScript to inject data (including primary key columns for auto-comparison)\n")
             include_equal_rows_sql = "true" if script_ops.data_comparison_include_equal_rows else "false"
@@ -1879,10 +1879,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tDROP TABLE IF EXISTS temp_compare_html;\n")
             out_buffer.write(f"\t\t\tCREATE TEMP TABLE temp_compare_html (content text);\n")
             out_buffer.write(f"\t\t\tINSERT INTO temp_compare_html VALUES (final_html);\n")
-            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_compare_html TO %L WITH (FORMAT CSV, QUOTE E''\\x01'', DELIMITER E''\\x02'')', '{compare_html_file}');\n")
+            out_buffer.write(f"\t\t\tEXECUTE format('COPY temp_compare_html TO %L WITH (FORMAT CSV, QUOTE E''\\x01'', DELIMITER E''\\x02'')', basePath || '/{compare_html_filename}');\n")
             out_buffer.write(f"\t\t\tDROP TABLE temp_compare_html;\n")
             out_buffer.write(f"\t\t\t\n")
-            out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: {compare_html_file}';\n")
+            out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: %', basePath || '/{compare_html_filename}';\n")
             out_buffer.write("\t\tEND;\n")
             out_buffer.write("\tEND IF;\n")
 

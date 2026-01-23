@@ -1,3 +1,4 @@
+import os
 from src.defs.script_defs import DBType, DBSyntax, InputOutput
 from src.utils import funcs as utils
 
@@ -13,8 +14,10 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput)
         sql_buffer.write("\t\tresult_string text;\n")
         sql_buffer.write("\t\thtml_content text;\n")
         sql_buffer.write("\t\tnew_content text;\n")
+        # Extract just the filename for use with basePath
+        html_output_filename = os.path.basename(input_output.html_output_path)
         sql_buffer.write(f"\t\tinput_file text := '{input_output.html_template_path}';\n")
-        sql_buffer.write(f"\t\toutput_file text := '{input_output.html_output_path}';\n")
+        sql_buffer.write(f"\t\toutput_file text := basePath || '/{html_output_filename}';\n")
         sql_buffer.write("\tBEGIN\n")
         sql_buffer.write("\t\t-- Generate the array data (tables and data entries)\n")
         sql_buffer.write("\t\tSELECT COALESCE(\n")

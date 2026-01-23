@@ -96,7 +96,13 @@
       "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\psql.exe\" -h localhost -U postgres -d Jonathan2 -f \"C:/Temp/ContextFreeSQL/sample_out.sql\")",
       "Bash(\"venv\\\\Scripts\\\\python.exe\":*)",
       "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"\nimport psycopg2\nconn = psycopg2.connect\\(host=''localhost'', database=''Jonathan2'', user=''postgres'', password=''yonision'', port=''5432''\\)\nconn.autocommit = True\ncur = conn.cursor\\(\\)\nwith open\\(''C:/Temp/ContextFreeSQL/sample_out.sql'', ''r'', encoding=''utf-8''\\) as f:\n    sql = f.read\\(\\)\ntry:\n    cur.execute\\(sql\\)\n    print\\(''Second run executed successfully!''\\)\nexcept Exception as e:\n    print\\(f''Error: {e}''\\)\nfinally:\n    cur.close\\(\\)\n    conn.close\\(\\)\n\")",
-      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m src.main --show-config)"
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m src.main --show-config)",
+      "Bash(venv\\\\Scripts\\\\python:*)",
+      "Bash(venv\\\\Scripts\\\\python.exe:*)",
+      "Bash(\"./venv/Scripts/python.exe\":*)",
+      "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; from src.generate.generate_final_html_report import generate_html_report; from src.generate.generate_final_code_diffs import generate_code_diffs; print\\(''All imports successful''\\)\")",
+      "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_script import build_script_header, generate_all_script; print\\(''Import successful''\\)\")",
+      "Bash(\"./venv/Scripts/python.exe\" -c \"from src.generate.generate_final_data import script_data; print\\(''Import successful''\\)\")"
     ],
     "deny": [],
     "ask": []
