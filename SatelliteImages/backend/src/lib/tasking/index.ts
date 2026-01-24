@@ -4,7 +4,7 @@
  */
 
 import { getWeatherData, type WeatherData } from '../nasa/power';
-import { getSatellitePasses, type SatellitePass, type PassPrediction } from '../nasa/n2yo';
+import { getSatellitePasses, type SatellitePass, type PassPredictionResult } from '../nasa/n2yo';
 
 export interface CollectionWindow {
   startTime: string;
@@ -101,7 +101,7 @@ export async function getOptimalCollectionWindows(
   );
 
   // Get satellite pass predictions
-  let passes: PassPrediction | null = null;
+  let passes: PassPredictionResult | null = null;
   if (n2yoApiKey) {
     try {
       passes = await getSatellitePasses(n2yoApiKey, lat, lon, 0, preferredSatellites, 7);
@@ -144,8 +144,8 @@ export async function getOptimalCollectionWindows(
                     factors.reduce((sum, f) => sum + f.weight, 0);
 
       windows.push({
-        startTime: pass.startTime,
-        endTime: pass.endTime,
+        startTime: pass.startTime instanceof Date ? pass.startTime.toISOString() : String(pass.startTime),
+        endTime: pass.endTime instanceof Date ? pass.endTime.toISOString() : String(pass.endTime),
         satellite: pass.satellite,
         score: Math.round(score),
         cloudCoverage,
@@ -172,7 +172,11 @@ export async function getOptimalCollectionWindows(
     .filter(([_, info]) => sensorType === 'any' || info.type === sensorType)
     .map(([name, info]) => ({
       satellite: name,
-      nextPass: passes?.passes.find(p => p.satellite === name)?.startTime || 'Unknown',
+      nextPass: (() => {
+        const pass = passes?.passes.find((p: SatellitePass) => p.satellite === name);
+        if (!pass) return 'Unknown';
+        return pass.startTime instanceof Date ? pass.startTime.toISOString() : String(pass.startTime);
+      })(),
       frequency: info.revisitDays === 1 ? 'Daily' : `Every ${info.revisitDays} days`,
     }));
 

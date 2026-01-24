@@ -46,7 +46,9 @@
       "Bash(echo:*)",
       "Bash(aws dynamodb delete-item:*)",
       "Bash(aws s3:*)",
-      "Bash(for func in satellite-platform-search-images-demo satellite-platform-get-image-demo satellite-platform-update-image-demo satellite-platform-delete-image-demo)"
+      "Bash(for func in satellite-platform-search-images-demo satellite-platform-get-image-demo satellite-platform-update-image-demo satellite-platform-delete-image-demo)",
+      "Bash(npm run build:frontend:*)",
+      "Bash(npm run build:backend:*)"
     ],
     "deny": [],
     "ask": []

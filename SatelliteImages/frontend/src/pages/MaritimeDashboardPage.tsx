@@ -14,7 +14,6 @@ import {
   Anchor,
   ChevronDown,
   ChevronRight,
-  MapPin,
   X,
   Image as ImageIcon,
 } from 'lucide-react';
