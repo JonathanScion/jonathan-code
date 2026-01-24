@@ -119,24 +119,6 @@ function getYesterday(): string {
   return date.toISOString().split('T')[0];
 }
 
-// Custom CRS for GIBS EPSG:4326 tiles
-// GIBS uses a specific tile matrix that differs from standard EPSG:4326
-function createGibsCRS4326() {
-  const resolutions = [
-    0.5625,      // Level 0
-    0.28125,     // Level 1
-    0.140625,    // Level 2
-    0.0703125,   // Level 3
-    0.03515625,  // Level 4
-    0.017578125, // Level 5
-    0.0087890625, // Level 6
-    0.00439453125, // Level 7
-    0.002197265625, // Level 8
-    0.0010986328125, // Level 9
-  ];
-
-  return L.CRS.EPSG4326;
-}
 
 export function MapViewer({
   images,

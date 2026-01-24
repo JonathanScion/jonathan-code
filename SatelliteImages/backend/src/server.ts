@@ -426,7 +426,7 @@ app.post('/api/images/search', async (req: Request, res: Response) => {
     });
 
     const searchResult: SearchResult = {
-      images,
+      images: images.filter((img): img is NonNullable<typeof img> => img !== null),
       total,
       page,
       pageSize,
@@ -553,7 +553,7 @@ app.get('/api/analytics/statistics', async (req: Request, res: Response) => {
     const imagesByTag: { [tag: string]: number } = {};
     images.forEach(img => {
       if (img?.tags) {
-        img.tags.forEach(tag => {
+        img.tags.forEach((tag: string) => {
           imagesByTag[tag] = (imagesByTag[tag] || 0) + 1;
         });
       }
@@ -1442,6 +1442,20 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 // ============ START SERVER ============
 
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendPath));
+
+  // Catch-all route for SPA - must be after API routes
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/files')) {
+      res.sendFile(path.join(frontendPath, 'index.html'));
+    }
+  });
+  console.log(`Serving frontend from: ${frontendPath}`);
+}
+
 async function start() {
   try {
     // Initialize storage directory
@@ -1455,6 +1469,9 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`API available at http://localhost:${PORT}/api`);
+      if (process.env.NODE_ENV === 'production') {
+        console.log(`Frontend served at http://localhost:${PORT}`);
+      }
     });
   } catch (err) {
     console.error('Failed to start server:', err);

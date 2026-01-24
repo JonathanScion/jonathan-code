@@ -189,7 +189,7 @@ export async function generateTimeline(
           passData.passes.forEach((pass, idx) => {
             entries.push({
               id: `pass-${idx}-${pass.satellite}`,
-              timestamp: pass.startTime,
+              timestamp: pass.startTime instanceof Date ? pass.startTime.toISOString() : String(pass.startTime),
               source: 'pass',
               title: `${pass.satellite} Pass`,
               description: `Max elevation: ${pass.maxElevation}°, Duration: ${Math.round(pass.duration / 60)}min`,

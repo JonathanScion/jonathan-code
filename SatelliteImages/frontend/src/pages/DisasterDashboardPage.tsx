@@ -16,7 +16,7 @@ import {
   X,
   ImageIcon,
 } from 'lucide-react';
-import { disastersApi, nasaApi, type HazardPoint, type DisasterSummary, type BoundingBox } from '@/lib/api';
+import { disastersApi, type HazardPoint } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';

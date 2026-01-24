@@ -11,7 +11,7 @@
 
 export * from './cmr';
 export * from './gibs';
-export * from './firms';
+export { getFireData, hasRecentFires, calculateFireRisk, type FIRMSResult } from './firms';
 export * from './power';
 export * from './n2yo';
 

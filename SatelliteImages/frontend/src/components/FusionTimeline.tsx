@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Loader2,
 } from 'lucide-react';
-import { fusionApi, type TimelineEntry, type TimelineSource, type IntelligenceReport } from '@/lib/api';
+import { fusionApi, type TimelineSource, type IntelligenceReport } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -85,7 +85,6 @@ export function FusionTimeline({
     data: report,
     isLoading: reportLoading,
     refetch: fetchReport,
-    isFetched: reportFetched,
   } = useQuery({
     queryKey: ['intel-report', imageId],
     queryFn: () => fusionApi.getReportForImage(imageId),

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Grid3x3, List, Map as MapIcon, Loader, Trash2, Layers, X } from 'lucide-react';
 import { useAtom } from 'jotai';

@@ -14,7 +14,7 @@ import {
   Sun,
   CloudRain,
 } from 'lucide-react';
-import { taskingApi, type TaskingRecommendation, type TaskingCriteria } from '@/lib/api';
+import { taskingApi, type TaskingCriteria } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -24,13 +24,6 @@ interface TaskingPanelProps {
   centerPoint?: { lat: number; lon: number };
 }
 
-const GRADE_COLORS: Record<string, string> = {
-  A: 'bg-green-500 text-white',
-  B: 'bg-green-400 text-white',
-  C: 'bg-yellow-500 text-dark',
-  D: 'bg-orange-500 text-white',
-  F: 'bg-red-500 text-white',
-};
 
 export function TaskingPanel({ imageId, centerPoint }: TaskingPanelProps) {
   const [expanded, setExpanded] = useState(false);

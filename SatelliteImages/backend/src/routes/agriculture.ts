@@ -135,9 +135,9 @@ router.post('/compare-seasons', async (req: Request, res: Response) => {
     // Calculate trends
     const validComparisons = comparisons.filter((c: any) => !c.error);
     const trend = validComparisons.length >= 2 ? {
-      healthChange: validComparisons[validComparisons.length - 1].cropHealth.overall -
-                    validComparisons[0].cropHealth.overall,
-      droughtTrend: validComparisons.map((c: any) => c.droughtIndex.value),
+      healthChange: (validComparisons[validComparisons.length - 1]?.cropHealth?.overall || 0) -
+                    (validComparisons[0]?.cropHealth?.overall || 0),
+      droughtTrend: validComparisons.map((c: any) => c.droughtIndex?.value),
     } : null;
 
     res.json({

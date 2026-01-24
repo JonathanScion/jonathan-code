@@ -16,7 +16,7 @@ import {
   Wind,
   Sun,
 } from 'lucide-react';
-import { nasaApi, type GIBSLayer, type ImageEnrichment, type BoundingBox } from '@/lib/api';
+import { nasaApi, type ImageEnrichment, type BoundingBox } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';

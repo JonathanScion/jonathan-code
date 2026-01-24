@@ -14,7 +14,7 @@ import {
   Loader2,
   RefreshCw,
 } from 'lucide-react';
-import { agricultureApi, type AgriculturalAnalysis, type CropType } from '@/lib/api';
+import { agricultureApi } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
