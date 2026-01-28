@@ -1,309 +1,157 @@
-# Deploying SatelliteImages to Hostinger
+# Deploying SatelliteImages API to Hostinger
 
-This guide covers deploying the SatelliteImages platform to Hostinger Business Web Hosting with Node.js support.
+This guide covers deploying the Node.js backend API to Hostinger.
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    jonathanscode.io                      │
-├─────────────────────────────────────────────────────────┤
-│  Frontend (React)     │  Backend (Express API)          │
-│  /                    │  /api/*                         │
-│  Static files from    │  Node.js app                    │
-│  frontend/dist        │  backend/dist/server.js         │
-└─────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │    NeonDB       │
-                    │  (PostgreSQL)   │
-                    │  Already hosted │
-                    └─────────────────┘
-```
-
-## Prerequisites
-
-- Hostinger Business Web Hosting (with Node.js support)
-- Domain: jonathanscode.io (or your domain)
-- NeonDB database already configured (you have this)
+**API Domain**: `satelliteimages-api.jonathanscode.io`
 
 ---
 
-## Step 1: Prepare the Code Locally
+## Critical Lessons Learned
 
-### 1.1 Update Frontend API URL
+### 1. Hostinger uses CommonJS to load your app
 
-Edit `frontend/.env`:
-
-```env
-VITE_API_URL=https://jonathanscode.io/api
-VITE_CESIUM_ION_TOKEN=your-cesium-ion-token
+Hostinger's Node.js launcher (`/usr/local/lsws/fcgi-bin/lsnode.js`) uses `require()`:
+```javascript
+var app = require(startupFile);  // CommonJS only!
 ```
 
-### 1.2 Build Both Projects
+- **DO NOT** put `"type": "module"` in package.json
+- **DO NOT** use `import` statements in server.js
+- **DO** use `require()` in server.js
+- **DO** use dynamic `import()` to load ES Module bundles from CommonJS
+
+### 2. ES Modules don't have `__dirname`
+
+ES Modules don't have `__dirname` or `__filename`. A polyfill is needed:
+```javascript
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+```
+
+**Problem**: TypeScript may strip this polyfill during compilation.
+
+**Solution**: Inject via esbuild `--banner` flag (see build script below).
+
+### 3. geotiff requires ES Modules
+
+The `geotiff` v2.x package depends on `quick-lru` which is ESM-only. You CANNOT `require()` it.
+
+**Solution**: Bundle backend as ES Module (`.mjs`) and load via dynamic `import()` from CommonJS wrapper.
+
+### 4. Hostinger has no runtime console logs
+
+Hostinger does not show `console.log` output. For debugging:
+- Check `stderr.log` in File Manager for startup crashes
+- Use file-based logging (write to `logs/app.log`)
+- The fallback server returns error details as JSON
+
+### 5. Environment variables via .env
+
+Include `.env` file in the zip at root level. Load with `dotenv` package.
+
+### 6. Cross-domain file serving (PUBLIC_API_URL)
+
+When frontend and API are on different domains (e.g., `satelliteimages.jonathanscode.io` vs
+`satelliteimages-api.jonathanscode.io`), download URLs must be absolute, not relative.
+
+The backend's `getDownloadUrl()` returns `/files/images/{uuid}/{file}` by default. The frontend
+renders `<img src="/files/...">` which resolves against the frontend domain - but files are on the
+API server.
+
+**Solution**: Set `PUBLIC_API_URL` in the API's `.env`:
+```
+PUBLIC_API_URL=https://satelliteimages-api.jonathanscode.io
+```
+This makes `getDownloadUrl()` return `https://satelliteimages-api.jonathanscode.io/files/...`.
+
+---
+
+## Zip Structure
+
+```
+hostinger-backend.zip/
++-- server.js           <- CommonJS entry point (Hostinger loads this via require)
++-- server.bundle.mjs   <- ES Module bundle (loaded via dynamic import)
++-- package.json        <- NO "type": "module"
++-- .env                <- Environment variables at root
++-- logs/               <- For file-based debug logging
++-- uploads/            <- For file uploads
+```
+
+---
+
+## Step-by-Step Deployment
+
+### Step 1: Build the Backend
 
 ```bash
-# From the project root
-npm run build:shared
-npm run build:backend
-npm run build:frontend
+cd backend && npm run build
 ```
 
-### 1.3 Modify Backend to Serve Frontend (Recommended)
-
-Add this to `backend/src/server.ts` before the `app.listen()` call to serve the frontend from the same Node.js app:
-
-```typescript
-// Serve frontend static files in production
-if (process.env.NODE_ENV === 'production') {
-  const frontendPath = path.join(__dirname, '../../frontend/dist');
-  app.use(express.static(frontendPath));
-
-  // Catch-all route for SPA - must be after API routes
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/files')) {
-      res.sendFile(path.join(frontendPath, 'index.html'));
-    }
-  });
-}
+Build script in `backend/package.json`:
+```
+tsc && tsc-alias && esbuild dist/server.js --bundle --platform=node --format=esm
+  --outfile=dist/server.bundle.js --packages=external
+  --banner:js="import { fileURLToPath } from 'url'; import { dirname } from 'path';
+  const __filename = fileURLToPath(import.meta.url); const __dirname = dirname(__filename);"
 ```
 
-Then rebuild the backend:
+Key flags:
+- `--format=esm` - Output as ES Module
+- `--packages=external` - Keep node_modules external (avoids "Dynamic require of fs" error)
+- `--banner:js=...` - Injects __dirname polyfill at top of bundle
+
+### Step 2: Copy bundle and create zip
+
 ```bash
-npm run build:backend
+# Copy bundle as .mjs (tells Node it's ES Module)
+cp backend/dist/server.bundle.js hostinger-deploy/server.bundle.mjs
+
+# Create zip (PowerShell on Windows)
+powershell Compress-Archive -Path hostinger-deploy/server.js, hostinger-deploy/server.bundle.mjs, hostinger-deploy/package.json, hostinger-deploy/.env, hostinger-deploy/logs, hostinger-deploy/uploads -DestinationPath hostinger-backend.zip -Force
 ```
+
+### Step 3: Upload to Hostinger
+
+1. Go to Hostinger > Websites > your-domain > Advanced > Node.js
+2. Upload `hostinger-backend.zip`
+3. Settings:
+   - **Framework**: Express
+   - **Node version**: 18.x
+   - **Entry point**: server.js
+   - **Start command**: npm start
+
+### Step 4: Check for errors
+
+If you get 503:
+1. Check `stderr.log` via File Manager for startup crashes
+2. Check `logs/app.log` for runtime errors
+3. Visit the URL directly - fallback server returns error JSON
 
 ---
 
-## Step 2: Create Node.js App in Hostinger hPanel
+## Common Errors
 
-1. Log in to **hPanel** at hpanel.hostinger.com
-2. Go to **Websites** → **Manage** for jonathanscode.io
-3. Find **Node.js** under "Advanced" or "Web Apps"
-4. Click **Create a new application**
-
-### Configuration:
-
-| Field | Value |
-|-------|-------|
-| **Node.js version** | 18.x or 20.x (LTS recommended) |
-| **Application root** | `satellite-app` (or your preferred folder name) |
-| **Application URL** | `jonathanscode.io` (root domain) |
-| **Start file** | `backend/dist/server.js` |
-
-5. Click **Create**
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `ERR_REQUIRE_ESM` | `"type": "module"` in package.json | Remove it; server.js must be CommonJS |
+| `__dirname is not defined` | ES Modules lack `__dirname` | Add polyfill via esbuild `--banner` |
+| `Dynamic require of "fs"` | esbuild bundled Node builtins | Use `--packages=external` flag |
+| `require() of quick-lru` | geotiff needs ESM | Bundle as `.mjs`, load via `import()` |
+| 503 with no info | Server crashed silently | Check `stderr.log` in File Manager |
+| Image preview 404 | `getDownloadUrl` returns relative path | Set `PUBLIC_API_URL` in `.env` |
 
 ---
 
-## Step 3: Upload Your Code
+## File Locations
 
-### Option A: Via File Manager
-
-1. In hPanel, go to **Files** → **File Manager**
-2. Navigate to `public_html/satellite-app/` (or your app root)
-3. Upload these folders/files:
-   ```
-   backend/           (entire folder)
-   frontend/dist/     (built frontend)
-   shared/            (shared types)
-   package.json       (root package.json)
-   ```
-
-### Option B: Via FTP/SFTP
-
-1. Get FTP credentials from hPanel → **Files** → **FTP Accounts**
-2. Connect using FileZilla or similar
-3. Upload to your application root folder
-
-### Folder Structure on Server:
-
-```
-satellite-app/
-├── backend/
-│   ├── dist/
-│   │   └── server.js      ← Start file
-│   ├── package.json
-│   └── node_modules/      (created after npm install)
-├── frontend/
-│   └── dist/              ← Built frontend files
-├── shared/
-│   └── dist/
-├── package.json
-└── uploads/               ← Created automatically for file storage
-```
-
----
-
-## Step 4: Configure Environment Variables
-
-In hPanel Node.js app settings, add these environment variables:
-
-### Required Variables:
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `NODE_ENV` | `production` | Enables production mode |
-| `PORT` | (leave empty or set by Hostinger) | Hostinger sets this automatically |
-| `DATABASE_URL` | `postgresql://neondb_owner:npg_xxx@ep-xxx.neon.tech/neondb?sslmode=require` | Your NeonDB connection string |
-| `STORAGE_DIR` | `./uploads` | Where uploaded images are stored |
-
-### Optional API Keys (for full functionality):
-
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `NASA_FIRMS_API_KEY` | Your FIRMS key | Fire detection data |
-| `N2YO_API_KEY` | Your N2YO key | Satellite pass predictions |
-| `ANTHROPIC_API_KEY` | Your Anthropic key | AI image analysis |
-
-### How to Set in hPanel:
-
-1. Go to **Websites** → **Manage** → **Node.js**
-2. Click on your application
-3. Find **Environment Variables** or **Configuration**
-4. Add each variable
-
----
-
-## Step 5: Install Dependencies and Start
-
-### 5.1 Install Dependencies
-
-In hPanel Node.js section:
-
-1. Click **NPM Install** or **Run NPM Install** button
-2. Wait for dependencies to install
-
-Or via SSH (if available):
-```bash
-cd ~/public_html/satellite-app/backend
-npm install --production
-```
-
-### 5.2 Start the Application
-
-1. In hPanel Node.js section, click **Start** or **Restart**
-2. Check the application status shows "Running"
-
-### 5.3 Initialize the Database (First Time Only)
-
-The database tables are created automatically on first startup. If you need to manually initialize:
-
-Via SSH:
-```bash
-cd ~/public_html/satellite-app
-node -e "require('./backend/dist/lib/database').initializeDatabase()"
-```
-
----
-
-## Step 6: Configure Domain Routing (if needed)
-
-If you want the API on a subdomain like `api.jonathanscode.io`:
-
-1. Go to **Domains** → **Subdomains**
-2. Create subdomain `api`
-3. Point it to your Node.js app
-4. Update `frontend/.env` to use `https://api.jonathanscode.io/api`
-5. Rebuild and re-upload frontend
-
----
-
-## Step 7: Verify Deployment
-
-### Test the API:
-```
-https://jonathanscode.io/api/health
-```
-Should return: `{ "status": "ok" }`
-
-### Test the Frontend:
-```
-https://jonathanscode.io
-```
-Should load the SatelliteImages React application.
-
-### Test Database Connection:
-```
-https://jonathanscode.io/api/images
-```
-Should return: `{ "data": { "images": [], "total": 0, ... } }`
-
----
-
-## Troubleshooting
-
-### App won't start
-- Check the **Logs** in hPanel Node.js section
-- Verify all environment variables are set
-- Ensure `DATABASE_URL` is correct
-
-### Database connection fails
-- Verify NeonDB is active (check NeonDB dashboard)
-- Confirm connection string includes `?sslmode=require`
-- Check if NeonDB allows connections from Hostinger IPs
-
-### Frontend shows blank page
-- Check browser console for errors
-- Verify `VITE_API_URL` was set correctly before build
-- Ensure frontend/dist was uploaded
-
-### File uploads fail
-- Check `STORAGE_DIR` is writable
-- Verify disk space quota in Hostinger
-
-### CORS errors
-- The backend already has CORS enabled
-- If issues persist, check if the domain matches
-
----
-
-## Maintenance
-
-### Updating the Application
-
-1. Make changes locally
-2. Run `npm run build`
-3. Upload changed files (usually `backend/dist` and/or `frontend/dist`)
-4. Click **Restart** in hPanel
-
-### Viewing Logs
-
-- In hPanel → Node.js → your app → **Logs** or **Error Logs**
-
-### Database Backups
-
-NeonDB handles backups automatically. You can also:
-- Export via NeonDB dashboard
-- Use `pg_dump` if SSH access is available
-
----
-
-## Security Checklist
-
-- [ ] Remove API keys from any committed files
-- [ ] Ensure `.env` files are in `.gitignore`
-- [ ] Use HTTPS (Hostinger provides free SSL)
-- [ ] Set `NODE_ENV=production`
-- [ ] Consider rate limiting for production
-
----
-
-## Quick Reference
-
-| Component | Location |
-|-----------|----------|
-| Frontend URL | https://jonathanscode.io |
-| API URL | https://jonathanscode.io/api |
-| Database | NeonDB (external) |
-| File Storage | ./uploads on Hostinger |
-| Start File | backend/dist/server.js |
-| Node Version | 18.x or 20.x |
-
----
-
-## Need Help?
-
-- Hostinger Support: support.hostinger.com
-- NeonDB Docs: neon.tech/docs
-- Node.js on Hostinger: support.hostinger.com/en/articles/6817577
+| File | Purpose |
+|------|---------|
+| `hostinger-deploy/server.js` | CommonJS entry point |
+| `hostinger-deploy/server.bundle.mjs` | Bundled ES Module backend |
+| `hostinger-deploy/package.json` | Dependencies (no "type": "module") |
+| `hostinger-deploy/.env` | Environment variables |
+| `hostinger-backend.zip` | Upload this to Hostinger |
+| `backend/package.json` | Build script with esbuild + banner |

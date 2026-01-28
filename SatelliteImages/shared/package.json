@@ -2,8 +2,15 @@
   "name": "@satellite-platform/shared",
   "version": "1.0.0",
   "description": "Shared TypeScript types and utilities",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "type": "module",
+  "main": "dist/types.js",
+  "types": "dist/types.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch"

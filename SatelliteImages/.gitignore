@@ -18,6 +18,12 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+*.env
+hostinger-deploy/.env
+hostinger-deploy/config.js
+
+# Deployment zips (may contain secrets)
+*.zip
 
 # IDE
 .vscode/

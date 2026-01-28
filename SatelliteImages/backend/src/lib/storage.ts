@@ -9,6 +9,12 @@ const stat = promisify(fs.stat);
 // Base directory for storing uploaded files
 export const STORAGE_DIR = process.env.STORAGE_DIR || path.join(process.cwd(), 'uploads');
 
+// Base URL path for the application (e.g., '/satelliteimages' for subdirectory deployment)
+export const BASE_PATH = process.env.BASE_PATH || '';
+
+// Public API URL for generating absolute download URLs (needed when frontend is on a different domain)
+export const PUBLIC_API_URL = process.env.PUBLIC_API_URL || '';
+
 // Ensure storage directory exists
 export async function ensureStorageDir(): Promise<void> {
   try {
@@ -35,10 +41,11 @@ export function generateUploadPath(imageId: string, filename: string): string {
   return path.join('images', imageId, filename);
 }
 
-// Get download URL (for local development, returns a path that Express will serve)
+// Get download URL (returns a path that Express will serve)
 export function getDownloadUrl(key: string): string {
   // Return a URL path that will be served by Express static middleware
-  return `/files/${key.replace(/\\/g, '/')}`;
+  // Include BASE_PATH for subdirectory deployments
+  return `${BASE_PATH}/files/${key.replace(/\\/g, '/')}`;
 }
 
 // Delete a file
