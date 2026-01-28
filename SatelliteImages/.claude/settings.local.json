@@ -48,7 +48,19 @@
       "Bash(aws s3:*)",
       "Bash(for func in satellite-platform-search-images-demo satellite-platform-get-image-demo satellite-platform-update-image-demo satellite-platform-delete-image-demo)",
       "Bash(npm run build:frontend:*)",
-      "Bash(npm run build:backend:*)"
+      "Bash(npm run build:backend:*)",
+      "Bash(dir \"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\frontend\")",
+      "Bash(tar:*)",
+      "Bash(cat:*)",
+      "Bash(python create_zip.py:*)",
+      "Bash(python:*)",
+      "Bash(timeout 10 npm start)",
+      "Bash(timeout 15 npm start)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(grep:*)",
+      "Bash(git reset:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

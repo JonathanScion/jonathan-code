@@ -3,10 +3,15 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 
+// ES Module polyfill for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import { pool, initializeDatabase, rowToImage, rowToCollection, rowToRequest } from './lib/database';
-import { STORAGE_DIR, ensureStorageDir, getDownloadUrl, deleteFile, generateUploadPath, getFilePath } from './lib/storage';
+import { STORAGE_DIR, BASE_PATH, ensureStorageDir, getDownloadUrl, deleteFile, generateUploadPath, getFilePath } from './lib/storage';
 import {
   searchCMR,
   getGIBSLayers,
@@ -443,11 +448,12 @@ app.post('/api/images/search', async (req: Request, res: Response) => {
 app.get('/api/images/:id', async (req: Request, res: Response) => {
   try {
     const result = await pool.query('SELECT * FROM images WHERE id = $1', [req.params.id]);
-    const image = rowToImage(result.rows[0]);
 
-    if (!image) {
+    if (!result.rows[0]) {
       return error(res, 'Image not found', 404);
     }
+
+    const image = rowToImage(result.rows[0]);
 
     // Add preview URL - prefer larger preview, then thumbnail, then original file
     // previewUrl from DB contains preview_path (1200px), thumbnailUrl contains thumbnail_path (300px)
@@ -1463,12 +1469,15 @@ async function start() {
     console.log(`Storage directory: ${STORAGE_DIR}`);
 
     // Initialize database
-    await initializeDatabase();
+    try { await initializeDatabase(); console.log('Database initialized successfully'); } catch (dbErr) { console.error('Database initialization failed (server will continue):', dbErr); }
 
     // Start server
-    app.listen(PORT, () => {
+    app.listen(Number(PORT), '0.0.0.0', () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`API available at http://localhost:${PORT}/api`);
+      if (BASE_PATH) {
+        console.log(`Base path: ${BASE_PATH}`);
+      }
       if (process.env.NODE_ENV === 'production') {
         console.log(`Frontend served at http://localhost:${PORT}`);
       }
