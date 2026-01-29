@@ -60,7 +60,9 @@
       "Bash(node:*)",
       "Bash(grep:*)",
       "Bash(git reset:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npx esbuild:*)"
     ],
     "deny": [],
     "ask": []

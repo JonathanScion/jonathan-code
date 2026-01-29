@@ -1,14 +1,12 @@
-import { fileURLToPath } from 'url'; import { dirname } from 'path'; const __filename = fileURLToPath(import.meta.url); const __dirname = dirname(__filename);
-
-// dist/server.js
+// dist/backend/src/server.js
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
 import multer from "multer";
 import path3 from "path";
+import { fileURLToPath } from "url";
 import { v4 as uuidv4 } from "uuid";
 
-// dist/lib/database.js
+// dist/backend/src/lib/database.js
 import { Pool } from "pg";
 var pool = new Pool(process.env.DATABASE_URL ? {
   connectionString: process.env.DATABASE_URL,
@@ -209,7 +207,7 @@ function rowToCollection(row) {
   };
 }
 
-// dist/lib/storage.js
+// dist/backend/src/lib/storage.js
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
@@ -218,6 +216,7 @@ var unlink2 = promisify(fs.unlink);
 var stat2 = promisify(fs.stat);
 var STORAGE_DIR = process.env.STORAGE_DIR || path.join(process.cwd(), "uploads");
 var BASE_PATH = process.env.BASE_PATH || "";
+var PUBLIC_API_URL = process.env.PUBLIC_API_URL || "";
 async function ensureStorageDir() {
   try {
     await mkdir2(STORAGE_DIR, { recursive: true });
@@ -235,7 +234,8 @@ function generateUploadPath(imageId, filename) {
   return path.join("images", imageId, filename);
 }
 function getDownloadUrl(key) {
-  return `${BASE_PATH}/files/${key.replace(/\\/g, "/")}`;
+  const prefix = PUBLIC_API_URL || BASE_PATH;
+  return `${prefix}/files/${key.replace(/\\/g, "/")}`;
 }
 async function deleteFile(key) {
   const filePath = getFilePath(key);
@@ -252,7 +252,7 @@ async function deleteFile(key) {
   }
 }
 
-// dist/lib/nasa/cmr.js
+// dist/backend/src/lib/nasa/cmr.js
 import axios from "axios";
 var CMR_BASE_URL = "https://cmr.earthdata.nasa.gov/search";
 var COLLECTION_IDS = {
@@ -371,7 +371,7 @@ function extractSatellite(title, collectionId) {
   return "Unknown";
 }
 
-// dist/lib/nasa/gibs.js
+// dist/backend/src/lib/nasa/gibs.js
 var GIBS_BASE_URL = "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best";
 var GIBS_LAYERS = [
   // === TRUE COLOR LAYERS (work in both modes) ===
@@ -541,7 +541,7 @@ function getLeafletLayerConfig(layerId, date) {
   };
 }
 
-// dist/lib/nasa/firms.js
+// dist/backend/src/lib/nasa/firms.js
 import axios2 from "axios";
 var FIRMS_BASE_URL = "https://firms.modaps.eosdis.nasa.gov/api";
 async function getFireData(apiKey, bbox, days = 1, source = "VIIRS_NOAA20_NRT") {
@@ -664,7 +664,7 @@ function toRad(deg) {
   return deg * (Math.PI / 180);
 }
 
-// dist/lib/nasa/power.js
+// dist/backend/src/lib/nasa/power.js
 import axios3 from "axios";
 var POWER_BASE_URL = "https://power.larc.nasa.gov/api/temporal";
 var PARAMETERS = [
@@ -836,7 +836,7 @@ function createEmptyWeather(date) {
   };
 }
 
-// dist/lib/nasa/n2yo.js
+// dist/backend/src/lib/nasa/n2yo.js
 import axios4 from "axios";
 var N2YO_BASE_URL = "https://api.n2yo.com/rest/v1/satellite";
 var SATELLITE_NORAD_IDS = {
@@ -900,7 +900,7 @@ function sleep(ms) {
   return new Promise((resolve2) => setTimeout(resolve2, ms));
 }
 
-// dist/lib/nasa/index.js
+// dist/backend/src/lib/nasa/index.js
 async function enrichImageWithNasaData(lat, lon, captureDate, firmsApiKey, n2yoApiKey) {
   const enrichment = {
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
@@ -966,7 +966,7 @@ async function enrichImageWithNasaData(lat, lon, captureDate, firmsApiKey, n2yoA
   return enrichment;
 }
 
-// dist/lib/analysis/claude-analysis.js
+// dist/backend/src/lib/analysis/claude-analysis.js
 import Anthropic from "@anthropic-ai/sdk";
 import * as fs2 from "fs";
 import * as path2 from "path";
@@ -1227,7 +1227,7 @@ Provide your analysis in JSON format:
   }
 }
 
-// dist/lib/disasters/usgs.js
+// dist/backend/src/lib/disasters/usgs.js
 import axios5 from "axios";
 var USGS_BASE_URL = "https://earthquake.usgs.gov/fdsnws/event/1";
 function parseEarthquake(feature) {
@@ -1299,7 +1299,7 @@ async function getEarthquakeStats(days = 7) {
   };
 }
 
-// dist/lib/disasters/gdacs.js
+// dist/backend/src/lib/disasters/gdacs.js
 import axios6 from "axios";
 var GDACS_API_URL = "https://www.gdacs.org/gdacsapi/api/events";
 var HAZARD_NAMES = {
@@ -1390,7 +1390,7 @@ async function getDisasterStats() {
   };
 }
 
-// dist/lib/disasters/index.js
+// dist/backend/src/lib/disasters/index.js
 function earthquakeToHazardPoint(eq) {
   let severity = "low";
   if (eq.magnitude >= 6)
@@ -1500,7 +1500,7 @@ async function getAllHazards(options = {}) {
   return hazards.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-// dist/lib/fusion/timeline-fusion.js
+// dist/backend/src/lib/fusion/timeline-fusion.js
 function createBboxFromPoint(lat, lon, radiusKm = 50) {
   const latDelta = radiusKm / 111;
   const lonDelta = radiusKm / (111 * Math.cos(lat * Math.PI / 180));
@@ -1756,7 +1756,7 @@ async function generateIntelReport(lat, lon, captureDate, options) {
   };
 }
 
-// dist/lib/geotiff-utils.js
+// dist/backend/src/lib/geotiff-utils.js
 import { fromFile } from "geotiff";
 import * as fs3 from "fs";
 function utmToLatLon(easting, northing, zone, isNorthernHemisphere) {
@@ -1898,7 +1898,7 @@ async function extractLocalGeoTIFFMetadata(filePath) {
   }
 }
 
-// dist/lib/agriculture/index.js
+// dist/backend/src/lib/agriculture/index.js
 var NDVI_THRESHOLDS = {
   barren: { min: -1, max: 0.1 },
   sparse: { min: 0.1, max: 0.2 },
@@ -2289,7 +2289,7 @@ function getCropTypes() {
   }));
 }
 
-// dist/lib/tasking/index.js
+// dist/backend/src/lib/tasking/index.js
 var SATELLITE_INFO = {
   "Landsat 8": { type: "optical", resolution: "30m", revisitDays: 16, swathKm: 185 },
   "Landsat 9": { type: "optical", resolution: "30m", revisitDays: 16, swathKm: 185 },
@@ -2510,7 +2510,7 @@ function scoreCollectionRequest(cloudCoverage, elevation, timeUntilPass, urgency
   return { score: Math.round(score), grade, recommendation };
 }
 
-// dist/lib/maritime/index.js
+// dist/backend/src/lib/maritime/index.js
 import axios7 from "axios";
 var VESSEL_TYPES = {
   0: "Unknown",
@@ -2783,10 +2783,21 @@ function identifyNearbyPorts(lat, lon) {
   return ports.map((p) => ({ ...p, distance: haversineDistance2(lat, lon, p.lat, p.lon) })).filter((p) => p.distance < 200).sort((a, b) => a.distance - b.distance).slice(0, 3).map((p) => p.name);
 }
 
-// dist/server.js
+// dist/backend/src/server.js
+var __filename = fileURLToPath(import.meta.url);
+var __dirname = path3.dirname(__filename);
 var app = express();
 var PORT = process.env.PORT || 3001;
-app.use(cors());
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.header("Access-Control-Allow-Credentials", "true");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
 app.use(express.json());
 app.use("/files", express.static(STORAGE_DIR));
 var storage = multer.diskStorage({
@@ -3069,10 +3080,10 @@ app.post("/api/images/search", async (req, res) => {
 app.get("/api/images/:id", async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM images WHERE id = $1", [req.params.id]);
-    const image = rowToImage(result.rows[0]);
-    if (!image) {
+    if (!result.rows[0]) {
       return error(res, "Image not found", 404);
     }
+    const image = rowToImage(result.rows[0]);
     const previewSource = image.previewUrl || image.thumbnailUrl || image.filePath || image.s3Key;
     image.previewUrl = getDownloadUrl(previewSource);
     success(res, image);

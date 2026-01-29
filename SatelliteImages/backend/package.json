@@ -4,7 +4,7 @@
   "description": "Backend server for Satellite Images platform",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && tsc-alias && esbuild dist/server.js --bundle --platform=node --format=esm --outfile=dist/server.bundle.js --packages=external --banner:js=\"import { fileURLToPath } from 'url'; import { dirname } from 'path'; const __filename = fileURLToPath(import.meta.url); const __dirname = dirname(__filename);\"",
+    "build": "tsc && tsc-alias && esbuild dist/backend/src/server.js --bundle --platform=node --format=esm --outfile=dist/server.bundle.js --packages=external",
     "start": "node dist/server.bundle.js",
     "dev": "npx tsx watch src/server.ts",
     "watch": "tsc --watch",
