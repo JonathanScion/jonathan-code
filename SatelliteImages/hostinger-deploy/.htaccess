@@ -1,0 +1,11 @@
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Origin "https://satelliteimages.jonathanscode.io"
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+  Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+  Header always set Access-Control-Allow-Credentials "true"
+</IfModule>
+
+# Handle OPTIONS preflight at LiteSpeed level
+RewriteEngine On
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]

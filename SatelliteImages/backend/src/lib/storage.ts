@@ -44,8 +44,9 @@ export function generateUploadPath(imageId: string, filename: string): string {
 // Get download URL (returns a path that Express will serve)
 export function getDownloadUrl(key: string): string {
   // Return a URL path that will be served by Express static middleware
-  // Include BASE_PATH for subdirectory deployments
-  return `${BASE_PATH}/files/${key.replace(/\\/g, '/')}`;
+  // When PUBLIC_API_URL is set, return absolute URL. Otherwise relative path
+  const prefix = PUBLIC_API_URL || BASE_PATH;
+  return `${prefix}/files/${key.replace(/\\/g, '/')}`;
 }
 
 // Delete a file
