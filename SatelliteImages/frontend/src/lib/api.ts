@@ -47,15 +47,18 @@ export const imagesApi = {
   },
 
   uploadFile: async (uploadUrl: string, file: File, onProgress?: (progress: number) => void) => {
-    // Use multipart form data upload to local server
-    const formData = new FormData();
-    formData.append('file', file);
+    // Read file as ArrayBuffer to send true raw binary
+    // (Axios wraps File objects in multipart even with octet-stream Content-Type)
+    const arrayBuffer = await file.arrayBuffer();
 
     // uploadUrl is relative (e.g., /api/images/{id}/upload) - use api instance
-    await api.post(uploadUrl.replace('/api', ''), formData, {
+    // Filename sent as query param to avoid custom header triggering CORS preflight issues on LiteSpeed
+    const urlWithFilename = `${uploadUrl.replace('/api', '')}?filename=${encodeURIComponent(file.name)}`;
+    await api.post(urlWithFilename, arrayBuffer, {
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/octet-stream',
       },
+      timeout: 5 * 60 * 1000, // 5 minutes for large satellite images
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           const progress = (progressEvent.loaded / progressEvent.total) * 100;

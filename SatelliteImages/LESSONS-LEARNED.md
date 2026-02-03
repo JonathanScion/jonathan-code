@@ -488,5 +488,137 @@ SatelliteImages/
 
 ---
 
+## Hostinger + LiteSpeed + Node.js: CORS and File Upload
+
+### The Architecture
+
+On Hostinger, Node.js apps run behind **LiteSpeed** as a reverse proxy:
+
+```
+Browser → LiteSpeed (Hostinger's web server) → Node.js (Express)
+```
+
+This has major implications. LiteSpeed intercepts and modifies requests **before** they reach Express.
+
+### Critical Discovery: `.htaccess` Does NOT Work for Node.js on Hostinger
+
+`.htaccess` only affects Apache/PHP sites. For Node.js apps on Hostinger, it is completely ignored. All CORS headers, timeouts, and rewrites must be handled in Node.js code. Do not waste time with `.htaccess`.
+
+### Problem 1: Multipart File Uploads Get 307 Redirected
+
+**Symptom:** `POST /api/images/{id}/upload` returns `307 Temporary Redirect` with no CORS headers. Browser reports CORS error. Server logs show nothing (request never reached Node.js).
+
+**Root Cause:** LiteSpeed intercepts `multipart/form-data` POST requests (especially large ones) and issues a 307 redirect as part of its internal request body buffering. This redirect has no CORS headers because Express never sees it.
+
+**Solution:** Don't use multipart. Send the file as raw binary:
+
+```typescript
+// Frontend - api.ts
+const arrayBuffer = await file.arrayBuffer();
+await api.post(url, arrayBuffer, {
+  headers: { 'Content-Type': 'application/octet-stream' },
+});
+```
+
+```typescript
+// Backend - server.ts
+app.post('/api/images/:id/upload', async (req, res) => {
+  const chunks: Buffer[] = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  await new Promise<void>((resolve, reject) => {
+    req.on('end', resolve);
+    req.on('error', reject);
+  });
+  const fileBuffer = Buffer.concat(chunks);
+  fs.writeFileSync(destPath, fileBuffer);
+});
+```
+
+**Important:** You must send `ArrayBuffer`, not a `File` object. Axios detects `File` objects and silently wraps them in multipart framing (`------WebKitFormBoundary...`), even if you set `Content-Type: application/octet-stream`. This corrupts the saved file.
+
+### Problem 2: Custom HTTP Headers Blocked in Preflight
+
+**Symptom:** `Request header field x-filename is not allowed by Access-Control-Allow-Headers in preflight response`. Even though Express CORS middleware includes the header.
+
+**Root Cause:** LiteSpeed intercepts OPTIONS preflight requests and responds on its own with a limited set of allowed headers. Express never sees the OPTIONS request, so your `Access-Control-Allow-Headers` setting is irrelevant.
+
+**Solution:** Don't use custom headers. Send metadata via query parameters instead:
+
+```typescript
+// Frontend
+const url = `/images/${id}/upload?filename=${encodeURIComponent(file.name)}`;
+await api.post(url, arrayBuffer, { ... });
+
+// Backend
+const filename = decodeURIComponent(req.query.filename as string) || 'upload.tif';
+```
+
+Query parameters don't trigger CORS preflight issues because they're part of the URL.
+
+### Problem 3: 504 Gateway Timeout on Large Uploads
+
+**Symptom:** Large file uploads get `504 Gateway Timeout` + CORS error.
+
+**Root Cause:** LiteSpeed has a proxy timeout (typically 30-60 seconds). If Node.js doesn't respond in time, LiteSpeed generates its own 504 with no CORS headers.
+
+**Mitigation:**
+- Use raw binary upload (faster than multipart)
+- Set generous timeout on frontend axios: `timeout: 5 * 60 * 1000`
+- Consider chunked uploads for very large files (500MB+)
+
+### Problem 4: Environment Variables on Hostinger
+
+**Symptom:** `connect ECONNREFUSED ::1:5432` — database connecting to localhost instead of Neon.
+
+**Root Cause:** There's no `.env` file on the server, and Hostinger doesn't provide an env var management UI for Node.js apps.
+
+**Solution:** Use a `config.js` file alongside the server, and parse it in `server.js` before loading the bundle:
+
+```javascript
+// server.js (CommonJS entry point)
+const configContent = fs.readFileSync(path.join(__dirname, 'config.js'), 'utf8');
+const match = configContent.match(/DATABASE_URL:\s*['"]([^'"]+)['"]/);
+if (match) process.env.DATABASE_URL = match[1];
+// ... repeat for other env vars
+
+// Then load the bundle
+await import('./server.bundle.mjs');
+```
+
+### Problem 5: File URLs Pointing to Wrong Domain
+
+**Symptom:** `GET https://satelliteimages.jonathanscode.io/files/images/{id}/file.tif 404` — requesting files from frontend domain instead of API domain.
+
+**Root Cause:** `PUBLIC_API_URL` env var was not set, so `getDownloadUrl()` returned relative paths (`/files/...`). The frontend resolved these against its own domain.
+
+**Solution:** Set `PUBLIC_API_URL` in `config.js`:
+
+```javascript
+PUBLIC_API_URL: 'https://satelliteimages-api.jonathanscode.io'
+```
+
+### Summary of LiteSpeed Interference Points
+
+| What | LiteSpeed Does | Workaround |
+|------|---------------|------------|
+| Multipart POST | 307 redirect, strips CORS | Use raw binary (`ArrayBuffer`) |
+| Custom headers in preflight | Answers OPTIONS itself, limited allowed headers | Use query params instead |
+| Long requests | 504 timeout, strips CORS | Set frontend timeout, keep uploads fast |
+| `.htaccess` | Completely ignored for Node.js | Handle everything in Node.js code |
+
+### Deployment Checklist (Hostinger Node.js)
+
+- [ ] Backend: `npm run build` in backend/
+- [ ] Copy `backend/dist/server.bundle.js` to `hostinger-deploy/server.bundle.mjs`
+- [ ] Zip: `server.js`, `server.bundle.mjs`, `package.json`, `config.js`
+- [ ] Upload zip to Hostinger API domain root
+- [ ] **Restart Node.js app** in hPanel (files don't auto-reload)
+- [ ] Check `logs/app.log` for "Server bundle loaded successfully"
+- [ ] Frontend: `npm run build` in frontend/
+- [ ] Upload `frontend/dist/` to Hostinger frontend domain
+- [ ] Test upload with a small TIFF file first
+
+---
+
 *Document created: 2025-10-28*
-*Last updated: 2025-10-28*
+*Last updated: 2026-02-03*

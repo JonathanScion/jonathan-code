@@ -50,7 +50,7 @@ const PORT = process.env.PORT || 3001;
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Filename');
   res.header('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -148,20 +148,38 @@ app.post('/api/images/upload-url', async (req: Request, res: Response) => {
   }
 });
 
-// Actual file upload endpoint
-app.post('/api/images/:id/upload', upload.single('file'), async (req: Request, res: Response) => {
+// Actual file upload endpoint - accepts raw binary body to avoid LiteSpeed multipart redirect
+app.post('/api/images/:id/upload', async (req: Request, res: Response) => {
   try {
     const imageId = req.params.id;
+    const rawFilename = (req.query.filename as string) || (req.headers['x-filename'] as string) || 'upload.tif';
+    const originalFilename = decodeURIComponent(rawFilename);
 
-    if (!req.file) {
+    // Collect raw body chunks
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    await new Promise<void>((resolve, reject) => {
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+    const fileBuffer = Buffer.concat(chunks);
+
+    if (fileBuffer.length === 0) {
       return error(res, 'No file uploaded', 400);
     }
 
+    // Save file to disk
+    const uploadDir = path.join(STORAGE_DIR, 'images', imageId);
+    const fs2 = await import('fs');
+    fs2.mkdirSync(uploadDir, { recursive: true });
+    const destPath = path.join(uploadDir, originalFilename);
+    fs2.writeFileSync(destPath, fileBuffer);
+
     // Update file path in database
-    const filePath = generateUploadPath(imageId, req.file.originalname);
+    const filePath = generateUploadPath(imageId, originalFilename);
     await pool.query(
       `UPDATE images SET file_path = $1, file_size = $2 WHERE id = $3`,
-      [filePath, req.file.size, imageId]
+      [filePath, fileBuffer.length, imageId]
     );
 
     success(res, { message: 'File uploaded successfully', imageId });

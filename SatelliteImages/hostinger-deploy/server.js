@@ -80,6 +80,45 @@ try {
   logError('dotenv load failed', err);
 }
 
+// Step 1b: Load config.js as fallback if env vars are still missing
+if (!process.env.DATABASE_URL) {
+  try {
+    log('DATABASE_URL not set, loading config.js fallback...');
+    const configPath = path.join(__dirname, 'config.js');
+    log('Looking for config.js at: ' + configPath);
+
+    if (fs.existsSync(configPath)) {
+      const configContent = fs.readFileSync(configPath, 'utf8');
+      // Parse the exported config object from the ES module file
+      const match = configContent.match(/DATABASE_URL:\s*['"]([^'"]+)['"]/);
+      if (match) process.env.DATABASE_URL = match[1];
+
+      const nodeEnvMatch = configContent.match(/NODE_ENV:\s*['"]([^'"]+)['"]/);
+      if (nodeEnvMatch) process.env.NODE_ENV = nodeEnvMatch[1];
+
+      const nasaMatch = configContent.match(/NASA_FIRMS_API_KEY:\s*['"]([^'"]+)['"]/);
+      if (nasaMatch) process.env.NASA_FIRMS_API_KEY = nasaMatch[1];
+
+      const n2yoMatch = configContent.match(/N2YO_API_KEY:\s*['"]([^'"]+)['"]/);
+      if (n2yoMatch) process.env.N2YO_API_KEY = n2yoMatch[1];
+
+      const anthropicMatch = configContent.match(/ANTHROPIC_API_KEY:\s*['"]([^'"]+)['"]/);
+      if (anthropicMatch) process.env.ANTHROPIC_API_KEY = anthropicMatch[1];
+
+      const publicApiMatch = configContent.match(/PUBLIC_API_URL:\s*['"]([^'"]+)['"]/);
+      if (publicApiMatch) process.env.PUBLIC_API_URL = publicApiMatch[1];
+
+      log('config.js parsed - DATABASE_URL set: ' + !!process.env.DATABASE_URL);
+      log('config.js parsed - ANTHROPIC_API_KEY set: ' + !!process.env.ANTHROPIC_API_KEY);
+      log('config.js parsed - PUBLIC_API_URL: ' + (process.env.PUBLIC_API_URL || '(not set)'));
+    } else {
+      log('config.js not found at ' + configPath);
+    }
+  } catch (configErr) {
+    logError('config.js load failed', configErr);
+  }
+}
+
 // Step 2: Dynamically import the ES Module bundle
 let bundleLoaded = false;
 
@@ -101,6 +140,19 @@ async function loadBundle() {
 
       const server = http.createServer((req, res) => {
         log('Request: ' + req.method + ' ' + req.url);
+
+        // CORS headers on fallback server so errors are visible in browser
+        const origin = req.headers.origin || '*';
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Filename');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200);
+          res.end();
+          return;
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({

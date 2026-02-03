@@ -2791,7 +2791,7 @@ var PORT = process.env.PORT || 3001;
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Filename");
   res.header("Access-Control-Allow-Credentials", "true");
   if (req.method === "OPTIONS") {
     return res.sendStatus(200);
@@ -2868,14 +2868,28 @@ app.post("/api/images/upload-url", async (req, res) => {
     error(res, err.message);
   }
 });
-app.post("/api/images/:id/upload", upload.single("file"), async (req, res) => {
+app.post("/api/images/:id/upload", async (req, res) => {
   try {
     const imageId = req.params.id;
-    if (!req.file) {
+    const rawFilename = req.query.filename || req.headers["x-filename"] || "upload.tif";
+    const originalFilename = decodeURIComponent(rawFilename);
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    await new Promise((resolve2, reject) => {
+      req.on("end", resolve2);
+      req.on("error", reject);
+    });
+    const fileBuffer = Buffer.concat(chunks);
+    if (fileBuffer.length === 0) {
       return error(res, "No file uploaded", 400);
     }
-    const filePath = generateUploadPath(imageId, req.file.originalname);
-    await pool.query(`UPDATE images SET file_path = $1, file_size = $2 WHERE id = $3`, [filePath, req.file.size, imageId]);
+    const uploadDir = path3.join(STORAGE_DIR, "images", imageId);
+    const fs22 = await import("fs");
+    fs22.mkdirSync(uploadDir, { recursive: true });
+    const destPath = path3.join(uploadDir, originalFilename);
+    fs22.writeFileSync(destPath, fileBuffer);
+    const filePath = generateUploadPath(imageId, originalFilename);
+    await pool.query(`UPDATE images SET file_path = $1, file_size = $2 WHERE id = $3`, [filePath, fileBuffer.length, imageId]);
     success(res, { message: "File uploaded successfully", imageId });
   } catch (err) {
     console.error("Error uploading file:", err);

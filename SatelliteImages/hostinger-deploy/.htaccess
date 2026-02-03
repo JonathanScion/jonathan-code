@@ -9,3 +9,6 @@
 RewriteEngine On
 RewriteCond %{REQUEST_METHOD} OPTIONS
 RewriteRule ^(.*)$ $1 [R=200,L]
+
+# Prevent LiteSpeed from aborting long-running requests (file uploads)
+RewriteRule .* - [E=noabort:1]
