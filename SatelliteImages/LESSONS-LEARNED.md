@@ -555,16 +555,53 @@ const filename = decodeURIComponent(req.query.filename as string) || 'upload.tif
 
 Query parameters don't trigger CORS preflight issues because they're part of the URL.
 
-### Problem 3: 504 Gateway Timeout on Large Uploads
+### Problem 3: Large File Uploads (>50-100MB) Get 307/504
 
-**Symptom:** Large file uploads get `504 Gateway Timeout` + CORS error.
+**Symptom:** Files under ~50MB upload fine. Larger files (e.g., 124MB) get `307 Temporary Redirect` with no CORS headers, appearing as a CORS error in the browser. Server logs show nothing (request never reached Node.js).
 
-**Root Cause:** LiteSpeed has a proxy timeout (typically 30-60 seconds). If Node.js doesn't respond in time, LiteSpeed generates its own 504 with no CORS headers.
+**Root Cause:** LiteSpeed has an **undocumented request body size limit**. When a single request body exceeds this limit (~50-100MB), LiteSpeed intercepts the request with a 307 redirect, stripping CORS headers. This happens even with raw binary uploads that otherwise work fine for smaller files.
 
-**Mitigation:**
-- Use raw binary upload (faster than multipart)
-- Set generous timeout on frontend axios: `timeout: 5 * 60 * 1000`
-- Consider chunked uploads for very large files (500MB+)
+**Solution: Chunked Uploads.** Split large files into small chunks (5MB each) and upload them individually:
+
+```typescript
+// Frontend - api.ts
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+
+if (file.size > CHUNK_SIZE) {
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunkBuffer = await file.slice(start, end).arrayBuffer();
+    const params = new URLSearchParams({
+      chunkIndex: String(i),
+      totalChunks: String(totalChunks),
+      filename: file.name,
+    });
+    await api.post(`/images/${id}/upload-chunk?${params}`, chunkBuffer, {
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+  }
+}
+```
+
+```typescript
+// Backend - server.ts (new endpoint)
+app.post('/api/images/:id/upload-chunk', async (req, res) => {
+  const { chunkIndex, totalChunks, filename } = req.query;
+  // Save chunk to temp directory: STORAGE_DIR/chunks/{imageId}/chunk_000001
+  // When all chunks received, assemble into final file and clean up
+});
+```
+
+**Key details:**
+- Files <= 5MB use the original single-request upload (no change)
+- Files > 5MB are automatically chunked by the frontend
+- Each 5MB chunk is well under LiteSpeed's limit
+- Backend stores chunks temporarily, assembles when all arrive
+- Progress is tracked across all chunks (e.g., chunk 13/26 at 50% = ~50% overall)
+- **Max file size is now effectively unlimited** (limited only by Hostinger disk quota)
+- A 124MB file splits into ~25 chunks, each completing in seconds
 
 ### Problem 4: Environment Variables on Hostinger
 
@@ -603,6 +640,7 @@ PUBLIC_API_URL: 'https://satelliteimages-api.jonathanscode.io'
 |------|---------------|------------|
 | Multipart POST | 307 redirect, strips CORS | Use raw binary (`ArrayBuffer`) |
 | Custom headers in preflight | Answers OPTIONS itself, limited allowed headers | Use query params instead |
+| Large request body (>~50MB) | 307 redirect, strips CORS | Chunked uploads (5MB per chunk) |
 | Long requests | 504 timeout, strips CORS | Set frontend timeout, keep uploads fast |
 | `.htaccess` | Completely ignored for Node.js | Handle everything in Node.js code |
 
@@ -621,4 +659,4 @@ PUBLIC_API_URL: 'https://satelliteimages-api.jonathanscode.io'
 ---
 
 *Document created: 2025-10-28*
-*Last updated: 2026-02-03*
+*Last updated: 2026-02-04*

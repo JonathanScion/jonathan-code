@@ -189,6 +189,102 @@ app.post('/api/images/:id/upload', async (req: Request, res: Response) => {
   }
 });
 
+// Chunked upload endpoint - for large files that exceed LiteSpeed's body size limit
+app.post('/api/images/:id/upload-chunk', async (req: Request, res: Response) => {
+  try {
+    const imageId = req.params.id;
+    const chunkIndex = parseInt(req.query.chunkIndex as string);
+    const totalChunks = parseInt(req.query.totalChunks as string);
+    const rawFilename = (req.query.filename as string) || 'upload.tif';
+    const originalFilename = decodeURIComponent(rawFilename);
+
+    if (isNaN(chunkIndex) || isNaN(totalChunks) || totalChunks < 1) {
+      return error(res, 'Invalid chunk parameters', 400);
+    }
+
+    // Collect raw body
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    await new Promise<void>((resolve, reject) => {
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+    const chunkBuffer = Buffer.concat(chunks);
+
+    if (chunkBuffer.length === 0) {
+      return error(res, 'Empty chunk', 400);
+    }
+
+    const fs2 = await import('fs');
+
+    // Save chunk to temporary directory
+    const chunksDir = path.join(STORAGE_DIR, 'chunks', imageId);
+    fs2.mkdirSync(chunksDir, { recursive: true });
+    const chunkPath = path.join(chunksDir, `chunk_${String(chunkIndex).padStart(6, '0')}`);
+    fs2.writeFileSync(chunkPath, chunkBuffer);
+
+    console.log(`Chunk ${chunkIndex + 1}/${totalChunks} received for ${imageId} (${chunkBuffer.length} bytes)`);
+
+    // Check if all chunks are present
+    const existingChunks = fs2.readdirSync(chunksDir).filter((f: string) => f.startsWith('chunk_'));
+
+    if (existingChunks.length === totalChunks) {
+      // All chunks received - assemble the file
+      console.log(`All ${totalChunks} chunks received for ${imageId}, assembling...`);
+
+      const uploadDir = path.join(STORAGE_DIR, 'images', imageId);
+      fs2.mkdirSync(uploadDir, { recursive: true });
+      const destPath = path.join(uploadDir, originalFilename);
+
+      // Write assembled file using streams for memory efficiency
+      const writeStream = fs2.createWriteStream(destPath);
+      const sortedChunks = existingChunks.sort();
+
+      for (const chunkFile of sortedChunks) {
+        const data = fs2.readFileSync(path.join(chunksDir, chunkFile));
+        writeStream.write(data);
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        writeStream.end(() => resolve());
+        writeStream.on('error', reject);
+      });
+
+      // Get final file size
+      const stats = fs2.statSync(destPath);
+      const fileSize = stats.size;
+
+      // Clean up chunks
+      for (const chunkFile of existingChunks) {
+        fs2.unlinkSync(path.join(chunksDir, chunkFile));
+      }
+      try { fs2.rmdirSync(chunksDir); } catch { /* ignore */ }
+
+      // Update database
+      const filePath = generateUploadPath(imageId, originalFilename);
+      await pool.query(
+        `UPDATE images SET file_path = $1, file_size = $2 WHERE id = $3`,
+        [filePath, fileSize, imageId]
+      );
+
+      console.log(`File assembled: ${destPath} (${fileSize} bytes)`);
+      success(res, { message: 'File uploaded successfully', imageId, assembled: true, fileSize });
+    } else {
+      // More chunks expected
+      success(res, {
+        message: `Chunk ${chunkIndex + 1}/${totalChunks} received`,
+        imageId,
+        chunksReceived: existingChunks.length,
+        totalChunks,
+        assembled: false,
+      });
+    }
+  } catch (err: any) {
+    console.error('Error uploading chunk:', err);
+    error(res, err.message);
+  }
+});
+
 // Confirm upload (finalize and set READY status)
 app.post('/api/images/:id/confirm', async (req: Request, res: Response) => {
   try {

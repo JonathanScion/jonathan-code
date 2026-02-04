@@ -66,7 +66,8 @@
       "WebSearch",
       "WebFetch(domain:satelliteimages-api.jonathanscode.io)",
       "Bash(zip:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(copy:*)"
     ],
     "deny": [],
     "ask": []

@@ -47,25 +47,51 @@ export const imagesApi = {
   },
 
   uploadFile: async (uploadUrl: string, file: File, onProgress?: (progress: number) => void) => {
-    // Read file as ArrayBuffer to send true raw binary
-    // (Axios wraps File objects in multipart even with octet-stream Content-Type)
-    const arrayBuffer = await file.arrayBuffer();
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks to stay under LiteSpeed body size limit
 
-    // uploadUrl is relative (e.g., /api/images/{id}/upload) - use api instance
-    // Filename sent as query param to avoid custom header triggering CORS preflight issues on LiteSpeed
-    const urlWithFilename = `${uploadUrl.replace('/api', '')}?filename=${encodeURIComponent(file.name)}`;
-    await api.post(urlWithFilename, arrayBuffer, {
-      headers: {
-        'Content-Type': 'application/octet-stream',
-      },
-      timeout: 5 * 60 * 1000, // 5 minutes for large satellite images
-      onUploadProgress: (progressEvent) => {
-        if (onProgress && progressEvent.total) {
-          const progress = (progressEvent.loaded / progressEvent.total) * 100;
-          onProgress(progress);
-        }
-      },
-    });
+    if (file.size <= CHUNK_SIZE) {
+      // Small file - single request upload (existing approach)
+      const arrayBuffer = await file.arrayBuffer();
+      const urlWithFilename = `${uploadUrl.replace('/api', '')}?filename=${encodeURIComponent(file.name)}`;
+      await api.post(urlWithFilename, arrayBuffer, {
+        headers: { 'Content-Type': 'application/octet-stream' },
+        timeout: 5 * 60 * 1000,
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            onProgress((progressEvent.loaded / progressEvent.total) * 100);
+          }
+        },
+      });
+    } else {
+      // Large file - chunked upload
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+      const chunkBaseUrl = `${uploadUrl.replace('/api', '')}-chunk`;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunkBlob = file.slice(start, end);
+        const chunkBuffer = await chunkBlob.arrayBuffer();
+
+        const params = new URLSearchParams({
+          chunkIndex: String(i),
+          totalChunks: String(totalChunks),
+          filename: file.name,
+        });
+
+        await api.post(`${chunkBaseUrl}?${params}`, chunkBuffer, {
+          headers: { 'Content-Type': 'application/octet-stream' },
+          timeout: 2 * 60 * 1000, // 2 min per chunk
+          onUploadProgress: (progressEvent) => {
+            if (onProgress && progressEvent.total) {
+              const chunkProgress = (progressEvent.loaded / progressEvent.total);
+              const overallProgress = ((i + chunkProgress) / totalChunks) * 100;
+              onProgress(overallProgress);
+            }
+          },
+        });
+      }
+    }
   },
 
   confirmUpload: async (imageId: string): Promise<SatelliteImage> => {
