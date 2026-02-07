@@ -9,7 +9,7 @@ interface UploadZoneProps {
   maxSize?: number; // in bytes
 }
 
-export function UploadZone({ onFilesSelected, maxFiles = 10, maxSize = 500 * 1024 * 1024 }: UploadZoneProps) {
+export function UploadZone({ onFilesSelected, maxFiles = 10, maxSize = 10 * 1024 * 1024 * 1024 }: UploadZoneProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => {
     onFilesSelected(acceptedFiles);
   }, [onFilesSelected]);
