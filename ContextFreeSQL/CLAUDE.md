@@ -70,6 +70,7 @@ Config Loading → Schema Loading → Entity Filtering → Data Loading → Scri
 
 1. **Configuration-Driven:** All behavior controlled via `config.json` with command-line password override
 2. **Pandas-Based Data Model:** All database metadata stored in pandas DataFrames for easy manipulation
+
 3. **Multi-Database Abstraction:** `DBType` enum and `DBSyntax` dataclass provide syntax abstraction for different databases
 4. **StringIO Buffering:** Script generation uses StringIO buffers to build SQL incrementally
 5. **State Table Pattern:** Creates temporary state tables to track ADD/ALTER/DROP operations

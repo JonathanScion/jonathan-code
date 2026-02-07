@@ -1,3 +1,0 @@
-DROP TABLE IF EXISTS collateral.collateral_extracted_collateral_oil_gas CASCADE;
-
-DROP TABLE IF EXISTS collateral.collateral_extracted_collateral_minerals CASCADE;

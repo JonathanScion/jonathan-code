@@ -39,7 +39,17 @@
       "Bash(findstr:*)",
       "Bash(powershell -Command:*)",
       "Bash(powershell \"[System.IO.File]::Delete\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\nul''\\)\")",
-      "Bash(powershell \"[System.IO.File]::Delete\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\nul''\\)\")"
+      "Bash(powershell \"[System.IO.File]::Delete\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\nul''\\)\")",
+      "WebFetch(domain:download.osgeo.org)",
+      "WebFetch(domain:getsamplefiles.com)",
+      "WebFetch(domain:docs.opendata.aws)",
+      "WebFetch(domain:registry.opendata.aws)",
+      "WebFetch(domain:ash-speed.hetzner.com)",
+      "WebFetch(domain:testfile.org)",
+      "WebFetch(domain:www.thinkbroadband.com)",
+      "Bash(npm run build:*)",
+      "Bash(tree:*)",
+      "Bash(timeout 3 node:*)"
     ]
   }
 }
