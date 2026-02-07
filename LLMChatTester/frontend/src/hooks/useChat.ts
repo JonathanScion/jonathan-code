@@ -1,6 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
-import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider } from '../types';
-import { DEFAULT_PARAMS } from '../types';
+import { useState, useCallback, useRef, useMemo } from 'react';
+import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage } from '../types';
+import { DEFAULT_PARAMS, DEFAULT_TURN_RATINGS } from '../types';
+
+type UsageState = Record<LLMProvider, TokenUsage | undefined>;
 
 const INITIAL_STREAMING_STATE: StreamingState = { claude: '', openai: '', gemini: '' };
 const INITIAL_STREAMING_STATUS: StreamingStatus = { claude: 'idle', openai: 'idle', gemini: 'idle' };
@@ -15,6 +17,7 @@ export function useChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const durationsRef = useRef<Record<LLMProvider, number>>({ claude: 0, openai: 0, gemini: 0 });
   const streamingTextRef = useRef<StreamingState>(INITIAL_STREAMING_STATE);
+  const usageRef = useRef<UsageState>({ claude: undefined, openai: undefined, gemini: undefined });
 
   // Build message history for each provider
   const buildMessageHistory = useCallback((provider: LLMProvider): Message[] => {
@@ -87,6 +90,7 @@ export function useChat() {
     setStreamingStatus({ claude: 'streaming', openai: 'streaming', gemini: 'streaming' });
     streamingTextRef.current = INITIAL_STREAMING_STATE;
     durationsRef.current = { claude: 0, openai: 0, gemini: 0 };
+    usageRef.current = { claude: undefined, openai: undefined, gemini: undefined };
 
     try {
       const res = await fetch('/api/chat/stream', {
@@ -134,24 +138,26 @@ export function useChat() {
               const parsed = JSON.parse(data);
               const { provider, type, data: content } = parsed as {
                 provider: LLMProvider;
-                type: 'chunk' | 'done' | 'error';
-                data: string;
+                type: 'chunk' | 'done' | 'error' | 'usage';
+                data: string | TokenUsage;
               };
 
               if (type === 'chunk') {
                 streamingTextRef.current = {
                   ...streamingTextRef.current,
-                  [provider]: streamingTextRef.current[provider] + content,
+                  [provider]: streamingTextRef.current[provider] + (content as string),
                 };
                 setStreamingText({ ...streamingTextRef.current });
+              } else if (type === 'usage') {
+                usageRef.current[provider] = content as TokenUsage;
               } else if (type === 'done') {
-                durationsRef.current[provider] = parseInt(content, 10);
+                durationsRef.current[provider] = parseInt(content as string, 10);
                 setStreamingStatus(prev => ({ ...prev, [provider]: 'done' }));
               } else if (type === 'error') {
                 setStreamingStatus(prev => ({ ...prev, [provider]: 'error' }));
                 streamingTextRef.current = {
                   ...streamingTextRef.current,
-                  [provider]: `Error: ${content}`,
+                  [provider]: `Error: ${content as string}`,
                 };
                 setStreamingText({ ...streamingTextRef.current });
               }
@@ -168,16 +174,19 @@ export function useChat() {
           response: streamingTextRef.current.claude || null,
           error: null,
           duration: durationsRef.current.claude,
+          usage: usageRef.current.claude,
         },
         openai: {
           response: streamingTextRef.current.openai || null,
           error: null,
           duration: durationsRef.current.openai,
+          usage: usageRef.current.openai,
         },
         gemini: {
           response: streamingTextRef.current.gemini || null,
           error: null,
           duration: durationsRef.current.gemini,
+          usage: usageRef.current.gemini,
         },
       };
 
@@ -201,6 +210,87 @@ export function useChat() {
     setHistory([]);
   }, []);
 
+  // Update rating for a specific turn and provider
+  const updateRating = useCallback((
+    turnIndex: number,
+    provider: LLMProvider,
+    rating: ResponseRating
+  ) => {
+    setHistory(prev => {
+      const newHistory = [...prev];
+      const turn = newHistory[turnIndex];
+      if (!turn) return prev;
+
+      // Initialize ratings if not present
+      const currentRatings = turn.ratings || { ...DEFAULT_TURN_RATINGS };
+
+      // If setting this as winner, clear other winners for this turn
+      let updatedRatings: TurnRatings;
+      if (rating.isWinner) {
+        updatedRatings = {
+          claude: { ...currentRatings.claude, isWinner: provider === 'claude' && rating.isWinner },
+          openai: { ...currentRatings.openai, isWinner: provider === 'openai' && rating.isWinner },
+          gemini: { ...currentRatings.gemini, isWinner: provider === 'gemini' && rating.isWinner },
+        };
+        updatedRatings[provider] = rating;
+      } else {
+        updatedRatings = {
+          ...currentRatings,
+          [provider]: rating,
+        };
+      }
+
+      newHistory[turnIndex] = {
+        ...turn,
+        ratings: updatedRatings,
+      };
+
+      return newHistory;
+    });
+  }, []);
+
+  // Calculate rating stats from history
+  const ratingStats = useMemo(() => {
+    const stats = {
+      claude: { wins: 0, totalStars: 0, totalRated: 0 },
+      openai: { wins: 0, totalStars: 0, totalRated: 0 },
+      gemini: { wins: 0, totalStars: 0, totalRated: 0 },
+    };
+
+    for (const turn of history) {
+      if (!turn.ratings) continue;
+
+      for (const provider of ['claude', 'openai', 'gemini'] as LLMProvider[]) {
+        const rating = turn.ratings[provider];
+        if (rating.isWinner) {
+          stats[provider].wins++;
+        }
+        if (rating.stars > 0) {
+          stats[provider].totalStars += rating.stars;
+          stats[provider].totalRated++;
+        }
+      }
+    }
+
+    return {
+      claude: {
+        wins: stats.claude.wins,
+        avgStars: stats.claude.totalRated > 0 ? stats.claude.totalStars / stats.claude.totalRated : 0,
+        totalRated: stats.claude.totalRated,
+      },
+      openai: {
+        wins: stats.openai.wins,
+        avgStars: stats.openai.totalRated > 0 ? stats.openai.totalStars / stats.openai.totalRated : 0,
+        totalRated: stats.openai.totalRated,
+      },
+      gemini: {
+        wins: stats.gemini.wins,
+        avgStars: stats.gemini.totalRated > 0 ? stats.gemini.totalStars / stats.gemini.totalRated : 0,
+        totalRated: stats.gemini.totalRated,
+      },
+    };
+  }, [history]);
+
   return {
     params,
     setParams,
@@ -213,5 +303,7 @@ export function useChat() {
     streamingText,
     streamingStatus,
     isStreaming,
+    updateRating,
+    ratingStats,
   };
 }

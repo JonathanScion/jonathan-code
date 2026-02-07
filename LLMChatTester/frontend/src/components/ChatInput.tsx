@@ -1,12 +1,25 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 
 interface ChatInputProps {
   onSubmit: (prompt: string) => void;
   isLoading: boolean;
+  value?: string;
+  onChange?: (value: string) => void;
 }
 
-export function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
-  const [prompt, setPrompt] = useState('');
+export function ChatInput({ onSubmit, isLoading, value, onChange }: ChatInputProps) {
+  const [internalPrompt, setInternalPrompt] = useState('');
+
+  // Use controlled value if provided
+  const prompt = value !== undefined ? value : internalPrompt;
+  const setPrompt = onChange || setInternalPrompt;
+
+  // Sync with external value changes
+  useEffect(() => {
+    if (value !== undefined) {
+      setInternalPrompt(value);
+    }
+  }, [value]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -19,6 +32,7 @@ export function ChatInput({ onSubmit, isLoading }: ChatInputProps) {
     if (prompt.trim() && !isLoading) {
       onSubmit(prompt.trim());
       setPrompt('');
+      setInternalPrompt('');
     }
   };
 

@@ -17,7 +17,17 @@ export interface ClaudeParams {
   messages?: Message[];
 }
 
-export async function queryClaude(params: ClaudeParams): Promise<string> {
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface ClaudeResponse {
+  text: string;
+  usage: TokenUsage;
+}
+
+export async function queryClaude(params: ClaudeParams): Promise<ClaudeResponse> {
   const {
     prompt,
     model = 'claude-sonnet-4-20250514',
@@ -64,14 +74,25 @@ export async function queryClaude(params: ClaudeParams): Promise<string> {
     const response = await client.messages.create(requestParams);
 
     const textBlock = response.content.find(block => block.type === 'text');
-    return textBlock ? textBlock.text : 'No response';
+    return {
+      text: textBlock ? textBlock.text : 'No response',
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+    };
   } catch (error) {
     const err = error as Error;
     throw new Error(`Claude API error: ${err.message}`);
   }
 }
 
-export async function* streamClaude(params: ClaudeParams): AsyncGenerator<string, void, unknown> {
+export interface StreamResult {
+  type: 'chunk' | 'usage';
+  data: string | TokenUsage;
+}
+
+export async function* streamClaude(params: ClaudeParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
     model = 'claude-sonnet-4-20250514',
@@ -118,7 +139,17 @@ export async function* streamClaude(params: ClaudeParams): AsyncGenerator<string
 
   for await (const event of stream) {
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      yield event.delta.text;
+      yield { type: 'chunk', data: event.delta.text };
     }
   }
+
+  // Get final message for usage stats
+  const finalMessage = await stream.finalMessage();
+  yield {
+    type: 'usage',
+    data: {
+      inputTokens: finalMessage.usage.input_tokens,
+      outputTokens: finalMessage.usage.output_tokens,
+    },
+  };
 }

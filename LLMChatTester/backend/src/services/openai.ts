@@ -19,7 +19,22 @@ export interface OpenAIParams {
   messages?: Message[];
 }
 
-export async function queryChatGPT(params: OpenAIParams): Promise<string> {
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface OpenAIResponse {
+  text: string;
+  usage: TokenUsage;
+}
+
+export interface StreamResult {
+  type: 'chunk' | 'usage';
+  data: string | TokenUsage;
+}
+
+export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse> {
   const {
     prompt,
     model = 'gpt-4o',
@@ -41,16 +56,16 @@ export async function queryChatGPT(params: OpenAIParams): Promise<string> {
   try {
     // Build messages array with optional system prompt
     const allMessages: OpenAI.ChatCompletionMessageParam[] = [];
-    
+
     if (systemPrompt) {
       allMessages.push({ role: 'system', content: systemPrompt });
     }
-    
+
     // Add conversation history
     for (const msg of messages) {
       allMessages.push({ role: msg.role, content: msg.content });
     }
-    
+
     // Add current prompt
     allMessages.push({ role: 'user', content: prompt });
 
@@ -80,14 +95,20 @@ export async function queryChatGPT(params: OpenAIParams): Promise<string> {
 
     const response = await client.chat.completions.create(requestParams);
 
-    return response.choices[0]?.message?.content || 'No response';
+    return {
+      text: response.choices[0]?.message?.content || 'No response',
+      usage: {
+        inputTokens: response.usage?.prompt_tokens || 0,
+        outputTokens: response.usage?.completion_tokens || 0,
+      },
+    };
   } catch (error) {
     const err = error as Error;
     throw new Error(`OpenAI API error: ${err.message}`);
   }
 }
 
-export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<string, void, unknown> {
+export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
     model = 'gpt-4o',
@@ -107,16 +128,16 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<strin
 
   // Build messages array with optional system prompt
   const allMessages: OpenAI.ChatCompletionMessageParam[] = [];
-  
+
   if (systemPrompt) {
     allMessages.push({ role: 'system', content: systemPrompt });
   }
-  
+
   // Add conversation history
   for (const msg of messages) {
     allMessages.push({ role: msg.role, content: msg.content });
   }
-  
+
   // Add current prompt
   allMessages.push({ role: 'user', content: prompt });
 
@@ -126,6 +147,7 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<strin
     max_tokens: maxTokens,
     messages: allMessages,
     stream: true,
+    stream_options: { include_usage: true },
   };
 
   // Add optional parameters
@@ -147,7 +169,17 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<strin
   for await (const chunk of stream) {
     const content = chunk.choices[0]?.delta?.content;
     if (content) {
-      yield content;
+      yield { type: 'chunk', data: content };
+    }
+    // Check for usage in final chunk
+    if (chunk.usage) {
+      yield {
+        type: 'usage',
+        data: {
+          inputTokens: chunk.usage.prompt_tokens || 0,
+          outputTokens: chunk.usage.completion_tokens || 0,
+        },
+      };
     }
   }
 }

@@ -2,11 +2,13 @@
   "name": "llm-chat-tester-backend",
   "version": "1.0.0",
   "description": "Backend for LLM Chat Tester",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepare-deploy": "npm run build && node scripts/prepare-deploy.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

@@ -1,6 +1,15 @@
 // Common types
 export type LLMProvider = 'claude' | 'openai' | 'gemini';
 
+// Prompt template types
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  prompt: string;
+  category?: string;
+  createdAt: number;
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -58,11 +67,18 @@ export interface ChatParams {
   gemini: GeminiParams;
 }
 
+// Token usage types
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 // Response types
 export interface LLMResponse {
   response: string | null;
   error: string | null;
   duration: number;
+  usage?: TokenUsage;
 }
 
 export interface StreamingState {
@@ -83,10 +99,36 @@ export interface ChatResponse {
   gemini: LLMResponse;
 }
 
+// Rating types
+export interface ResponseRating {
+  stars: number; // 0-5, 0 means not rated
+  isWinner: boolean;
+  notes: string;
+}
+
+export interface TurnRatings {
+  claude: ResponseRating;
+  openai: ResponseRating;
+  gemini: ResponseRating;
+}
+
+export const DEFAULT_RATING: ResponseRating = {
+  stars: 0,
+  isWinner: false,
+  notes: '',
+};
+
+export const DEFAULT_TURN_RATINGS: TurnRatings = {
+  claude: { ...DEFAULT_RATING },
+  openai: { ...DEFAULT_RATING },
+  gemini: { ...DEFAULT_RATING },
+};
+
 export interface ConversationTurn {
   userMessage: string;
   responses: ChatResponse;
   timestamp: number;
+  ratings?: TurnRatings;
 }
 
 // Default values
@@ -140,7 +182,33 @@ export const MODEL_OPTIONS = {
 
 export const SAFETY_LEVEL_OPTIONS: GeminiSafetyLevel[] = [
   'BLOCK_NONE',
-  'BLOCK_ONLY_HIGH', 
+  'BLOCK_ONLY_HIGH',
   'BLOCK_MEDIUM_AND_ABOVE',
   'BLOCK_LOW_AND_ABOVE',
 ];
+
+// Pricing per 1M tokens (USD)
+export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude models
+  'claude-sonnet-4-20250514': { input: 3, output: 15 },
+  'claude-3-5-haiku-20241022': { input: 1, output: 5 },
+  'claude-3-opus-20240229': { input: 15, output: 75 },
+  // OpenAI models
+  'gpt-4o': { input: 2.5, output: 10 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-4-turbo': { input: 10, output: 30 },
+  'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+  // Gemini models
+  'gemini-2.5-flash': { input: 0.15, output: 0.6 },
+  'gemini-2.5-pro': { input: 1.25, output: 10 },
+  'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+};
+
+export function calculateCost(model: string, usage?: TokenUsage): number {
+  if (!usage) return 0;
+  const pricing = MODEL_PRICING[model];
+  if (!pricing) return 0;
+  const inputCost = (usage.inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (usage.outputTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}

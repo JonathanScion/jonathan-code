@@ -27,6 +27,21 @@ export interface GeminiParams {
   messages?: Message[];
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface GeminiResponse {
+  text: string;
+  usage: TokenUsage;
+}
+
+export interface StreamResult {
+  type: 'chunk' | 'usage';
+  data: string | TokenUsage;
+}
+
 function mapSafetyLevel(level: SafetyLevel): HarmBlockThreshold {
   switch (level) {
     case 'BLOCK_NONE':
@@ -65,7 +80,7 @@ function buildSafetySettings(settings?: SafetySettings) {
   ];
 }
 
-export async function queryGemini(params: GeminiParams): Promise<string> {
+export async function queryGemini(params: GeminiParams): Promise<GeminiResponse> {
   const {
     prompt,
     model = 'gemini-2.5-flash',
@@ -81,12 +96,12 @@ export async function queryGemini(params: GeminiParams): Promise<string> {
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
-    
+
     const generationConfig: Record<string, unknown> = {
       temperature,
       maxOutputTokens: maxTokens,
     };
-    
+
     if (topK !== undefined) {
       generationConfig.topK = topK;
     }
@@ -115,14 +130,22 @@ export async function queryGemini(params: GeminiParams): Promise<string> {
     // Start chat with history and send new message
     const chat = geminiModel.startChat({ history });
     const result = await chat.sendMessage(prompt);
-    return result.response.text();
+    const usageMetadata = result.response.usageMetadata;
+
+    return {
+      text: result.response.text(),
+      usage: {
+        inputTokens: usageMetadata?.promptTokenCount || 0,
+        outputTokens: usageMetadata?.candidatesTokenCount || 0,
+      },
+    };
   } catch (error) {
     const err = error as Error;
     throw new Error(`Gemini API error: ${err.message}`);
   }
 }
 
-export async function* streamGemini(params: GeminiParams): AsyncGenerator<string, void, unknown> {
+export async function* streamGemini(params: GeminiParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
     model = 'gemini-2.5-flash',
@@ -137,12 +160,12 @@ export async function* streamGemini(params: GeminiParams): AsyncGenerator<string
   } = params;
 
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
-  
+
   const generationConfig: Record<string, unknown> = {
     temperature,
     maxOutputTokens: maxTokens,
   };
-  
+
   if (topK !== undefined) {
     generationConfig.topK = topK;
   }
@@ -175,7 +198,18 @@ export async function* streamGemini(params: GeminiParams): AsyncGenerator<string
   for await (const chunk of result.stream) {
     const text = chunk.text();
     if (text) {
-      yield text;
+      yield { type: 'chunk', data: text };
     }
   }
+
+  // Get usage from the aggregated response
+  const response = await result.response;
+  const usageMetadata = response.usageMetadata;
+  yield {
+    type: 'usage',
+    data: {
+      inputTokens: usageMetadata?.promptTokenCount || 0,
+      outputTokens: usageMetadata?.candidatesTokenCount || 0,
+    },
+  };
 }

@@ -64,10 +64,21 @@ interface ChatRequest {
   };
 }
 
+interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 interface LLMResponse {
   response: string | null;
   error: string | null;
   duration: number;
+  usage?: TokenUsage;
+}
+
+interface ServiceResponse {
+  text: string;
+  usage: TokenUsage;
 }
 
 chatRouter.post('/', async (req: Request, res: Response) => {
@@ -79,16 +90,16 @@ chatRouter.post('/', async (req: Request, res: Response) => {
   }
 
   const executeWithTiming = async (
-    fn: () => Promise<string>,
-    name: string
+    fn: () => Promise<ServiceResponse>
   ): Promise<LLMResponse> => {
     const start = Date.now();
     try {
-      const response = await fn();
+      const result = await fn();
       return {
-        response,
+        response: result.text,
         error: null,
         duration: Date.now() - start,
+        usage: result.usage,
       };
     } catch (error) {
       const err = error as Error;
@@ -102,16 +113,13 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
   const [claudeResult, openaiResult, geminiResult] = await Promise.all([
     executeWithTiming(
-      () => queryClaude({ prompt, ...claude, messages: history?.claude }),
-      'claude'
+      () => queryClaude({ prompt, ...claude, messages: history?.claude })
     ),
     executeWithTiming(
-      () => queryChatGPT({ prompt, ...openai, messages: history?.openai }),
-      'openai'
+      () => queryChatGPT({ prompt, ...openai, messages: history?.openai })
     ),
     executeWithTiming(
-      () => queryGemini({ prompt, ...gemini, messages: history?.gemini }),
-      'gemini'
+      () => queryGemini({ prompt, ...gemini, messages: history?.gemini })
     ),
   ]);
 
@@ -137,7 +145,12 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const sendEvent = (provider: string, type: 'chunk' | 'done' | 'error', data: string) => {
+  interface StreamResult {
+    type: 'chunk' | 'usage';
+    data: string | TokenUsage;
+  }
+
+  const sendEvent = (provider: string, type: 'chunk' | 'done' | 'error' | 'usage', data: string | TokenUsage) => {
     res.write(`data: ${JSON.stringify({ provider, type, data })}\n\n`);
   };
 
@@ -150,11 +163,15 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   // Stream from all providers concurrently
   const streamProvider = async (
     name: string,
-    streamFn: () => AsyncGenerator<string, void, unknown>
+    streamFn: () => AsyncGenerator<StreamResult, void, unknown>
   ) => {
     try {
-      for await (const chunk of streamFn()) {
-        sendEvent(name, 'chunk', chunk);
+      for await (const result of streamFn()) {
+        if (result.type === 'chunk') {
+          sendEvent(name, 'chunk', result.data as string);
+        } else if (result.type === 'usage') {
+          sendEvent(name, 'usage', result.data as TokenUsage);
+        }
       }
       const duration = Date.now() - startTimes[name];
       sendEvent(name, 'done', String(duration));

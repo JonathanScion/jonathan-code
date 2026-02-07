@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { ChatInput } from './components/ChatInput';
 import { ParameterControls } from './components/ParameterControls';
+import { PromptTemplates } from './components/PromptTemplates';
+import { RatingControls, RatingStats } from './components/RatingControls';
 import { useChat } from './hooks/useChat';
+import { downloadJSON, downloadMarkdown } from './utils/export';
 import type { LLMProvider } from './types';
+import { DEFAULT_RATING, calculateCost } from './types';
 
 const PROVIDER_CONFIG: Record<LLMProvider, { name: string; color: string }> = {
   claude: { name: 'Claude', color: 'bg-orange-600' },
@@ -22,26 +26,61 @@ function App() {
     streamingText,
     streamingStatus,
     isStreaming,
+    updateRating,
+    ratingStats,
   } = useChat();
   const [showParams, setShowParams] = useState(true);
+  const [showTemplates, setShowTemplates] = useState(true);
+  const [promptValue, setPromptValue] = useState('');
 
   const isWorking = isLoading || isStreaming;
+
+  const handleSelectTemplate = (prompt: string) => {
+    setPromptValue(prompt);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-900">
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-100">LLM Chat Tester</h1>
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold text-gray-100">LLM Chat Tester</h1>
+            <RatingStats stats={ratingStats} />
+          </div>
           <div className="flex gap-4">
             {history.length > 0 && (
-              <button
-                onClick={clearHistory}
-                className="text-sm text-red-400 hover:text-red-300 transition-colors"
-              >
-                Clear History
-              </button>
+              <>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => downloadJSON(history, params)}
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Export as JSON"
+                  >
+                    Export JSON
+                  </button>
+                  <button
+                    onClick={() => downloadMarkdown(history, params)}
+                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Export as Markdown"
+                  >
+                    Export MD
+                  </button>
+                </div>
+                <button
+                  onClick={clearHistory}
+                  className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                >
+                  Clear History
+                </button>
+              </>
             )}
+            <button
+              onClick={() => setShowTemplates(!showTemplates)}
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              {showTemplates ? 'Hide' : 'Show'} Templates
+            </button>
             <button
               onClick={() => setShowParams(!showParams)}
               className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -55,6 +94,14 @@ function App() {
       {/* Parameters Panel */}
       {showParams && (
         <ParameterControls params={params} onParamsChange={setParams} />
+      )}
+
+      {/* Prompt Templates */}
+      {showTemplates && (
+        <PromptTemplates
+          onSelectTemplate={handleSelectTemplate}
+          currentPrompt={promptValue}
+        />
       )}
 
       {/* Error Banner */}
@@ -90,13 +137,35 @@ function App() {
                 {(['claude', 'openai', 'gemini'] as LLMProvider[]).map((provider) => {
                   const config = PROVIDER_CONFIG[provider];
                   const response = turn.responses[provider];
+                  const rating = turn.ratings?.[provider] || DEFAULT_RATING;
+                  const hasWinner = turn.ratings
+                    ? Object.values(turn.ratings).some((r) => r.isWinner)
+                    : false;
+                  const isWinnerDisabled = hasWinner && !rating.isWinner;
+
+                  const model = params[provider].model;
+                  const cost = calculateCost(model, response.usage);
+
                   return (
                     <div key={provider} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                      <div className={`${config.color} px-3 py-2 flex justify-between items-center`}>
-                        <span className="font-semibold text-white text-sm">{config.name}</span>
-                        <span className="text-xs text-white/75">
-                          {(response.duration / 1000).toFixed(2)}s
-                        </span>
+                      <div className={`${config.color} px-3 py-2`}>
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-white text-sm">
+                            {config.name}
+                            {rating.isWinner && <span className="ml-1">🏆</span>}
+                          </span>
+                          <span className="text-xs text-white/75">
+                            {(response.duration / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                        {response.usage && (
+                          <div className="flex justify-between items-center mt-1 text-xs text-white/60">
+                            <span>
+                              {response.usage.inputTokens} in / {response.usage.outputTokens} out
+                            </span>
+                            <span>${cost.toFixed(4)}</span>
+                          </div>
+                        )}
                       </div>
                       <div className="p-3 text-sm">
                         {response.error ? (
@@ -104,6 +173,11 @@ function App() {
                         ) : (
                           <div className="text-gray-200 whitespace-pre-wrap">{response.response}</div>
                         )}
+                        <RatingControls
+                          rating={rating}
+                          isWinnerDisabled={isWinnerDisabled}
+                          onRatingChange={(newRating) => updateRating(index, provider, newRating)}
+                        />
                       </div>
                     </div>
                   );
@@ -174,7 +248,12 @@ function App() {
       </div>
 
       {/* Input */}
-      <ChatInput onSubmit={sendPromptStreaming} isLoading={isWorking} />
+      <ChatInput
+        onSubmit={sendPromptStreaming}
+        isLoading={isWorking}
+        value={promptValue}
+        onChange={setPromptValue}
+      />
     </div>
   );
 }
