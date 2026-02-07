@@ -10,6 +10,32 @@ export interface PromptTemplate {
   createdAt: number;
 }
 
+// RAG types
+export interface DocumentInfo {
+  id: string;
+  name: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  chunkCount: number;
+  uploadedAt: number;
+}
+
+export interface RagResult {
+  id: string;
+  score: number;
+  text: string;
+  documentName: string;
+  documentId: string;
+  chunkIndex: number;
+}
+
+export interface RagStatus {
+  enabled: boolean;
+  pinecone: boolean;
+  embeddings: boolean;
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;

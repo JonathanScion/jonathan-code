@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChatInput } from './components/ChatInput';
 import { ParameterControls } from './components/ParameterControls';
 import { PromptTemplates } from './components/PromptTemplates';
+import { DocumentManager } from './components/DocumentManager';
 import { RatingControls, RatingStats } from './components/RatingControls';
 import { useChat } from './hooks/useChat';
 import { downloadJSON, downloadMarkdown } from './utils/export';
@@ -28,9 +29,14 @@ function App() {
     isStreaming,
     updateRating,
     ratingStats,
+    useRag,
+    setUseRag,
+    lastRagResults,
   } = useChat();
   const [showParams, setShowParams] = useState(true);
   const [showTemplates, setShowTemplates] = useState(true);
+  const [showDocuments, setShowDocuments] = useState(true);
+  const [ragAvailable, setRagAvailable] = useState(false);
   const [promptValue, setPromptValue] = useState('');
 
   const isWorking = isLoading || isStreaming;
@@ -48,7 +54,19 @@ function App() {
             <h1 className="text-xl font-bold text-gray-100">LLM Chat Tester</h1>
             <RatingStats stats={ratingStats} />
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center">
+            {/* RAG Toggle */}
+            {ragAvailable && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useRag}
+                  onChange={(e) => setUseRag(e.target.checked)}
+                  className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-300">RAG</span>
+              </label>
+            )}
             {history.length > 0 && (
               <>
                 <div className="flex gap-2">
@@ -76,6 +94,12 @@ function App() {
               </>
             )}
             <button
+              onClick={() => setShowDocuments(!showDocuments)}
+              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              {showDocuments ? 'Hide' : 'Show'} Documents
+            </button>
+            <button
               onClick={() => setShowTemplates(!showTemplates)}
               className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
             >
@@ -102,6 +126,33 @@ function App() {
           onSelectTemplate={handleSelectTemplate}
           currentPrompt={promptValue}
         />
+      )}
+
+      {/* Document Manager */}
+      {showDocuments && (
+        <DocumentManager onRagStatusChange={setRagAvailable} />
+      )}
+
+      {/* RAG Context Display */}
+      {useRag && lastRagResults.length > 0 && (
+        <div className="bg-blue-900/20 border-b border-blue-700/50 px-4 py-2">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-xs text-blue-300 mb-1">
+              Retrieved {lastRagResults.length} relevant chunks:
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {lastRagResults.map((result, idx) => (
+                <div
+                  key={result.id}
+                  className="text-xs px-2 py-1 bg-blue-900/40 rounded text-blue-200"
+                  title={result.text}
+                >
+                  [{idx + 1}] {result.documentName} (score: {result.score.toFixed(3)})
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Error Banner */}

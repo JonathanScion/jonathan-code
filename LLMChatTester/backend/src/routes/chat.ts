@@ -2,8 +2,27 @@ import { Router, Request, Response } from 'express';
 import { queryClaude, streamClaude } from '../services/claude.js';
 import { queryChatGPT, streamChatGPT } from '../services/openai.js';
 import { queryGemini, streamGemini } from '../services/gemini.js';
+import { generateEmbedding, isEmbeddingsEnabled } from '../services/embeddings.js';
+import { queryVectors, isPineconeEnabled, type QueryResult } from '../services/pinecone.js';
 
 export const chatRouter = Router();
+
+// Helper to build context from RAG results
+function buildRagContext(results: QueryResult[]): string {
+  if (results.length === 0) return '';
+
+  const contextParts = results.map((r, idx) =>
+    `[Source ${idx + 1}: ${r.documentName}]\n${r.text}`
+  );
+
+  return `\n\n--- Relevant Context from Documents ---\n${contextParts.join('\n\n')}\n--- End Context ---\n\n`;
+}
+
+// Helper to inject RAG context into prompt
+function injectRagContext(prompt: string, context: string): string {
+  if (!context) return prompt;
+  return `${context}Based on the above context (if relevant), please answer the following:\n\n${prompt}`;
+}
 
 interface Message {
   role: 'user' | 'assistant';
@@ -62,6 +81,8 @@ interface ChatRequest {
     openai: Message[];
     gemini: Message[];
   };
+  useRag?: boolean;
+  ragTopK?: number;
 }
 
 interface TokenUsage {
@@ -82,12 +103,27 @@ interface ServiceResponse {
 }
 
 chatRouter.post('/', async (req: Request, res: Response) => {
-  const { prompt, claude = {}, openai = {}, gemini = {}, history } = req.body as ChatRequest;
+  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5 } = req.body as ChatRequest;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
     return;
   }
+
+  // Get RAG context if enabled
+  let ragContext = '';
+  let ragResults: QueryResult[] = [];
+  if (useRag && isPineconeEnabled() && isEmbeddingsEnabled()) {
+    try {
+      const queryEmbedding = await generateEmbedding(prompt);
+      ragResults = await queryVectors(queryEmbedding, ragTopK);
+      ragContext = buildRagContext(ragResults);
+    } catch (error) {
+      console.error('RAG query error:', error);
+    }
+  }
+
+  const augmentedPrompt = injectRagContext(prompt, ragContext);
 
   const executeWithTiming = async (
     fn: () => Promise<ServiceResponse>
@@ -113,13 +149,13 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
   const [claudeResult, openaiResult, geminiResult] = await Promise.all([
     executeWithTiming(
-      () => queryClaude({ prompt, ...claude, messages: history?.claude })
+      () => queryClaude({ prompt: augmentedPrompt, ...claude, messages: history?.claude })
     ),
     executeWithTiming(
-      () => queryChatGPT({ prompt, ...openai, messages: history?.openai })
+      () => queryChatGPT({ prompt: augmentedPrompt, ...openai, messages: history?.openai })
     ),
     executeWithTiming(
-      () => queryGemini({ prompt, ...gemini, messages: history?.gemini })
+      () => queryGemini({ prompt: augmentedPrompt, ...gemini, messages: history?.gemini })
     ),
   ]);
 
@@ -127,23 +163,44 @@ chatRouter.post('/', async (req: Request, res: Response) => {
     claude: claudeResult,
     openai: openaiResult,
     gemini: geminiResult,
+    ragContext: useRag ? ragResults : undefined,
   });
 });
 
 // Streaming endpoint using Server-Sent Events
 chatRouter.post('/stream', async (req: Request, res: Response) => {
-  const { prompt, claude = {}, openai = {}, gemini = {}, history } = req.body as ChatRequest;
+  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5 } = req.body as ChatRequest;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
     return;
   }
 
+  // Get RAG context if enabled
+  let ragContext = '';
+  let ragResults: QueryResult[] = [];
+  if (useRag && isPineconeEnabled() && isEmbeddingsEnabled()) {
+    try {
+      const queryEmbedding = await generateEmbedding(prompt);
+      ragResults = await queryVectors(queryEmbedding, ragTopK);
+      ragContext = buildRagContext(ragResults);
+    } catch (error) {
+      console.error('RAG query error:', error);
+    }
+  }
+
+  const augmentedPrompt = injectRagContext(prompt, ragContext);
+
   // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
+
+  // Send RAG context info first if available
+  if (useRag && ragResults.length > 0) {
+    res.write(`data: ${JSON.stringify({ type: 'rag', data: ragResults })}\n\n`);
+  }
 
   interface StreamResult {
     type: 'chunk' | 'usage';
@@ -182,9 +239,9 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   };
 
   await Promise.all([
-    streamProvider('claude', () => streamClaude({ prompt, ...claude, messages: history?.claude })),
-    streamProvider('openai', () => streamChatGPT({ prompt, ...openai, messages: history?.openai })),
-    streamProvider('gemini', () => streamGemini({ prompt, ...gemini, messages: history?.gemini })),
+    streamProvider('claude', () => streamClaude({ prompt: augmentedPrompt, ...claude, messages: history?.claude })),
+    streamProvider('openai', () => streamChatGPT({ prompt: augmentedPrompt, ...openai, messages: history?.openai })),
+    streamProvider('gemini', () => streamGemini({ prompt: augmentedPrompt, ...gemini, messages: history?.gemini })),
   ]);
 
   res.write('data: [DONE]\n\n');

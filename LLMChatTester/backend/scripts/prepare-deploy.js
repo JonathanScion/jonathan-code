@@ -39,11 +39,18 @@ const prodPkg = {
 };
 fs.writeFileSync(path.join(deployDir, 'package.json'), JSON.stringify(prodPkg, null, 2));
 
+// Create data directory for document registry
+fs.mkdirSync(path.join(deployDir, 'data'), { recursive: true });
+
 // Create .env.example
 const envExample = `# API Keys - Add your keys here
 ANTHROPIC_API_KEY=your_anthropic_key_here
 OPENAI_API_KEY=your_openai_key_here
 GOOGLE_AI_API_KEY=your_google_ai_key_here
+
+# Pinecone (for RAG features)
+PINECONE_API_KEY=your_pinecone_key_here
+PINECONE_INDEX=llm-chat-tester
 
 # Server port (optional, defaults to 3001)
 PORT=3001

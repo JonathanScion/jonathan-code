@@ -45,6 +45,16 @@ Save conversations as JSON or markdown files:
 - Downloads with timestamped filenames
 - Includes token usage and cost per response
 
+### RAG (Retrieval-Augmented Generation) ✓
+Document-based context for LLM responses:
+- Upload PDF, DOCX, TXT, MD files
+- Text chunking with overlap for better retrieval
+- OpenAI embeddings (text-embedding-3-small)
+- Pinecone vector database for storage and search
+- RAG toggle to enable/disable context injection
+- Shows retrieved chunks with relevance scores
+- Context injected into all three LLM providers
+
 ---
 
 ## All Features Complete!

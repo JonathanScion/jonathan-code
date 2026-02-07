@@ -261,3 +261,28 @@ npm run typecheck
 ## License
 
 MIT
+
+
+## To run\todo now
+ Open in your browser:
+  http://localhost:6274/?MCP_PROXY_AUTH_TOKEN=ee57306ab2da64b11d4e4cd18f1c8f9e51c45b32cc5f80e5d5aa7d7a5a399394
+
+  The Inspector lets you:
+  - See all available tools (connect, describe_schema, etc.)
+  - Call tools interactively with custom arguments
+  - View the JSON responses
+  - Debug issues
+
+  To test DBProfessor:
+  1. Click on "Tools" in the sidebar
+  2. Select connect
+  3. Enter a connection string (e.g., postgresql://user:pass@localhost:5432/mydb)
+  4. Click "Call Tool"
+
+  When you're done testing, you can kill the inspector:
+
+  # Press Ctrl+C in the terminal, or I can kill it for you
+
+  Other testing options:
+  - Claude Desktop - configure it in claude_desktop_config.json and use it naturally in chat
+  - Direct stdin - send JSON-RPC messages manually (tedious but works)

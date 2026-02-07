@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage } from '../types';
+import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage, RagResult } from '../types';
 import { DEFAULT_PARAMS, DEFAULT_TURN_RATINGS } from '../types';
 
 type UsageState = Record<LLMProvider, TokenUsage | undefined>;
@@ -15,6 +15,8 @@ export function useChat() {
   const [streamingText, setStreamingText] = useState<StreamingState>(INITIAL_STREAMING_STATE);
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>(INITIAL_STREAMING_STATUS);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [useRag, setUseRag] = useState(false);
+  const [lastRagResults, setLastRagResults] = useState<RagResult[]>([]);
   const durationsRef = useRef<Record<LLMProvider, number>>({ claude: 0, openai: 0, gemini: 0 });
   const streamingTextRef = useRef<StreamingState>(INITIAL_STREAMING_STATE);
   const usageRef = useRef<UsageState>({ claude: undefined, openai: undefined, gemini: undefined });
@@ -88,6 +90,7 @@ export function useChat() {
     setError(null);
     setStreamingText(INITIAL_STREAMING_STATE);
     setStreamingStatus({ claude: 'streaming', openai: 'streaming', gemini: 'streaming' });
+    setLastRagResults([]);
     streamingTextRef.current = INITIAL_STREAMING_STATE;
     durationsRef.current = { claude: 0, openai: 0, gemini: 0 };
     usageRef.current = { claude: undefined, openai: undefined, gemini: undefined };
@@ -108,6 +111,8 @@ export function useChat() {
             openai: buildMessageHistory('openai'),
             gemini: buildMessageHistory('gemini'),
           },
+          useRag,
+          ragTopK: 5,
         }),
       });
 
@@ -136,6 +141,13 @@ export function useChat() {
 
             try {
               const parsed = JSON.parse(data);
+
+              // Handle RAG results
+              if (parsed.type === 'rag') {
+                setLastRagResults(parsed.data as RagResult[]);
+                continue;
+              }
+
               const { provider, type, data: content } = parsed as {
                 provider: LLMProvider;
                 type: 'chunk' | 'done' | 'error' | 'usage';
@@ -204,7 +216,7 @@ export function useChat() {
       setStreamingText(INITIAL_STREAMING_STATE);
       setStreamingStatus(INITIAL_STREAMING_STATUS);
     }
-  }, [params, buildMessageHistory, getSystemPrompt]);
+  }, [params, buildMessageHistory, getSystemPrompt, useRag]);
 
   const clearHistory = useCallback(() => {
     setHistory([]);
@@ -305,5 +317,8 @@ export function useChat() {
     isStreaming,
     updateRating,
     ratingStats,
+    useRag,
+    setUseRag,
+    lastRagResults,
   };
 }
