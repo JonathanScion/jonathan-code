@@ -1,4 +1,4 @@
-import { LLMResponse } from '../types';
+import type { LLMResponse } from '../types';
 
 interface ResponsePanelProps {
   title: string;

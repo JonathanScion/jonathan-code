@@ -1,16 +1,29 @@
 import { useState, useCallback } from 'react';
-import { ChatParams, ChatResponse, DEFAULT_PARAMS } from '../types';
+import type { ChatParams, ChatResponse, ConversationTurn, Message } from '../types';
+import { DEFAULT_PARAMS } from '../types';
 
 export function useChat() {
   const [params, setParams] = useState<ChatParams>(DEFAULT_PARAMS);
-  const [response, setResponse] = useState<ChatResponse | null>(null);
+  const [history, setHistory] = useState<ConversationTurn[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Build message history for each provider
+  const buildMessageHistory = useCallback((provider: 'claude' | 'openai' | 'gemini'): Message[] => {
+    const messages: Message[] = [];
+    for (const turn of history) {
+      messages.push({ role: 'user', content: turn.userMessage });
+      const response = turn.responses[provider];
+      if (response.response) {
+        messages.push({ role: 'assistant', content: response.response });
+      }
+    }
+    return messages;
+  }, [history]);
 
   const sendPrompt = useCallback(async (prompt: string) => {
     setIsLoading(true);
     setError(null);
-    setResponse(null);
 
     try {
       const res = await fetch('/api/chat', {
@@ -23,6 +36,11 @@ export function useChat() {
           claude: params.claude,
           openai: params.openai,
           gemini: params.gemini,
+          history: {
+            claude: buildMessageHistory('claude'),
+            openai: buildMessageHistory('openai'),
+            gemini: buildMessageHistory('gemini'),
+          },
         }),
       });
 
@@ -31,21 +49,32 @@ export function useChat() {
       }
 
       const data: ChatResponse = await res.json();
-      setResponse(data);
+
+      // Add to history
+      setHistory(prev => [...prev, {
+        userMessage: prompt,
+        responses: data,
+        timestamp: Date.now(),
+      }]);
     } catch (err) {
       const error = err as Error;
       setError(error.message);
     } finally {
       setIsLoading(false);
     }
-  }, [params]);
+  }, [params, buildMessageHistory]);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+  }, []);
 
   return {
     params,
     setParams,
-    response,
+    history,
     isLoading,
     error,
     sendPrompt,
+    clearHistory,
   };
 }

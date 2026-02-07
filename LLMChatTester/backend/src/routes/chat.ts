@@ -5,6 +5,11 @@ import { queryGemini } from '../services/gemini.js';
 
 export const chatRouter = Router();
 
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface ChatRequest {
   prompt: string;
   claude?: {
@@ -22,6 +27,11 @@ interface ChatRequest {
     temperature?: number;
     maxTokens?: number;
   };
+  history?: {
+    claude: Message[];
+    openai: Message[];
+    gemini: Message[];
+  };
 }
 
 interface LLMResponse {
@@ -31,7 +41,7 @@ interface LLMResponse {
 }
 
 chatRouter.post('/', async (req: Request, res: Response) => {
-  const { prompt, claude = {}, openai = {}, gemini = {} } = req.body as ChatRequest;
+  const { prompt, claude = {}, openai = {}, gemini = {}, history } = req.body as ChatRequest;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
@@ -62,15 +72,15 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
   const [claudeResult, openaiResult, geminiResult] = await Promise.all([
     executeWithTiming(
-      () => queryClaude({ prompt, ...claude }),
+      () => queryClaude({ prompt, ...claude, messages: history?.claude }),
       'claude'
     ),
     executeWithTiming(
-      () => queryChatGPT({ prompt, ...openai }),
+      () => queryChatGPT({ prompt, ...openai, messages: history?.openai }),
       'openai'
     ),
     executeWithTiming(
-      () => queryGemini({ prompt, ...gemini }),
+      () => queryGemini({ prompt, ...gemini, messages: history?.gemini }),
       'gemini'
     ),
   ]);

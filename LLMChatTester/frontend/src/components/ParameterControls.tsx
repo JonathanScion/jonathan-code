@@ -1,4 +1,5 @@
-import { ChatParams, LLMProvider, MODEL_OPTIONS } from '../types';
+import type { ChatParams, LLMProvider } from '../types';
+import { MODEL_OPTIONS } from '../types';
 
 interface ParameterControlsProps {
   params: ChatParams;
