@@ -1,25 +1,21 @@
-import OpenAI from 'openai';
+const EMBEDDING_MODEL = 'gemini-embedding-001';
+const EMBEDDING_DIMENSIONS = 3072;
+const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-const EMBEDDING_MODEL = 'text-embedding-3-small';
-const EMBEDDING_DIMENSIONS = 1536;
-
-let openaiClient: OpenAI | null = null;
+let apiKey: string | null = null;
 
 export function initEmbeddings() {
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('OPENAI_API_KEY not set - embeddings will be disabled');
+  if (!process.env.GOOGLE_AI_API_KEY) {
+    console.warn('GOOGLE_AI_API_KEY not set - embeddings will be disabled');
     return;
   }
 
-  openaiClient = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
+  apiKey = process.env.GOOGLE_AI_API_KEY;
   console.log(`Embeddings initialized with model: ${EMBEDDING_MODEL}`);
 }
 
 export function isEmbeddingsEnabled(): boolean {
-  return openaiClient !== null;
+  return apiKey !== null;
 }
 
 export function getEmbeddingDimensions(): number {
@@ -27,34 +23,42 @@ export function getEmbeddingDimensions(): number {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  if (!openaiClient) {
-    throw new Error('OpenAI client not initialized');
+  if (!apiKey) {
+    throw new Error('Google AI API key not initialized');
   }
 
-  const response = await openaiClient.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: text,
+  const url = `${API_BASE}/models/${EMBEDDING_MODEL}:embedContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: { parts: [{ text }] },
+    }),
   });
 
-  return response.data[0].embedding;
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Embedding API error: ${response.status} - ${error}`);
+  }
+
+  const data = await response.json();
+  return data.embedding.values;
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  if (!openaiClient) {
-    throw new Error('OpenAI client not initialized');
+  if (!apiKey) {
+    throw new Error('Google AI API key not initialized');
   }
 
   if (texts.length === 0) {
     return [];
   }
 
-  // OpenAI supports batch embedding
-  const response = await openaiClient.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: texts,
-  });
+  // Process in parallel for speed
+  const embeddings = await Promise.all(
+    texts.map(text => generateEmbedding(text))
+  );
 
-  // Sort by index to ensure correct order
-  const sorted = response.data.sort((a, b) => a.index - b.index);
-  return sorted.map((item) => item.embedding);
+  return embeddings;
 }

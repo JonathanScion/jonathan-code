@@ -1,5 +1,4 @@
-// @ts-expect-error pdf-parse types issue
-import pdfParse from 'pdf-parse';
+import { extractText as extractPdfText } from 'unpdf';
 import mammoth from 'mammoth';
 import fs from 'fs/promises';
 import path from 'path';
@@ -38,8 +37,8 @@ export async function extractText(
   const ext = path.extname(filename).toLowerCase();
 
   if (mimeType === 'application/pdf' || ext === '.pdf') {
-    const data = await pdfParse(buffer);
-    return data.text;
+    const { text } = await extractPdfText(buffer);
+    return text;
   }
 
   if (
