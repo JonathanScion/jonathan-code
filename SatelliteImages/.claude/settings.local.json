@@ -67,7 +67,11 @@
       "WebFetch(domain:satelliteimages-api.jonathanscode.io)",
       "Bash(zip:*)",
       "Bash(xxd:*)",
-      "Bash(copy:*)"
+      "Bash(copy:*)",
+      "WebFetch(domain:gibs.earthdata.nasa.gov)",
+      "WebFetch(domain:nasa-gibs.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:worldview.earthdata.nasa.gov)"
     ],
     "deny": [],
     "ask": []

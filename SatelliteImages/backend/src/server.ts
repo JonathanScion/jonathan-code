@@ -381,11 +381,12 @@ app.post('/api/images/:id/confirm', async (req: Request, res: Response) => {
       console.log('Final coordinates to save:', { lat: updates.center_lat, lon: updates.center_lon });
     }
 
-    // Generate thumbnail for large images (especially TIF files)
+    // Generate thumbnail and preview for image files
     const originalFilePath = getFilePath(image.filePath || image.s3Key);
     if (originalFilePath) {
       const ext = path.extname(originalFilePath).toLowerCase();
-      if (ext === '.tif' || ext === '.tiff') {
+      const supportedImageExts = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg'];
+      if (supportedImageExts.includes(ext)) {
         try {
           const sharp = (await import('sharp')).default;
           const thumbnailFilename = `thumbnail.png`;
@@ -394,7 +395,7 @@ app.post('/api/images/:id/confirm', async (req: Request, res: Response) => {
           const thumbnailPath = path.join(imageDir, thumbnailFilename);
           const previewPath = path.join(imageDir, previewFilename);
 
-          console.log('Generating thumbnail and preview for large TIF...');
+          console.log(`Generating thumbnail and preview for ${ext} file...`);
 
           // Generate small thumbnail (300px) for gallery
           await sharp(originalFilePath, { limitInputPixels: false })

@@ -3063,7 +3063,8 @@ app.post("/api/images/:id/confirm", async (req, res) => {
     const originalFilePath = getFilePath(image.filePath || image.s3Key);
     if (originalFilePath) {
       const ext = path3.extname(originalFilePath).toLowerCase();
-      if (ext === ".tif" || ext === ".tiff") {
+      const supportedImageExts = [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
+      if (supportedImageExts.includes(ext)) {
         try {
           const sharp2 = (await import("sharp")).default;
           const thumbnailFilename = `thumbnail.png`;
@@ -3071,7 +3072,7 @@ app.post("/api/images/:id/confirm", async (req, res) => {
           const imageDir = path3.dirname(originalFilePath);
           const thumbnailPath = path3.join(imageDir, thumbnailFilename);
           const previewPath = path3.join(imageDir, previewFilename);
-          console.log("Generating thumbnail and preview for large TIF...");
+          console.log(`Generating thumbnail and preview for ${ext} file...`);
           await sharp2(originalFilePath, { limitInputPixels: false }).resize(300, 300, { fit: "inside", withoutEnlargement: true }).png({ quality: 80 }).toFile(thumbnailPath);
           await sharp2(originalFilePath, { limitInputPixels: false }).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png({ quality: 85 }).toFile(previewPath);
           const relThumbnailPath = path3.join("images", imageId, thumbnailFilename).replace(/\\/g, "/");

@@ -49,7 +49,25 @@
       "WebFetch(domain:www.thinkbroadband.com)",
       "Bash(npm run build:*)",
       "Bash(tree:*)",
-      "Bash(timeout 3 node:*)"
+      "Bash(timeout 3 node:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run build:shared:*)",
+      "Bash(npm run build:backend:*)",
+      "Bash(npm run build:frontend:*)",
+      "Bash(if [ -f \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-satellite-images.zip\" ])",
+      "Bash(then unzip -l \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-satellite-images.zip\")",
+      "Bash(fi)",
+      "Bash(if [ -f \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-backend.zip\" ])",
+      "Bash(then unzip -l \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-backend.zip\")",
+      "Bash(if [ -f \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-frontend.zip\" ])",
+      "Bash(then unzip -l \"/c/Users/jonat/source/repos/jonathan-code/SatelliteImages/hostinger-frontend.zip\")",
+      "Bash(powershell.exe -Command \"Remove-Item -Force hostinger-backend.zip -ErrorAction SilentlyContinue; Compress-Archive -Path ''hostinger-deploy/server.js'',''hostinger-deploy/server.bundle.mjs'',''hostinger-deploy/config.js'',''hostinger-deploy/package.json'',''hostinger-deploy/package-lock.json'',''hostinger-deploy/README.md'' -DestinationPath ''hostinger-backend.zip''\")",
+      "Bash(powershell.exe -Command \"Remove-Item -Force hostinger-frontend.zip -ErrorAction SilentlyContinue; Compress-Archive -Path ''frontend/dist/*'' -DestinationPath ''hostinger-frontend.zip''\")",
+      "Bash(powershell.exe -Command \"\n$be = [System.IO.Compression.ZipFile]::OpenRead\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\hostinger-backend.zip''\\)\n$be.Entries | ForEach-Object { ''{0,-40} {1,10}'' -f $_.FullName, $_.Length }\n$be.Dispose\\(\\)\n\")",
+      "Bash(powershell.exe -NoProfile -Command \"Add-Type -Assembly System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\hostinger-backend.zip''\\); $z.Entries | Select-Object FullName, Length | Format-Table; $z.Dispose\\(\\)\")",
+      "Bash(python3:*)",
+      "Bash(powershell.exe -NoProfile -Command \"Remove-Item -Force hostinger-backend.zip -ErrorAction SilentlyContinue; Compress-Archive -Path ''hostinger-deploy\\\\server.js'',''hostinger-deploy\\\\server.bundle.mjs'',''hostinger-deploy\\\\package.json'',''hostinger-deploy\\\\.env'',''hostinger-deploy\\\\config.js'',''hostinger-deploy\\\\logs'',''hostinger-deploy\\\\uploads'' -DestinationPath ''hostinger-backend.zip'' -Force\")",
+      "WebFetch(domain:gibs.earthdata.nasa.gov)"
     ]
   }
 }
