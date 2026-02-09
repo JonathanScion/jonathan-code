@@ -1,22 +1,10 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import {
-  extractText,
-  chunkText,
-  loadDocumentRegistry,
-  saveDocumentRegistry,
-  addDocument,
-  removeDocument,
-  generateDocumentId,
-  loadCollections,
-  createCollection,
-  renameCollection,
-  deleteCollection,
-  getDocumentsByCollection,
-  DEFAULT_COLLECTION_ID,
-  type DocumentInfo,
-  type Collection,
-} from '../services/documents.js';
+import path from 'path';
+import { eq, and } from 'drizzle-orm';
+import { getDb, collections, documents, isDatabaseEnabled } from '../db/index.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/requireAuth.js';
+import { extractText, chunkText, generateDocumentId } from '../services/documents.js';
 import { generateEmbeddings, generateEmbedding, isEmbeddingsEnabled } from '../services/embeddings.js';
 import {
   upsertVectors,
@@ -26,6 +14,7 @@ import {
   isPineconeEnabled,
   type VectorMetadata,
 } from '../services/pinecone.js';
+import { saveFile, deleteFile, getFile } from '../services/fileStorage.js';
 
 export const ragRouter = Router();
 
@@ -56,19 +45,31 @@ const upload = multer({
 // Check if RAG is available
 ragRouter.get('/status', (_req: Request, res: Response) => {
   res.json({
-    enabled: isPineconeEnabled() && isEmbeddingsEnabled(),
+    enabled: isPineconeEnabled() && isEmbeddingsEnabled() && isDatabaseEnabled(),
     pinecone: isPineconeEnabled(),
     embeddings: isEmbeddingsEnabled(),
+    database: isDatabaseEnabled(),
   });
 });
 
+// All other routes require authentication
+ragRouter.use(requireAuth);
+
 // === Collection endpoints ===
 
-// List all collections
-ragRouter.get('/collections', async (_req: Request, res: Response) => {
+// List all collections for the user
+ragRouter.get('/collections', async (req: Request, res: Response) => {
   try {
-    const collections = await loadCollections();
-    res.json({ collections });
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
+    const db = getDb();
+
+    const userCollections = await db.query.collections.findMany({
+      where: eq(collections.userId, userId),
+      orderBy: (collections, { asc }) => [asc(collections.createdAt)],
+    });
+
+    res.json({ collections: userCollections });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });
@@ -78,13 +79,25 @@ ragRouter.get('/collections', async (_req: Request, res: Response) => {
 // Create a collection
 ragRouter.post('/collections', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { name } = req.body;
+
     if (!name || typeof name !== 'string') {
       res.status(400).json({ error: 'Collection name is required' });
       return;
     }
-    const collection = await createCollection(name.trim());
-    res.json({ collection });
+
+    const db = getDb();
+    const [newCollection] = await db
+      .insert(collections)
+      .values({
+        userId,
+        name: name.trim(),
+      })
+      .returning();
+
+    res.json({ collection: newCollection });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });
@@ -94,18 +107,29 @@ ragRouter.post('/collections', async (req: Request, res: Response) => {
 // Rename a collection
 ragRouter.put('/collections/:id', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { id } = req.params;
     const { name } = req.body;
+
     if (!name || typeof name !== 'string') {
       res.status(400).json({ error: 'Collection name is required' });
       return;
     }
-    const success = await renameCollection(id, name.trim());
-    if (!success) {
-      res.status(404).json({ error: 'Collection not found or cannot be renamed' });
+
+    const db = getDb();
+    const result = await db
+      .update(collections)
+      .set({ name: name.trim() })
+      .where(and(eq(collections.id, id), eq(collections.userId, userId)))
+      .returning();
+
+    if (result.length === 0) {
+      res.status(404).json({ error: 'Collection not found' });
       return;
     }
-    res.json({ success: true });
+
+    res.json({ success: true, collection: result[0] });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });
@@ -115,29 +139,38 @@ ragRouter.put('/collections/:id', async (req: Request, res: Response) => {
 // Delete a collection and all its documents
 ragRouter.delete('/collections/:id', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { id } = req.params;
 
-    if (id === DEFAULT_COLLECTION_ID) {
-      res.status(400).json({ error: 'Cannot delete the default collection' });
-      return;
-    }
+    const db = getDb();
 
+    // Get all documents in this collection to delete their files
+    const collectionDocs = await db.query.documents.findMany({
+      where: and(eq(documents.collectionId, id), eq(documents.userId, userId)),
+    });
+
+    // Delete vectors from Pinecone
     if (isPineconeEnabled()) {
-      // Delete all vectors in this collection from Pinecone
-      await deleteByCollectionId(id);
+      await deleteByCollectionId(userId, id);
     }
 
-    // Remove documents from registry
-    const documents = await loadDocumentRegistry();
-    const remainingDocs = documents.filter(d => d.collectionId !== id);
-    await saveDocumentRegistry(remainingDocs);
+    // Delete files from disk
+    for (const doc of collectionDocs) {
+      await deleteFile(doc.filePath);
+    }
 
-    // Delete the collection
-    const success = await deleteCollection(id);
-    if (!success) {
+    // Delete collection (cascade will delete documents)
+    const result = await db
+      .delete(collections)
+      .where(and(eq(collections.id, id), eq(collections.userId, userId)))
+      .returning();
+
+    if (result.length === 0) {
       res.status(404).json({ error: 'Collection not found' });
       return;
     }
+
     res.json({ success: true });
   } catch (error) {
     const err = error as Error;
@@ -150,15 +183,26 @@ ragRouter.delete('/collections/:id', async (req: Request, res: Response) => {
 // List documents (optionally filtered by collection)
 ragRouter.get('/documents', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { collectionId } = req.query;
-    let documents: DocumentInfo[];
+
+    const db = getDb();
+    let userDocuments;
 
     if (collectionId && typeof collectionId === 'string') {
-      documents = await getDocumentsByCollection(collectionId);
+      userDocuments = await db.query.documents.findMany({
+        where: and(eq(documents.userId, userId), eq(documents.collectionId, collectionId)),
+        orderBy: (documents, { desc }) => [desc(documents.uploadedAt)],
+      });
     } else {
-      documents = await loadDocumentRegistry();
+      userDocuments = await db.query.documents.findMany({
+        where: eq(documents.userId, userId),
+        orderBy: (documents, { desc }) => [desc(documents.uploadedAt)],
+      });
     }
-    res.json({ documents });
+
+    res.json({ documents: userDocuments });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });
@@ -168,6 +212,9 @@ ragRouter.get('/documents', async (req: Request, res: Response) => {
 // Upload a document
 ragRouter.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
+
     if (!isPineconeEnabled() || !isEmbeddingsEnabled()) {
       res.status(503).json({ error: 'RAG services not configured' });
       return;
@@ -179,7 +226,34 @@ ragRouter.post('/upload', upload.single('file'), async (req: Request, res: Respo
     }
 
     const file = req.file;
-    const collectionId = (req.body.collectionId as string) || DEFAULT_COLLECTION_ID;
+    const collectionId = req.body.collectionId as string;
+
+    if (!collectionId) {
+      res.status(400).json({ error: 'Collection ID is required' });
+      return;
+    }
+
+    const db = getDb();
+
+    // Verify collection belongs to user
+    const collection = await db.query.collections.findFirst({
+      where: and(eq(collections.id, collectionId), eq(collections.userId, userId)),
+    });
+
+    if (!collection) {
+      res.status(404).json({ error: 'Collection not found' });
+      return;
+    }
+
+    // Check document count limit (100 per user)
+    const docCount = await db.query.documents.findMany({
+      where: eq(documents.userId, userId),
+    });
+    if (docCount.length >= 100) {
+      res.status(400).json({ error: 'Document limit reached (100 documents max)' });
+      return;
+    }
+
     const documentId = generateDocumentId();
 
     // Extract text from document
@@ -189,6 +263,9 @@ ragRouter.post('/upload', upload.single('file'), async (req: Request, res: Respo
       res.status(400).json({ error: 'Could not extract text from document' });
       return;
     }
+
+    // Save file to disk
+    const filePath = await saveFile(userId, documentId, file.buffer, file.originalname);
 
     // Chunk the text
     const chunks = chunkText(text);
@@ -210,25 +287,28 @@ ragRouter.post('/upload', upload.single('file'), async (req: Request, res: Respo
       } as VectorMetadata,
     }));
 
-    // Upsert to Pinecone
-    await upsertVectors(vectors);
+    // Upsert to Pinecone (user-scoped namespace)
+    await upsertVectors(userId, vectors);
 
-    // Save document info
-    const docInfo: DocumentInfo = {
-      id: documentId,
-      collectionId,
-      name: file.originalname,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-      chunkCount: chunks.length,
-      uploadedAt: Date.now(),
-    };
-    await addDocument(docInfo);
+    // Save document info to database
+    const [newDocument] = await db
+      .insert(documents)
+      .values({
+        id: documentId,
+        userId,
+        collectionId,
+        name: file.originalname,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        chunkCount: chunks.length,
+        filePath,
+      })
+      .returning();
 
     res.json({
       success: true,
-      document: docInfo,
+      document: newDocument,
       message: `Document processed: ${chunks.length} chunks created`,
     });
   } catch (error) {
@@ -238,9 +318,40 @@ ragRouter.post('/upload', upload.single('file'), async (req: Request, res: Respo
   }
 });
 
+// Download a document
+ragRouter.get('/documents/:id/download', async (req: Request, res: Response) => {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
+    const { id } = req.params;
+
+    const db = getDb();
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.id, id), eq(documents.userId, userId)),
+    });
+
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    const fileBuffer = await getFile(doc.filePath);
+    const ext = path.extname(doc.originalName);
+
+    res.setHeader('Content-Disposition', `attachment; filename="${doc.originalName}"`);
+    res.setHeader('Content-Type', doc.mimeType);
+    res.send(fileBuffer);
+  } catch (error) {
+    const err = error as Error;
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Delete a document
 ragRouter.delete('/documents/:id', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { id } = req.params;
 
     if (!isPineconeEnabled()) {
@@ -248,16 +359,26 @@ ragRouter.delete('/documents/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    // Delete from Pinecone
-    await deleteByDocumentId(id);
+    const db = getDb();
 
-    // Remove from registry
-    const removed = await removeDocument(id);
+    // Get document
+    const doc = await db.query.documents.findFirst({
+      where: and(eq(documents.id, id), eq(documents.userId, userId)),
+    });
 
-    if (!removed) {
+    if (!doc) {
       res.status(404).json({ error: 'Document not found' });
       return;
     }
+
+    // Delete from Pinecone (user-scoped)
+    await deleteByDocumentId(userId, id);
+
+    // Delete file from disk
+    await deleteFile(doc.filePath);
+
+    // Delete from database
+    await db.delete(documents).where(eq(documents.id, id));
 
     res.json({ success: true, message: 'Document deleted' });
   } catch (error) {
@@ -269,6 +390,8 @@ ragRouter.delete('/documents/:id', async (req: Request, res: Response) => {
 // Query for relevant context
 ragRouter.post('/query', async (req: Request, res: Response) => {
   try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user!.userId;
     const { query, topK = 5, collectionId } = req.body;
 
     if (!query) {
@@ -284,35 +407,10 @@ ragRouter.post('/query', async (req: Request, res: Response) => {
     // Generate embedding for query
     const queryEmbedding = await generateEmbedding(query);
 
-    // Query Pinecone (with optional collection filter)
-    const results = await queryVectors(queryEmbedding, topK, collectionId);
+    // Query Pinecone (user-scoped namespace with optional collection filter)
+    const results = await queryVectors(userId, queryEmbedding, topK, collectionId);
 
     res.json({ results });
-  } catch (error) {
-    const err = error as Error;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Clear all documents
-ragRouter.delete('/documents', async (_req: Request, res: Response) => {
-  try {
-    if (!isPineconeEnabled()) {
-      res.status(503).json({ error: 'RAG services not configured' });
-      return;
-    }
-
-    const documents = await loadDocumentRegistry();
-
-    // Delete all documents from Pinecone
-    for (const doc of documents) {
-      await deleteByDocumentId(doc.id);
-    }
-
-    // Clear registry
-    await saveDocumentRegistry([]);
-
-    res.json({ success: true, message: `Deleted ${documents.length} documents` });
   } catch (error) {
     const err = error as Error;
     res.status(500).json({ error: err.message });

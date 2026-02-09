@@ -4,8 +4,12 @@ import { queryChatGPT, streamChatGPT } from '../services/openai.js';
 import { queryGemini, streamGemini } from '../services/gemini.js';
 import { generateEmbedding, isEmbeddingsEnabled } from '../services/embeddings.js';
 import { queryVectors, isPineconeEnabled, type QueryResult } from '../services/pinecone.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/requireAuth.js';
 
 export const chatRouter = Router();
+
+// All chat routes require authentication
+chatRouter.use(requireAuth);
 
 // Helper to build context from RAG results
 function buildRagContext(results: QueryResult[]): string {
@@ -111,20 +115,22 @@ interface ServiceResponse {
 }
 
 chatRouter.post('/', async (req: Request, res: Response) => {
-  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5 } = req.body as ChatRequest;
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user!.userId;
+  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5, ragCollectionId } = req.body as ChatRequest;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
     return;
   }
 
-  // Get RAG context if enabled
+  // Get RAG context if enabled (user-scoped)
   let ragContext = '';
   let ragResults: QueryResult[] = [];
   if (useRag && isPineconeEnabled() && isEmbeddingsEnabled()) {
     try {
       const queryEmbedding = await generateEmbedding(prompt);
-      ragResults = await queryVectors(queryEmbedding, ragTopK);
+      ragResults = await queryVectors(userId, queryEmbedding, ragTopK, ragCollectionId);
       ragContext = buildRagContext(ragResults);
     } catch (error) {
       console.error('RAG query error:', error);
@@ -177,6 +183,8 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
 // Streaming endpoint using Server-Sent Events
 chatRouter.post('/stream', async (req: Request, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  const userId = authReq.user!.userId;
   const { prompt, images, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5, ragCollectionId } = req.body as ChatRequest;
 
   if (!prompt && (!images || images.length === 0)) {
@@ -184,13 +192,13 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
     return;
   }
 
-  // Get RAG context if enabled
+  // Get RAG context if enabled (user-scoped)
   let ragContext = '';
   let ragResults: QueryResult[] = [];
   if (useRag && isPineconeEnabled() && isEmbeddingsEnabled()) {
     try {
       const queryEmbedding = await generateEmbedding(prompt);
-      ragResults = await queryVectors(queryEmbedding, ragTopK, ragCollectionId);
+      ragResults = await queryVectors(userId, queryEmbedding, ragTopK, ragCollectionId);
       ragContext = buildRagContext(ragResults);
     } catch (error) {
       console.error('RAG query error:', error);

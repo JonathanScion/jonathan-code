@@ -7,12 +7,18 @@ interface DocumentManagerProps {
   selectedCollectionId?: string | null;
 }
 
-const DEFAULT_COLLECTION_ID = 'default';
+const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:3001';
+
+// Helper to get auth headers
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export function DocumentManager({ onRagStatusChange, onCollectionChange, selectedCollectionId }: DocumentManagerProps) {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
-  const [activeCollectionId, setActiveCollectionId] = useState<string>(selectedCollectionId || DEFAULT_COLLECTION_ID);
+  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(selectedCollectionId || null);
   const [ragStatus, setRagStatus] = useState<RagStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
@@ -24,18 +30,26 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
   // Check RAG status on mount
   useEffect(() => {
     fetchRagStatus();
-    fetchCollections();
   }, []);
+
+  // Fetch collections after RAG status is confirmed
+  useEffect(() => {
+    if (ragStatus?.enabled) {
+      fetchCollections();
+    }
+  }, [ragStatus?.enabled]);
 
   // Fetch documents when active collection changes
   useEffect(() => {
-    fetchDocuments();
-    onCollectionChange?.(activeCollectionId);
+    if (activeCollectionId) {
+      fetchDocuments();
+      onCollectionChange?.(activeCollectionId);
+    }
   }, [activeCollectionId, onCollectionChange]);
 
   const fetchRagStatus = async () => {
     try {
-      const res = await fetch('/api/rag/status');
+      const res = await fetch(`${API_BASE}/api/rag/status`);
       const data = await res.json();
       setRagStatus(data);
       onRagStatusChange?.(data.enabled);
@@ -46,20 +60,35 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
 
   const fetchCollections = async () => {
     try {
-      const res = await fetch('/api/rag/collections');
+      const res = await fetch(`${API_BASE}/api/rag/collections`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        if (res.status === 401) return; // Not authenticated yet
+        throw new Error('Failed to fetch collections');
+      }
       const data = await res.json();
-      setCollections(data.collections || []);
+      const cols = data.collections || [];
+      setCollections(cols);
+      // Set first collection as active if none selected
+      if (!activeCollectionId && cols.length > 0) {
+        setActiveCollectionId(cols[0].id);
+      }
     } catch (err) {
       console.error('Failed to fetch collections:', err);
     }
   };
 
   const fetchDocuments = async () => {
+    if (!activeCollectionId) return;
     try {
-      const url = activeCollectionId
-        ? `/api/rag/documents?collectionId=${activeCollectionId}`
-        : '/api/rag/documents';
-      const res = await fetch(url);
+      const res = await fetch(`${API_BASE}/api/rag/documents?collectionId=${activeCollectionId}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        if (res.status === 401) return;
+        throw new Error('Failed to fetch documents');
+      }
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch (err) {
@@ -71,9 +100,12 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
     if (!newCollectionName.trim()) return;
 
     try {
-      const res = await fetch('/api/rag/collections', {
+      const res = await fetch(`${API_BASE}/api/rag/collections`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ name: newCollectionName.trim() }),
       });
 
@@ -94,12 +126,12 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
   };
 
   const handleDeleteCollection = async (collectionId: string) => {
-    if (collectionId === DEFAULT_COLLECTION_ID) return;
     if (!confirm('Delete this collection and all its documents? This cannot be undone.')) return;
 
     try {
-      const res = await fetch(`/api/rag/collections/${collectionId}`, {
+      const res = await fetch(`${API_BASE}/api/rag/collections/${collectionId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
 
       if (!res.ok) {
@@ -107,9 +139,10 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
         throw new Error(data.error || 'Delete failed');
       }
 
-      setCollections(prev => prev.filter(c => c.id !== collectionId));
+      const remaining = collections.filter(c => c.id !== collectionId);
+      setCollections(remaining);
       if (activeCollectionId === collectionId) {
-        setActiveCollectionId(DEFAULT_COLLECTION_ID);
+        setActiveCollectionId(remaining.length > 0 ? remaining[0].id : null);
       }
     } catch (err) {
       const error = err as Error;
@@ -119,7 +152,7 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !activeCollectionId) return;
 
     setIsUploading(true);
     setError(null);
@@ -133,8 +166,9 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
         formData.append('file', file);
         formData.append('collectionId', activeCollectionId);
 
-        const res = await fetch('/api/rag/upload', {
+        const res = await fetch(`${API_BASE}/api/rag/upload`, {
           method: 'POST',
+          headers: getAuthHeaders(),
           body: formData,
         });
 
@@ -161,8 +195,9 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
 
   const handleDelete = async (docId: string) => {
     try {
-      const res = await fetch(`/api/rag/documents/${docId}`, {
+      const res = await fetch(`${API_BASE}/api/rag/documents/${docId}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
 
       if (!res.ok) {
@@ -183,8 +218,9 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const formatDate = (timestamp: number): string => {
-    return new Date(timestamp).toLocaleDateString();
+  const formatDate = (timestamp: number | Date): string => {
+    const date = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
+    return date.toLocaleDateString();
   };
 
   const activeCollection = collections.find(c => c.id === activeCollectionId);
@@ -211,10 +247,11 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
         <div className="flex items-center gap-3 mb-3">
           <span className="text-xs text-gray-400">Collection:</span>
           <select
-            value={activeCollectionId}
-            onChange={(e) => setActiveCollectionId(e.target.value)}
+            value={activeCollectionId || ''}
+            onChange={(e) => setActiveCollectionId(e.target.value || null)}
             className="text-xs px-2 py-1 bg-gray-700 text-gray-200 border border-gray-600 rounded focus:border-blue-500 focus:outline-none"
           >
+            {collections.length === 0 && <option value="">No collections</option>}
             {collections.map((col) => (
               <option key={col.id} value={col.id}>
                 {col.name}
@@ -259,7 +296,7 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
             </button>
           )}
 
-          {activeCollectionId !== DEFAULT_COLLECTION_ID && (
+          {activeCollectionId && collections.length > 1 && (
             <button
               onClick={() => handleDeleteCollection(activeCollectionId)}
               className="text-xs px-2 py-1 text-red-400 hover:text-red-300"
@@ -284,11 +321,12 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
               onChange={handleFileSelect}
               className="hidden"
               id="doc-upload"
+              disabled={!activeCollectionId}
             />
             <label
               htmlFor="doc-upload"
               className={`text-xs px-3 py-1.5 rounded cursor-pointer transition-colors ${
-                isUploading
+                isUploading || !activeCollectionId
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-500'
               }`}
@@ -312,7 +350,9 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
 
         {documents.length === 0 ? (
           <p className="text-xs text-gray-500">
-            No documents in this collection. Upload PDF, DOCX, TXT, or MD files.
+            {activeCollectionId
+              ? 'No documents in this collection. Upload PDF, DOCX, TXT, or MD files.'
+              : 'Create a collection to start uploading documents.'}
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">

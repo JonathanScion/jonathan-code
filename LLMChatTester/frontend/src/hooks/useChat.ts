@@ -7,6 +7,14 @@ type UsageState = Record<LLMProvider, TokenUsage | undefined>;
 const INITIAL_STREAMING_STATE: StreamingState = { claude: '', openai: '', gemini: '' };
 const INITIAL_STREAMING_STATUS: StreamingStatus = { claude: 'idle', openai: 'idle', gemini: 'idle' };
 
+const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:3001';
+
+// Helper to get auth headers
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function useChat() {
   const [params, setParams] = useState<ChatParams>(DEFAULT_PARAMS);
   const [history, setHistory] = useState<ConversationTurn[]>([]);
@@ -48,10 +56,11 @@ export function useChat() {
     setError(null);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           prompt,
@@ -97,10 +106,11 @@ export function useChat() {
     usageRef.current = { claude: undefined, openai: undefined, gemini: undefined };
 
     try {
-      const res = await fetch('/api/chat/stream', {
+      const res = await fetch(`${API_BASE}/api/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           prompt,

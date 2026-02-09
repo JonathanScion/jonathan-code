@@ -3,10 +3,13 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import passport from 'passport';
 import { chatRouter } from './routes/chat.js';
 import { ragRouter } from './routes/rag.js';
+import { authRouter, initPassport } from './routes/auth.js';
 import { initPinecone } from './services/pinecone.js';
 import { initEmbeddings } from './services/embeddings.js';
+import { initDatabase, isDatabaseEnabled } from './db/index.js';
 
 // ES module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -17,17 +20,25 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
 dotenv.config();
 
-// Initialize RAG services
+// Initialize services
+initDatabase();
 initPinecone();
 initEmbeddings();
+
+// Initialize auth (only if database is enabled)
+if (isDatabaseEnabled()) {
+  initPassport();
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' })); // Increased for image uploads
+app.use(passport.initialize());
 
 // API routes
+app.use('/api/auth', authRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/rag', ragRouter);
 

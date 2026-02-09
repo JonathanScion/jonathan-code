@@ -1,4 +1,4 @@
-import { Pinecone } from '@pinecone-database/pinecone';
+import { Pinecone, Index } from '@pinecone-database/pinecone';
 
 export interface VectorMetadata {
   documentId: string;
@@ -36,7 +36,7 @@ export function initPinecone() {
   console.log(`Pinecone initialized with index: ${indexName}`);
 }
 
-function getIndex() {
+function getIndex(): Index<VectorMetadata> {
   if (!pineconeClient || !indexName) {
     throw new Error('Pinecone not initialized');
   }
@@ -47,17 +47,25 @@ export function isPineconeEnabled(): boolean {
   return pineconeClient !== null && indexName !== null;
 }
 
+// Get user-specific namespace
+export function getUserNamespace(userId: string): string {
+  return `user-${userId}`;
+}
+
+// Upsert vectors for a specific user
 export async function upsertVectors(
+  userId: string,
   vectors: { id: string; values: number[]; metadata: VectorMetadata }[]
 ): Promise<void> {
   const index = getIndex();
+  const namespace = getUserNamespace(userId);
 
   // Pinecone recommends batches of 100
   const batchSize = 100;
   for (let i = 0; i < vectors.length; i += batchSize) {
     const batch = vectors.slice(i, i + batchSize);
-    await index.upsert({
-      records: batch.map(v => ({
+    await index.namespace(namespace).upsert({
+      records: batch.map((v) => ({
         id: v.id,
         values: v.values,
         metadata: v.metadata,
@@ -66,12 +74,15 @@ export async function upsertVectors(
   }
 }
 
+// Query vectors for a specific user
 export async function queryVectors(
+  userId: string,
   queryVector: number[],
   topK: number = 5,
   collectionId?: string
 ): Promise<QueryResult[]> {
   const index = getIndex();
+  const namespace = getUserNamespace(userId);
 
   const queryParams: {
     vector: number[];
@@ -89,7 +100,7 @@ export async function queryVectors(
     queryParams.filter = { collectionId: { $eq: collectionId } };
   }
 
-  const results = await index.query(queryParams);
+  const results = await index.namespace(namespace).query(queryParams);
 
   return (results.matches || []).map((match) => ({
     id: match.id,
@@ -102,33 +113,35 @@ export async function queryVectors(
   }));
 }
 
-export async function deleteByDocumentId(documentId: string): Promise<void> {
+// Delete vectors by document ID for a specific user
+export async function deleteByDocumentId(userId: string, documentId: string): Promise<void> {
   const index = getIndex();
+  const namespace = getUserNamespace(userId);
 
   // Delete all vectors with this documentId
-  await index.deleteMany({
+  await index.namespace(namespace).deleteMany({
     filter: { documentId: { $eq: documentId } },
   });
 }
 
-export async function deleteByCollectionId(collectionId: string): Promise<void> {
+// Delete vectors by collection ID for a specific user
+export async function deleteByCollectionId(userId: string, collectionId: string): Promise<void> {
   const index = getIndex();
+  const namespace = getUserNamespace(userId);
 
   // Delete all vectors in this collection
-  await index.deleteMany({
+  await index.namespace(namespace).deleteMany({
     filter: { collectionId: { $eq: collectionId } },
   });
 }
 
-export async function listDocuments(): Promise<{ id: string; name: string; chunkCount: number }[]> {
+// Delete all vectors for a user (used when deleting account)
+export async function deleteUserNamespace(userId: string): Promise<void> {
   const index = getIndex();
+  const namespace = getUserNamespace(userId);
 
-  // Pinecone doesn't have a direct "list all" - we need to query with a dummy vector
-  // This is a limitation; for a production app, you'd store document metadata separately
-  // For now, we'll maintain a local document registry
-
-  // This function will be supplemented by local storage
-  return [];
+  // Delete entire namespace
+  await index.namespace(namespace).deleteAll();
 }
 
 export async function getIndexStats() {
