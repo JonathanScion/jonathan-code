@@ -11,8 +11,15 @@ export interface PromptTemplate {
 }
 
 // RAG types
+export interface Collection {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
 export interface DocumentInfo {
   id: string;
+  collectionId: string;
   name: string;
   originalName: string;
   mimeType: string;
@@ -36,9 +43,17 @@ export interface RagStatus {
   embeddings: boolean;
 }
 
+// Image data for multimodal
+export interface ImageData {
+  base64: string;
+  mimeType: string;
+  name: string;
+}
+
 export interface Message {
   role: 'user' | 'assistant';
   content: string;
+  images?: ImageData[];
 }
 
 // Provider-specific parameter types
@@ -152,6 +167,7 @@ export const DEFAULT_TURN_RATINGS: TurnRatings = {
 
 export interface ConversationTurn {
   userMessage: string;
+  images?: ImageData[];
   responses: ChatResponse;
   timestamp: number;
   ratings?: TurnRatings;

@@ -5,8 +5,15 @@ interface Message {
   content: string;
 }
 
+interface ImageData {
+  base64: string;
+  mimeType: string;
+  name: string;
+}
+
 export interface OpenAIParams {
   prompt: string;
+  images?: ImageData[];
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -17,6 +24,35 @@ export interface OpenAIParams {
   seed?: number;
   systemPrompt?: string;
   messages?: Message[];
+}
+
+// Build content for multimodal messages
+function buildUserContent(prompt: string, images?: ImageData[]): OpenAI.ChatCompletionUserMessageParam['content'] {
+  if (!images || images.length === 0) {
+    return prompt;
+  }
+
+  const content: OpenAI.ChatCompletionContentPart[] = [];
+
+  // Add images first
+  for (const img of images) {
+    content.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${img.mimeType};base64,${img.base64}`,
+      },
+    });
+  }
+
+  // Add text prompt
+  if (prompt) {
+    content.push({
+      type: 'text',
+      text: prompt,
+    });
+  }
+
+  return content;
 }
 
 export interface TokenUsage {
@@ -37,6 +73,7 @@ export interface StreamResult {
 export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse> {
   const {
     prompt,
+    images,
     model = 'gpt-4o',
     temperature = 0.7,
     maxTokens = 1024,
@@ -66,8 +103,8 @@ export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse
       allMessages.push({ role: msg.role, content: msg.content });
     }
 
-    // Add current prompt
-    allMessages.push({ role: 'user', content: prompt });
+    // Add current prompt with optional images
+    allMessages.push({ role: 'user', content: buildUserContent(prompt, images) });
 
     const requestParams: OpenAI.ChatCompletionCreateParams = {
       model,
@@ -111,6 +148,7 @@ export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse
 export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
+    images,
     model = 'gpt-4o',
     temperature = 0.7,
     maxTokens = 1024,
@@ -138,8 +176,8 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<Strea
     allMessages.push({ role: msg.role, content: msg.content });
   }
 
-  // Add current prompt
-  allMessages.push({ role: 'user', content: prompt });
+  // Add current prompt with optional images
+  allMessages.push({ role: 'user', content: buildUserContent(prompt, images) });
 
   const requestParams: OpenAI.ChatCompletionCreateParams = {
     model,

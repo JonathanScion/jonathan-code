@@ -217,6 +217,12 @@ function StopSequencesField({
   );
 }
 
+const TEMPERATURE_PRESETS = [
+  { name: 'Precise', temp: 0.2, description: 'Focused, deterministic responses' },
+  { name: 'Balanced', temp: 0.7, description: 'Default creative balance' },
+  { name: 'Creative', temp: 1.0, description: 'More varied, creative outputs' },
+];
+
 export function ParameterControls({ params, onParamsChange }: ParameterControlsProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     system: true,
@@ -227,6 +233,21 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
 
   const toggleSection = (section: string) => {
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const applyTemperaturePreset = (temp: number) => {
+    onParamsChange({
+      ...params,
+      claude: { ...params.claude, temperature: Math.min(temp, 1) }, // Claude max is 1
+      openai: { ...params.openai, temperature: temp },
+      gemini: { ...params.gemini, temperature: temp },
+    });
+  };
+
+  const getCurrentPreset = () => {
+    const avgTemp = (params.claude.temperature + params.openai.temperature + params.gemini.temperature) / 3;
+    const preset = TEMPERATURE_PRESETS.find(p => Math.abs(p.temp - avgTemp) < 0.1);
+    return preset?.name || null;
   };
 
   const updateClaude = (updates: Partial<ClaudeParams>) => {
@@ -250,9 +271,35 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
     });
   };
 
+  const currentPreset = getCurrentPreset();
+
   return (
     <div className="p-4 bg-gray-900 border-b border-gray-700">
       <div className="max-w-4xl mx-auto space-y-3">
+        {/* Temperature Presets */}
+        <div className="flex items-center gap-3 pb-2">
+          <span className="text-xs text-gray-400">Quick Temperature:</span>
+          <div className="flex gap-2">
+            {TEMPERATURE_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                onClick={() => applyTemperaturePreset(preset.temp)}
+                className={`px-3 py-1 text-xs rounded transition-colors ${
+                  currentPreset === preset.name
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title={preset.description}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-gray-500">
+            (Claude: {params.claude.temperature}, OpenAI: {params.openai.temperature}, Gemini: {params.gemini.temperature})
+          </span>
+        </div>
+
         <Accordion
           title="System Prompt"
           color="bg-purple-600"

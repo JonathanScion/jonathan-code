@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage, RagResult } from '../types';
+import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage, RagResult, ImageData } from '../types';
 import { DEFAULT_PARAMS, DEFAULT_TURN_RATINGS } from '../types';
 
 type UsageState = Record<LLMProvider, TokenUsage | undefined>;
@@ -16,6 +16,7 @@ export function useChat() {
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>(INITIAL_STREAMING_STATUS);
   const [isStreaming, setIsStreaming] = useState(false);
   const [useRag, setUseRag] = useState(false);
+  const [ragCollectionId, setRagCollectionId] = useState<string | null>('default');
   const [lastRagResults, setLastRagResults] = useState<RagResult[]>([]);
   const durationsRef = useRef<Record<LLMProvider, number>>({ claude: 0, openai: 0, gemini: 0 });
   const streamingTextRef = useRef<StreamingState>(INITIAL_STREAMING_STATE);
@@ -85,7 +86,7 @@ export function useChat() {
     }
   }, [params, buildMessageHistory, getSystemPrompt]);
 
-  const sendPromptStreaming = useCallback(async (prompt: string) => {
+  const sendPromptStreaming = useCallback(async (prompt: string, images?: ImageData[]) => {
     setIsStreaming(true);
     setError(null);
     setStreamingText(INITIAL_STREAMING_STATE);
@@ -103,6 +104,7 @@ export function useChat() {
         },
         body: JSON.stringify({
           prompt,
+          images,
           claude: { ...params.claude, systemPrompt: getSystemPrompt(params.claude.systemPrompt) },
           openai: { ...params.openai, systemPrompt: getSystemPrompt(params.openai.systemPrompt) },
           gemini: { ...params.gemini, systemPrompt: getSystemPrompt(params.gemini.systemPrompt) },
@@ -113,6 +115,7 @@ export function useChat() {
           },
           useRag,
           ragTopK: 5,
+          ragCollectionId,
         }),
       });
 
@@ -204,6 +207,7 @@ export function useChat() {
 
       setHistory(prev => [...prev, {
         userMessage: prompt,
+        images,
         responses: finalResponses,
         timestamp: Date.now(),
       }]);
@@ -216,7 +220,7 @@ export function useChat() {
       setStreamingText(INITIAL_STREAMING_STATE);
       setStreamingStatus(INITIAL_STREAMING_STATUS);
     }
-  }, [params, buildMessageHistory, getSystemPrompt, useRag]);
+  }, [params, buildMessageHistory, getSystemPrompt, useRag, ragCollectionId]);
 
   const clearHistory = useCallback(() => {
     setHistory([]);
@@ -319,6 +323,8 @@ export function useChat() {
     ratingStats,
     useRag,
     setUseRag,
+    ragCollectionId,
+    setRagCollectionId,
     lastRagResults,
   };
 }

@@ -1,23 +1,37 @@
 import { useState, useEffect, useRef } from 'react';
-import type { DocumentInfo, RagStatus } from '../types';
+import type { DocumentInfo, RagStatus, Collection } from '../types';
 
 interface DocumentManagerProps {
   onRagStatusChange?: (enabled: boolean) => void;
+  onCollectionChange?: (collectionId: string | null) => void;
+  selectedCollectionId?: string | null;
 }
 
-export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
+const DEFAULT_COLLECTION_ID = 'default';
+
+export function DocumentManager({ onRagStatusChange, onCollectionChange, selectedCollectionId }: DocumentManagerProps) {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
+  const [activeCollectionId, setActiveCollectionId] = useState<string>(selectedCollectionId || DEFAULT_COLLECTION_ID);
   const [ragStatus, setRagStatus] = useState<RagStatus | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check RAG status on mount
   useEffect(() => {
     fetchRagStatus();
-    fetchDocuments();
+    fetchCollections();
   }, []);
+
+  // Fetch documents when active collection changes
+  useEffect(() => {
+    fetchDocuments();
+    onCollectionChange?.(activeCollectionId);
+  }, [activeCollectionId, onCollectionChange]);
 
   const fetchRagStatus = async () => {
     try {
@@ -30,13 +44,76 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
     }
   };
 
+  const fetchCollections = async () => {
+    try {
+      const res = await fetch('/api/rag/collections');
+      const data = await res.json();
+      setCollections(data.collections || []);
+    } catch (err) {
+      console.error('Failed to fetch collections:', err);
+    }
+  };
+
   const fetchDocuments = async () => {
     try {
-      const res = await fetch('/api/rag/documents');
+      const url = activeCollectionId
+        ? `/api/rag/documents?collectionId=${activeCollectionId}`
+        : '/api/rag/documents';
+      const res = await fetch(url);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch (err) {
       console.error('Failed to fetch documents:', err);
+    }
+  };
+
+  const handleCreateCollection = async () => {
+    if (!newCollectionName.trim()) return;
+
+    try {
+      const res = await fetch('/api/rag/collections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCollectionName.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to create collection');
+      }
+
+      const data = await res.json();
+      setCollections(prev => [...prev, data.collection]);
+      setActiveCollectionId(data.collection.id);
+      setNewCollectionName('');
+      setIsCreatingCollection(false);
+    } catch (err) {
+      const error = err as Error;
+      setError(`Create collection failed: ${error.message}`);
+    }
+  };
+
+  const handleDeleteCollection = async (collectionId: string) => {
+    if (collectionId === DEFAULT_COLLECTION_ID) return;
+    if (!confirm('Delete this collection and all its documents? This cannot be undone.')) return;
+
+    try {
+      const res = await fetch(`/api/rag/collections/${collectionId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Delete failed');
+      }
+
+      setCollections(prev => prev.filter(c => c.id !== collectionId));
+      if (activeCollectionId === collectionId) {
+        setActiveCollectionId(DEFAULT_COLLECTION_ID);
+      }
+    } catch (err) {
+      const error = err as Error;
+      setError(`Delete collection failed: ${error.message}`);
     }
   };
 
@@ -54,6 +131,7 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
       try {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('collectionId', activeCollectionId);
 
         const res = await fetch('/api/rag/upload', {
           method: 'POST',
@@ -99,26 +177,6 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
     }
   };
 
-  const handleClearAll = async () => {
-    if (!confirm('Delete all documents? This cannot be undone.')) return;
-
-    try {
-      const res = await fetch('/api/rag/documents', {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Clear failed');
-      }
-
-      fetchDocuments();
-    } catch (err) {
-      const error = err as Error;
-      setError(`Clear failed: ${error.message}`);
-    }
-  };
-
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -128,6 +186,8 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
   const formatDate = (timestamp: number): string => {
     return new Date(timestamp).toLocaleDateString();
   };
+
+  const activeCollection = collections.find(c => c.id === activeCollectionId);
 
   if (!ragStatus?.enabled) {
     return (
@@ -147,9 +207,73 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
   return (
     <div className="bg-gray-800 border-b border-gray-700 px-4 py-3">
       <div className="max-w-7xl mx-auto">
+        {/* Collection selector row */}
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-xs text-gray-400">Collection:</span>
+          <select
+            value={activeCollectionId}
+            onChange={(e) => setActiveCollectionId(e.target.value)}
+            className="text-xs px-2 py-1 bg-gray-700 text-gray-200 border border-gray-600 rounded focus:border-blue-500 focus:outline-none"
+          >
+            {collections.map((col) => (
+              <option key={col.id} value={col.id}>
+                {col.name}
+              </option>
+            ))}
+          </select>
+
+          {isCreatingCollection ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newCollectionName}
+                onChange={(e) => setNewCollectionName(e.target.value)}
+                placeholder="Collection name..."
+                className="text-xs px-2 py-1 bg-gray-700 text-gray-200 border border-gray-600 rounded focus:border-blue-500 focus:outline-none"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateCollection();
+                  if (e.key === 'Escape') setIsCreatingCollection(false);
+                }}
+              />
+              <button
+                onClick={handleCreateCollection}
+                className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-500"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setIsCreatingCollection(false)}
+                className="text-xs px-2 py-1 bg-gray-600 text-gray-300 rounded hover:bg-gray-500"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsCreatingCollection(true)}
+              className="text-xs px-2 py-1 bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
+              title="Create new collection"
+            >
+              + New
+            </button>
+          )}
+
+          {activeCollectionId !== DEFAULT_COLLECTION_ID && (
+            <button
+              onClick={() => handleDeleteCollection(activeCollectionId)}
+              className="text-xs px-2 py-1 text-red-400 hover:text-red-300"
+              title="Delete this collection"
+            >
+              Delete Collection
+            </button>
+          )}
+        </div>
+
+        {/* Documents row */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-300">
-            Document Store ({documents.length} documents)
+            {activeCollection?.name || 'Documents'} ({documents.length} documents)
           </h2>
           <div className="flex gap-2">
             <input
@@ -171,14 +295,6 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
             >
               {isUploading ? uploadProgress : 'Upload Documents'}
             </label>
-            {documents.length > 0 && (
-              <button
-                onClick={handleClearAll}
-                className="text-xs px-3 py-1.5 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 transition-colors"
-              >
-                Clear All
-              </button>
-            )}
           </div>
         </div>
 
@@ -196,7 +312,7 @@ export function DocumentManager({ onRagStatusChange }: DocumentManagerProps) {
 
         {documents.length === 0 ? (
           <p className="text-xs text-gray-500">
-            No documents uploaded. Upload PDF, DOCX, TXT, or MD files to enable RAG.
+            No documents in this collection. Upload PDF, DOCX, TXT, or MD files.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">

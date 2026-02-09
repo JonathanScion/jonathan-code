@@ -29,6 +29,12 @@ interface Message {
   content: string;
 }
 
+interface ImageData {
+  base64: string;
+  mimeType: string;
+  name: string;
+}
+
 type SafetyLevel = 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
 
 interface SafetySettings {
@@ -73,6 +79,7 @@ interface GeminiRequestParams {
 
 interface ChatRequest {
   prompt: string;
+  images?: ImageData[];
   claude?: ClaudeRequestParams;
   openai?: OpenAIRequestParams;
   gemini?: GeminiRequestParams;
@@ -83,6 +90,7 @@ interface ChatRequest {
   };
   useRag?: boolean;
   ragTopK?: number;
+  ragCollectionId?: string;
 }
 
 interface TokenUsage {
@@ -169,10 +177,10 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
 // Streaming endpoint using Server-Sent Events
 chatRouter.post('/stream', async (req: Request, res: Response) => {
-  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5 } = req.body as ChatRequest;
+  const { prompt, images, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5, ragCollectionId } = req.body as ChatRequest;
 
-  if (!prompt) {
-    res.status(400).json({ error: 'Prompt is required' });
+  if (!prompt && (!images || images.length === 0)) {
+    res.status(400).json({ error: 'Prompt or images are required' });
     return;
   }
 
@@ -182,7 +190,7 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   if (useRag && isPineconeEnabled() && isEmbeddingsEnabled()) {
     try {
       const queryEmbedding = await generateEmbedding(prompt);
-      ragResults = await queryVectors(queryEmbedding, ragTopK);
+      ragResults = await queryVectors(queryEmbedding, ragTopK, ragCollectionId);
       ragContext = buildRagContext(ragResults);
     } catch (error) {
       console.error('RAG query error:', error);
@@ -239,9 +247,9 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
   };
 
   await Promise.all([
-    streamProvider('claude', () => streamClaude({ prompt: augmentedPrompt, ...claude, messages: history?.claude })),
-    streamProvider('openai', () => streamChatGPT({ prompt: augmentedPrompt, ...openai, messages: history?.openai })),
-    streamProvider('gemini', () => streamGemini({ prompt: augmentedPrompt, ...gemini, messages: history?.gemini })),
+    streamProvider('claude', () => streamClaude({ prompt: augmentedPrompt, images, ...claude, messages: history?.claude })),
+    streamProvider('openai', () => streamChatGPT({ prompt: augmentedPrompt, images, ...openai, messages: history?.openai })),
+    streamProvider('gemini', () => streamGemini({ prompt: augmentedPrompt, images, ...gemini, messages: history?.gemini })),
   ]);
 
   res.write('data: [DONE]\n\n');

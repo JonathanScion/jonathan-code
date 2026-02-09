@@ -3,6 +3,7 @@ import { Pinecone } from '@pinecone-database/pinecone';
 export interface VectorMetadata {
   documentId: string;
   documentName: string;
+  collectionId: string;
   chunkIndex: number;
   text: string;
   [key: string]: string | number; // Index signature for RecordMetadata compatibility
@@ -14,6 +15,7 @@ export interface QueryResult {
   text: string;
   documentName: string;
   documentId: string;
+  collectionId: string;
   chunkIndex: number;
 }
 
@@ -66,15 +68,28 @@ export async function upsertVectors(
 
 export async function queryVectors(
   queryVector: number[],
-  topK: number = 5
+  topK: number = 5,
+  collectionId?: string
 ): Promise<QueryResult[]> {
   const index = getIndex();
 
-  const results = await index.query({
+  const queryParams: {
+    vector: number[];
+    topK: number;
+    includeMetadata: boolean;
+    filter?: Record<string, unknown>;
+  } = {
     vector: queryVector,
     topK,
     includeMetadata: true,
-  });
+  };
+
+  // Filter by collection if specified
+  if (collectionId) {
+    queryParams.filter = { collectionId: { $eq: collectionId } };
+  }
+
+  const results = await index.query(queryParams);
 
   return (results.matches || []).map((match) => ({
     id: match.id,
@@ -82,6 +97,7 @@ export async function queryVectors(
     text: match.metadata?.text || '',
     documentName: match.metadata?.documentName || '',
     documentId: match.metadata?.documentId || '',
+    collectionId: match.metadata?.collectionId || '',
     chunkIndex: match.metadata?.chunkIndex || 0,
   }));
 }
@@ -92,6 +108,15 @@ export async function deleteByDocumentId(documentId: string): Promise<void> {
   // Delete all vectors with this documentId
   await index.deleteMany({
     filter: { documentId: { $eq: documentId } },
+  });
+}
+
+export async function deleteByCollectionId(collectionId: string): Promise<void> {
+  const index = getIndex();
+
+  // Delete all vectors in this collection
+  await index.deleteMany({
+    filter: { collectionId: { $eq: collectionId } },
   });
 }
 

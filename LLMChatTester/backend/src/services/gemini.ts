@@ -5,6 +5,12 @@ interface Message {
   content: string;
 }
 
+interface ImageData {
+  base64: string;
+  mimeType: string;
+  name: string;
+}
+
 type SafetyLevel = 'BLOCK_NONE' | 'BLOCK_ONLY_HIGH' | 'BLOCK_MEDIUM_AND_ABOVE' | 'BLOCK_LOW_AND_ABOVE';
 
 interface SafetySettings {
@@ -16,6 +22,7 @@ interface SafetySettings {
 
 export interface GeminiParams {
   prompt: string;
+  images?: ImageData[];
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -25,6 +32,30 @@ export interface GeminiParams {
   safetySettings?: SafetySettings;
   systemPrompt?: string;
   messages?: Message[];
+}
+
+// Build parts array for multimodal messages
+function buildMessageParts(prompt: string, images?: ImageData[]) {
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];
+
+  // Add images first
+  if (images) {
+    for (const img of images) {
+      parts.push({
+        inlineData: {
+          mimeType: img.mimeType,
+          data: img.base64,
+        },
+      });
+    }
+  }
+
+  // Add text prompt
+  if (prompt) {
+    parts.push({ text: prompt });
+  }
+
+  return parts;
 }
 
 export interface TokenUsage {
@@ -83,6 +114,7 @@ function buildSafetySettings(settings?: SafetySettings) {
 export async function queryGemini(params: GeminiParams): Promise<GeminiResponse> {
   const {
     prompt,
+    images,
     model = 'gemini-2.5-flash',
     temperature = 0.7,
     maxTokens = 1024,
@@ -129,7 +161,8 @@ export async function queryGemini(params: GeminiParams): Promise<GeminiResponse>
 
     // Start chat with history and send new message
     const chat = geminiModel.startChat({ history });
-    const result = await chat.sendMessage(prompt);
+    const messageParts = buildMessageParts(prompt, images);
+    const result = await chat.sendMessage(messageParts);
     const usageMetadata = result.response.usageMetadata;
 
     return {
@@ -148,6 +181,7 @@ export async function queryGemini(params: GeminiParams): Promise<GeminiResponse>
 export async function* streamGemini(params: GeminiParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
+    images,
     model = 'gemini-2.5-flash',
     temperature = 0.7,
     maxTokens = 1024,
@@ -193,7 +227,8 @@ export async function* streamGemini(params: GeminiParams): AsyncGenerator<Stream
 
   // Start chat with history and send new message with streaming
   const chat = geminiModel.startChat({ history });
-  const result = await chat.sendMessageStream(prompt);
+  const messageParts = buildMessageParts(prompt, images);
+  const result = await chat.sendMessageStream(messageParts);
 
   for await (const chunk of result.stream) {
     const text = chunk.text();

@@ -5,8 +5,15 @@ interface Message {
   content: string;
 }
 
+interface ImageData {
+  base64: string;
+  mimeType: string;
+  name: string;
+}
+
 export interface ClaudeParams {
   prompt: string;
+  images?: ImageData[];
   model?: string;
   temperature?: number;
   maxTokens?: number;
@@ -15,6 +22,37 @@ export interface ClaudeParams {
   stopSequences?: string[];
   systemPrompt?: string;
   messages?: Message[];
+}
+
+// Build content blocks for multimodal messages
+function buildContentBlocks(prompt: string, images?: ImageData[]): Anthropic.MessageParam['content'] {
+  if (!images || images.length === 0) {
+    return prompt;
+  }
+
+  const content: Anthropic.ContentBlockParam[] = [];
+
+  // Add images first
+  for (const img of images) {
+    content.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: img.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+        data: img.base64,
+      },
+    });
+  }
+
+  // Add text prompt
+  if (prompt) {
+    content.push({
+      type: 'text',
+      text: prompt,
+    });
+  }
+
+  return content;
 }
 
 export interface TokenUsage {
@@ -30,6 +68,7 @@ export interface ClaudeResponse {
 export async function queryClaude(params: ClaudeParams): Promise<ClaudeResponse> {
   const {
     prompt,
+    images,
     model = 'claude-sonnet-4-20250514',
     temperature = 0.7,
     maxTokens = 1024,
@@ -45,9 +84,9 @@ export async function queryClaude(params: ClaudeParams): Promise<ClaudeResponse>
   });
 
   try {
-    const allMessages = [
+    const allMessages: Anthropic.MessageParam[] = [
       ...messages,
-      { role: 'user' as const, content: prompt },
+      { role: 'user' as const, content: buildContentBlocks(prompt, images) },
     ];
 
     const requestParams: Anthropic.MessageCreateParams = {
@@ -95,6 +134,7 @@ export interface StreamResult {
 export async function* streamClaude(params: ClaudeParams): AsyncGenerator<StreamResult, void, unknown> {
   const {
     prompt,
+    images,
     model = 'claude-sonnet-4-20250514',
     temperature = 0.7,
     maxTokens = 1024,
@@ -109,9 +149,9 @@ export async function* streamClaude(params: ClaudeParams): AsyncGenerator<Stream
     apiKey: process.env.ANTHROPIC_API_KEY,
   });
 
-  const allMessages = [
+  const allMessages: Anthropic.MessageParam[] = [
     ...messages,
-    { role: 'user' as const, content: prompt },
+    { role: 'user' as const, content: buildContentBlocks(prompt, images) },
   ];
 
   const requestParams: Anthropic.MessageStreamParams = {

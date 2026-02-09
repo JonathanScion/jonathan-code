@@ -7,11 +7,22 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Document registry stored in a JSON file
+// Registry paths
 const REGISTRY_PATH = path.join(__dirname, '../../data/documents.json');
+const COLLECTIONS_PATH = path.join(__dirname, '../../data/collections.json');
+
+// Default collection for backwards compatibility
+export const DEFAULT_COLLECTION_ID = 'default';
+
+export interface Collection {
+  id: string;
+  name: string;
+  createdAt: number;
+}
 
 export interface DocumentInfo {
   id: string;
+  collectionId: string;
   name: string;
   originalName: string;
   mimeType: string;
@@ -170,4 +181,76 @@ export async function getDocument(documentId: string): Promise<DocumentInfo | nu
 
 export function generateDocumentId(): string {
   return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// Collection registry functions
+export async function loadCollections(): Promise<Collection[]> {
+  try {
+    await ensureDataDir();
+    const data = await fs.readFile(COLLECTIONS_PATH, 'utf-8');
+    const collections = JSON.parse(data) as Collection[];
+    // Ensure default collection exists
+    if (!collections.find(c => c.id === DEFAULT_COLLECTION_ID)) {
+      collections.unshift({ id: DEFAULT_COLLECTION_ID, name: 'Default', createdAt: 0 });
+    }
+    return collections;
+  } catch {
+    // Return default collection if file doesn't exist
+    return [{ id: DEFAULT_COLLECTION_ID, name: 'Default', createdAt: 0 }];
+  }
+}
+
+export async function saveCollections(collections: Collection[]): Promise<void> {
+  await ensureDataDir();
+  await fs.writeFile(COLLECTIONS_PATH, JSON.stringify(collections, null, 2));
+}
+
+export async function createCollection(name: string): Promise<Collection> {
+  const collections = await loadCollections();
+  const newCollection: Collection = {
+    id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    name,
+    createdAt: Date.now(),
+  };
+  collections.push(newCollection);
+  await saveCollections(collections);
+  return newCollection;
+}
+
+export async function renameCollection(collectionId: string, newName: string): Promise<boolean> {
+  if (collectionId === DEFAULT_COLLECTION_ID) {
+    return false; // Can't rename default collection
+  }
+  const collections = await loadCollections();
+  const collection = collections.find(c => c.id === collectionId);
+  if (!collection) {
+    return false;
+  }
+  collection.name = newName;
+  await saveCollections(collections);
+  return true;
+}
+
+export async function deleteCollection(collectionId: string): Promise<boolean> {
+  if (collectionId === DEFAULT_COLLECTION_ID) {
+    return false; // Can't delete default collection
+  }
+  const collections = await loadCollections();
+  const index = collections.findIndex(c => c.id === collectionId);
+  if (index === -1) {
+    return false;
+  }
+  collections.splice(index, 1);
+  await saveCollections(collections);
+  return true;
+}
+
+export async function getCollection(collectionId: string): Promise<Collection | null> {
+  const collections = await loadCollections();
+  return collections.find(c => c.id === collectionId) || null;
+}
+
+export async function getDocumentsByCollection(collectionId: string): Promise<DocumentInfo[]> {
+  const documents = await loadDocumentRegistry();
+  return documents.filter(d => d.collectionId === collectionId);
 }

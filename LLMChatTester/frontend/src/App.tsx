@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChatInput } from './components/ChatInput';
 import { ParameterControls } from './components/ParameterControls';
 import { PromptTemplates } from './components/PromptTemplates';
@@ -9,11 +9,21 @@ import { downloadJSON, downloadMarkdown } from './utils/export';
 import type { LLMProvider } from './types';
 import { DEFAULT_RATING, calculateCost } from './types';
 
-const PROVIDER_CONFIG: Record<LLMProvider, { name: string; color: string }> = {
-  claude: { name: 'Claude', color: 'bg-orange-600' },
-  openai: { name: 'ChatGPT', color: 'bg-green-600' },
-  gemini: { name: 'Gemini', color: 'bg-blue-600' },
+const PROVIDER_CONFIG: Record<LLMProvider, { name: string; color: string; colorLight: string }> = {
+  claude: { name: 'Claude', color: 'bg-orange-600', colorLight: 'bg-orange-500' },
+  openai: { name: 'ChatGPT', color: 'bg-green-600', colorLight: 'bg-green-500' },
+  gemini: { name: 'Gemini', color: 'bg-blue-600', colorLight: 'bg-blue-500' },
 };
+
+// Copy to clipboard helper
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function App() {
   const {
@@ -31,6 +41,8 @@ function App() {
     ratingStats,
     useRag,
     setUseRag,
+    ragCollectionId,
+    setRagCollectionId,
     lastRagResults,
   } = useChat();
   const [showParams, setShowParams] = useState(true);
@@ -38,6 +50,46 @@ function App() {
   const [showDocuments, setShowDocuments] = useState(true);
   const [ragAvailable, setRagAvailable] = useState(false);
   const [promptValue, setPromptValue] = useState('');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('theme');
+    return (saved === 'light' ? 'light' : 'dark');
+  });
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Theme toggle
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('theme', next);
+      return next;
+    });
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+L to clear conversation
+      if (e.ctrlKey && e.key === 'l') {
+        e.preventDefault();
+        clearHistory();
+      }
+      // Escape to clear input (only if not in a text area)
+      if (e.key === 'Escape' && document.activeElement?.tagName !== 'TEXTAREA') {
+        setPromptValue('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clearHistory]);
+
+  // Copy handler
+  const handleCopy = async (text: string, id: string) => {
+    const success = await copyToClipboard(text);
+    if (success) {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
 
   const isWorking = isLoading || isStreaming;
 
@@ -45,13 +97,15 @@ function App() {
     setPromptValue(prompt);
   };
 
+  const isDark = theme === 'dark';
+
   return (
-    <div className="min-h-screen flex flex-col bg-gray-900">
+    <div className={`min-h-screen flex flex-col ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
+      <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} border-b px-4 py-3`}>
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold text-gray-100">LLM Chat Tester</h1>
+            <h1 className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>LLM Chat Tester</h1>
             <RatingStats stats={ratingStats} />
           </div>
           <div className="flex gap-4 items-center">
@@ -62,9 +116,9 @@ function App() {
                   type="checkbox"
                   checked={useRag}
                   onChange={(e) => setUseRag(e.target.checked)}
-                  className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                  className={`w-4 h-4 rounded ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-200 border-gray-400'} text-blue-600 focus:ring-blue-500`}
                 />
-                <span className="text-sm text-gray-300">RAG</span>
+                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>RAG</span>
               </label>
             )}
             {history.length > 0 && (
@@ -72,14 +126,14 @@ function App() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => downloadJSON(history, params)}
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    className={`text-sm ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
                     title="Export as JSON"
                   >
                     Export JSON
                   </button>
                   <button
                     onClick={() => downloadMarkdown(history, params)}
-                    className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    className={`text-sm ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} transition-colors`}
                     title="Export as Markdown"
                   >
                     Export MD
@@ -87,7 +141,8 @@ function App() {
                 </div>
                 <button
                   onClick={clearHistory}
-                  className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                  className={`text-sm ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'} transition-colors`}
+                  title="Ctrl+L"
                 >
                   Clear History
                 </button>
@@ -95,21 +150,28 @@ function App() {
             )}
             <button
               onClick={() => setShowDocuments(!showDocuments)}
-              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              className={`text-sm ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
             >
               {showDocuments ? 'Hide' : 'Show'} Documents
             </button>
             <button
               onClick={() => setShowTemplates(!showTemplates)}
-              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              className={`text-sm ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
             >
               {showTemplates ? 'Hide' : 'Show'} Templates
             </button>
             <button
               onClick={() => setShowParams(!showParams)}
-              className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              className={`text-sm ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'} transition-colors`}
             >
               {showParams ? 'Hide' : 'Show'} Parameters
+            </button>
+            <button
+              onClick={toggleTheme}
+              className={`text-sm px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition-colors`}
+              title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+            >
+              {isDark ? '☀️' : '🌙'}
             </button>
           </div>
         </div>
@@ -130,7 +192,11 @@ function App() {
 
       {/* Document Manager */}
       {showDocuments && (
-        <DocumentManager onRagStatusChange={setRagAvailable} />
+        <DocumentManager
+          onRagStatusChange={setRagAvailable}
+          onCollectionChange={setRagCollectionId}
+          selectedCollectionId={ragCollectionId}
+        />
       )}
 
       {/* RAG Context Display */}
@@ -168,8 +234,9 @@ function App() {
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-7xl mx-auto space-y-6">
           {history.length === 0 && !isWorking && (
-            <div className="text-center text-gray-500 py-12">
+            <div className={`text-center ${isDark ? 'text-gray-500' : 'text-gray-600'} py-12`}>
               Start a conversation by typing a message below
+              <div className="text-xs mt-2">Tip: Press Ctrl+L to clear history, Escape to clear input</div>
             </div>
           )}
 
@@ -177,9 +244,21 @@ function App() {
             <div key={turn.timestamp} className="space-y-3">
               {/* User Message */}
               <div className="flex justify-end">
-                <div className="bg-gray-700 rounded-lg px-4 py-2 max-w-2xl">
-                  <div className="text-xs text-gray-400 mb-1">You</div>
-                  <div className="text-gray-100 whitespace-pre-wrap">{turn.userMessage}</div>
+                <div className={`${isDark ? 'bg-gray-700' : 'bg-blue-100'} rounded-lg px-4 py-2 max-w-2xl`}>
+                  <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>You</div>
+                  {turn.images && turn.images.length > 0 && (
+                    <div className="flex gap-2 mb-2 flex-wrap">
+                      {turn.images.map((img, imgIdx) => (
+                        <img
+                          key={imgIdx}
+                          src={`data:${img.mimeType};base64,${img.base64}`}
+                          alt={img.name}
+                          className="h-24 max-w-48 object-contain rounded border border-gray-500"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className={`${isDark ? 'text-gray-100' : 'text-gray-900'} whitespace-pre-wrap`}>{turn.userMessage}</div>
                 </div>
               </div>
 
@@ -197,17 +276,31 @@ function App() {
                   const model = params[provider].model;
                   const cost = calculateCost(model, response.usage);
 
+                  const copyId = `${turn.timestamp}-${provider}`;
+                  const isCopied = copiedId === copyId;
+
                   return (
-                    <div key={provider} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                      <div className={`${config.color} px-3 py-2`}>
+                    <div key={provider} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} rounded-lg border overflow-hidden`}>
+                      <div className={`${isDark ? config.color : config.colorLight} px-3 py-2`}>
                         <div className="flex justify-between items-center">
                           <span className="font-semibold text-white text-sm">
                             {config.name}
                             {rating.isWinner && <span className="ml-1">🏆</span>}
                           </span>
-                          <span className="text-xs text-white/75">
-                            {(response.duration / 1000).toFixed(2)}s
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-white/75">
+                              {(response.duration / 1000).toFixed(2)}s
+                            </span>
+                            {!response.error && response.response && (
+                              <button
+                                onClick={() => handleCopy(response.response, copyId)}
+                                className="text-xs text-white/75 hover:text-white transition-colors"
+                                title="Copy response"
+                              >
+                                {isCopied ? '✓' : '📋'}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {response.usage && (
                           <div className="flex justify-between items-center mt-1 text-xs text-white/60">
@@ -222,7 +315,7 @@ function App() {
                         {response.error ? (
                           <div className="text-red-400">{response.error}</div>
                         ) : (
-                          <div className="text-gray-200 whitespace-pre-wrap">{response.response}</div>
+                          <div className={`${isDark ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{response.response}</div>
                         )}
                         <RatingControls
                           rating={rating}
@@ -236,7 +329,7 @@ function App() {
               </div>
 
               {index < history.length - 1 && (
-                <hr className="border-gray-700" />
+                <hr className={isDark ? 'border-gray-700' : 'border-gray-300'} />
               )}
             </div>
           ))}
@@ -249,8 +342,8 @@ function App() {
                 const text = streamingText[provider];
                 const status = streamingStatus[provider];
                 return (
-                  <div key={provider} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                    <div className={`${config.color} px-3 py-2 flex justify-between items-center`}>
+                  <div key={provider} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} rounded-lg border overflow-hidden`}>
+                    <div className={`${isDark ? config.color : config.colorLight} px-3 py-2 flex justify-between items-center`}>
                       <span className="font-semibold text-white text-sm">{config.name}</span>
                       {status === 'streaming' && (
                         <span className="text-xs text-white/75 animate-pulse">streaming...</span>
@@ -261,14 +354,14 @@ function App() {
                     </div>
                     <div className="p-3 text-sm min-h-[60px]">
                       {text ? (
-                        <div className="text-gray-200 whitespace-pre-wrap">{text}</div>
+                        <div className={`${isDark ? 'text-gray-200' : 'text-gray-800'} whitespace-pre-wrap`}>{text}</div>
                       ) : status === 'streaming' ? (
-                        <div className="animate-pulse text-gray-400">Thinking...</div>
+                        <div className={`animate-pulse ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Thinking...</div>
                       ) : status === 'error' ? (
                         <div className="text-red-400">Error occurred</div>
                       ) : null}
                       {status === 'streaming' && text && (
-                        <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-0.5" />
+                        <span className={`inline-block w-2 h-4 ${isDark ? 'bg-gray-400' : 'bg-gray-500'} animate-pulse ml-0.5`} />
                       )}
                     </div>
                   </div>
@@ -283,12 +376,12 @@ function App() {
               {(['claude', 'openai', 'gemini'] as LLMProvider[]).map((provider) => {
                 const config = PROVIDER_CONFIG[provider];
                 return (
-                  <div key={provider} className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
-                    <div className={`${config.color} px-3 py-2`}>
+                  <div key={provider} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-300'} rounded-lg border overflow-hidden`}>
+                    <div className={`${isDark ? config.color : config.colorLight} px-3 py-2`}>
                       <span className="font-semibold text-white text-sm">{config.name}</span>
                     </div>
                     <div className="p-3 text-sm">
-                      <div className="animate-pulse text-gray-400">Thinking...</div>
+                      <div className={`animate-pulse ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Thinking...</div>
                     </div>
                   </div>
                 );
