@@ -75,7 +75,7 @@ export async function enrichImageWithNasaData(
   // 1. NDVI layer availability (GIBS - no API key needed)
   enrichment.ndvi = {
     available: true,
-    layerUrl: getGIBSTileUrl('MODIS_Terra_NDVI_8Day', captureDate),
+    layerUrl: getGIBSTileUrl('MODIS_Terra_L3_NDVI_Monthly', captureDate),
   };
 
   // 2. Fire risk (FIRMS - requires API key)

@@ -65,12 +65,8 @@ export function ImageDetailPage() {
 
   // Layers that only work in NASA mode (EPSG:4326)
   const nasaOnlyLayers = new Set([
-    'MODIS_Terra_NDVI_8Day',
-    'MODIS_Terra_Thermal_Anomalies_All',
-    'MODIS_Aqua_Thermal_Anomalies_All',
-    'VIIRS_NOAA20_Thermal_Anomalies_375m_All',
-    'VIIRS_SNPP_Thermal_Anomalies_375m_All',
-    'MODIS_Terra_Aerosol_Optical_Depth',
+    'MODIS_Terra_L3_NDVI_Monthly',
+    'MODIS_Combined_MAIAC_L2G_AerosolOpticalDepth',
     'MODIS_Terra_Cloud_Top_Temp_Day',
   ]);
 
@@ -349,7 +345,7 @@ export function ImageDetailPage() {
                               ? 'bg-primary text-white'
                               : 'bg-white text-gray-600 hover:bg-gray-50'
                           }`}
-                          title="NASA mode - Blue Marble base, ALL NASA layers including fire detection"
+                          title="NASA mode - Blue Marble base, ALL NASA layers including NDVI and atmosphere"
                         >
                           <Globe2 className="w-3 h-3" />
                           NASA
@@ -361,7 +357,7 @@ export function ImageDetailPage() {
                 <CardContent>
                   {projectionMode === 'nasaMode' && (
                     <div className="mb-2 p-2 bg-blue-50 text-blue-700 text-xs rounded">
-                      NASA Mode: All layers available including fire detection. Uses NASA Blue Marble base map.
+                      NASA Mode: All layers available including NDVI, aerosol, and cloud data. Uses NASA Blue Marble base map.
                     </div>
                   )}
                   <MapViewer

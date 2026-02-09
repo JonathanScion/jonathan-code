@@ -417,14 +417,14 @@ var GIBS_LAYERS = [
   },
   // === VEGETATION LAYERS (NASA Mode only - EPSG:4326) ===
   {
-    id: "MODIS_Terra_NDVI_8Day",
+    id: "MODIS_Terra_L3_NDVI_Monthly",
     name: "NDVI Vegetation",
-    description: "8-day NDVI vegetation index (NASA Mode only)",
+    description: "Monthly NDVI vegetation index (NASA Mode only)",
     category: "vegetation",
     format: "png",
     tileMatrixSet: "1km",
     hasTime: true,
-    startDate: "2000-02-18",
+    startDate: "2000-03-01",
     requiresNasaMode: true
   },
   // === THERMAL LAYERS (work in both modes) ===
@@ -438,59 +438,17 @@ var GIBS_LAYERS = [
     hasTime: true,
     startDate: "2000-02-24"
   },
-  // === FIRE DETECTION LAYERS (NASA Mode only - EPSG:4326) ===
-  {
-    id: "MODIS_Terra_Thermal_Anomalies_All",
-    name: "MODIS Terra Fire Detection",
-    description: "Fire and thermal anomaly detections from Terra (NASA Mode only)",
-    category: "thermal",
-    format: "png",
-    tileMatrixSet: "1km",
-    hasTime: true,
-    startDate: "2000-02-24",
-    requiresNasaMode: true
-  },
-  {
-    id: "MODIS_Aqua_Thermal_Anomalies_All",
-    name: "MODIS Aqua Fire Detection",
-    description: "Fire and thermal anomaly detections from Aqua (NASA Mode only)",
-    category: "thermal",
-    format: "png",
-    tileMatrixSet: "1km",
-    hasTime: true,
-    startDate: "2002-07-04",
-    requiresNasaMode: true
-  },
-  {
-    id: "VIIRS_NOAA20_Thermal_Anomalies_375m_All",
-    name: "VIIRS NOAA-20 Fire Detection",
-    description: "High-resolution fire detection from VIIRS (NASA Mode only)",
-    category: "thermal",
-    format: "png",
-    tileMatrixSet: "250m",
-    hasTime: true,
-    startDate: "2018-01-01",
-    requiresNasaMode: true
-  },
-  {
-    id: "VIIRS_SNPP_Thermal_Anomalies_375m_All",
-    name: "VIIRS SNPP Fire Detection",
-    description: "High-resolution fire detection from VIIRS Suomi NPP (NASA Mode only)",
-    category: "thermal",
-    format: "png",
-    tileMatrixSet: "250m",
-    hasTime: true,
-    startDate: "2012-01-19",
-    requiresNasaMode: true
-  },
+  // NOTE: Fire detection layers (MODIS/VIIRS Thermal Anomalies) removed -
+  // GIBS now serves these as .mvt vector tiles, not raster PNG.
+  // Would need a vector tile renderer (e.g., leaflet.vectorgrid) to display them.
   // === ATMOSPHERE LAYERS (NASA Mode only - EPSG:4326) ===
   {
-    id: "MODIS_Terra_Aerosol_Optical_Depth",
+    id: "MODIS_Combined_MAIAC_L2G_AerosolOpticalDepth",
     name: "Aerosol Optical Depth",
     description: "Atmospheric aerosol concentration (NASA Mode only)",
     category: "atmosphere",
     format: "png",
-    tileMatrixSet: "2km",
+    tileMatrixSet: "1km",
     hasTime: true,
     startDate: "2000-02-24",
     requiresNasaMode: true
@@ -916,7 +874,7 @@ async function enrichImageWithNasaData(lat, lon, captureDate, firmsApiKey, n2yoA
   const promises = [];
   enrichment.ndvi = {
     available: true,
-    layerUrl: getGIBSTileUrl("MODIS_Terra_NDVI_8Day", captureDate)
+    layerUrl: getGIBSTileUrl("MODIS_Terra_L3_NDVI_Monthly", captureDate)
   };
   if (firmsApiKey) {
     promises.push(hasRecentFires(firmsApiKey, lat, lon, 50, 7).then((result) => {

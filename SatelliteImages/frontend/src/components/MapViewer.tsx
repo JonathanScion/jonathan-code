@@ -16,6 +16,18 @@ let DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+// Custom CRS for NASA GIBS EPSG:4326 tiles
+// GIBS uses 512px tiles; default L.CRS.EPSG4326 uses scale=256*2^z which
+// produces wrong tile coordinates (off by factor of 2). GIBS needs scale=512*2^z.
+const GIBS_EPSG4326 = L.Util.extend({}, L.CRS.EPSG4326, {
+  scale(zoom: number) {
+    return 512 * Math.pow(2, zoom);
+  },
+  zoom(scale: number) {
+    return Math.log(scale / 512) / Math.LN2;
+  },
+}) as L.CRS;
+
 export type ProjectionMode = 'streetMap' | 'nasaMode';
 
 export interface GIBSLayerConfig {
@@ -43,22 +55,18 @@ const GIBS_LAYERS_3857: Record<string, { tileMatrixSet: string; format: string; 
   'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: 'GoogleMapsCompatible_Level7', format: 'png', maxZoom: 7 },
 };
 
-// GIBS layer metadata for EPSG:4326 (Geographic / NASA mode) - ALL layers available
+// GIBS layer metadata for EPSG:4326 (Geographic / NASA mode)
+// Max zoom verified against GIBS WMTS (400 = exceeded max)
+// Fire detection layers removed: GIBS now serves them as .mvt vector tiles, not raster PNG
 const GIBS_LAYERS_4326: Record<string, { tileMatrixSet: string; format: string; maxZoom: number }> = {
-  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
-  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
-  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
-  'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 9 },
-  'MODIS_Terra_NDVI_8Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 6 },
-  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
-  // Fire/thermal layers - only available in EPSG:4326!
-  'MODIS_Terra_Thermal_Anomalies_All': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
-  'MODIS_Aqua_Thermal_Anomalies_All': { tileMatrixSet: '1km', format: 'png', maxZoom: 7 },
-  'VIIRS_NOAA20_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
-  'VIIRS_SNPP_Thermal_Anomalies_375m_All': { tileMatrixSet: '250m', format: 'png', maxZoom: 8 },
-  // Additional layers only in 4326
-  'MODIS_Terra_Aerosol_Optical_Depth': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
-  'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png', maxZoom: 6 },
+  'MODIS_Terra_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 8 },
+  'MODIS_Aqua_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 8 },
+  'VIIRS_NOAA20_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 8 },
+  'VIIRS_SNPP_CorrectedReflectance_TrueColor': { tileMatrixSet: '250m', format: 'jpg', maxZoom: 8 },
+  'MODIS_Terra_L3_NDVI_Monthly': { tileMatrixSet: '1km', format: 'png', maxZoom: 6 },
+  'MODIS_Terra_Land_Surface_Temp_Day': { tileMatrixSet: '1km', format: 'png', maxZoom: 6 },
+  'MODIS_Combined_MAIAC_L2G_AerosolOpticalDepth': { tileMatrixSet: '1km', format: 'png', maxZoom: 6 },
+  'MODIS_Terra_Cloud_Top_Temp_Day': { tileMatrixSet: '2km', format: 'png', maxZoom: 5 },
 };
 
 // Validate and sanitize date for NASA GIBS requests
@@ -162,12 +170,12 @@ export function MapViewer({
 
     // Create map with appropriate CRS
     const mapOptions: L.MapOptions = {
-      maxZoom: isNasaMode ? 9 : 18,
+      maxZoom: isNasaMode ? 8 : 18,
       minZoom: 1,
     };
 
     if (isNasaMode) {
-      mapOptions.crs = L.CRS.EPSG4326;
+      mapOptions.crs = GIBS_EPSG4326;
       mapOptions.maxBounds = [[-90, -180], [90, 180]];
     }
 
@@ -178,10 +186,11 @@ export function MapViewer({
       // Use NASA Blue Marble as base layer for EPSG:4326
       // Blue Marble is a static layer (no time dimension)
       baseLayerRef.current = L.tileLayer(
-        'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/EPSG4326_500m/{z}/{y}/{x}.jpeg',
+        'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg',
         {
           attribution: 'NASA Blue Marble',
           maxZoom: 8,
+          maxNativeZoom: 7,
           tileSize: 512,
           noWrap: true,
           bounds: [[-90, -180], [90, 180]],
@@ -195,6 +204,9 @@ export function MapViewer({
       });
     }
     baseLayerRef.current.addTo(mapRef.current);
+
+    // Force Leaflet to recalculate container size (fixes blank map after mode switch)
+    setTimeout(() => mapRef.current?.invalidateSize(), 0);
 
     // Set initial view based on first image
     if (firstImageBounds) {
@@ -257,7 +269,7 @@ export function MapViewer({
       const layerOptions: L.TileLayerOptions = {
         tileSize: projectionMode === 'nasaMode' ? 512 : 256,
         minZoom: 0,
-        maxZoom: projectionMode === 'nasaMode' ? 9 : 18,
+        maxZoom: projectionMode === 'nasaMode' ? 8 : 18,
         maxNativeZoom: maxZoom,
         opacity: config.opacity ?? 0.7,
         attribution: 'NASA GIBS',
