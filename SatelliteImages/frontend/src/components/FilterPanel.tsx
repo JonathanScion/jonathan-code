@@ -47,7 +47,7 @@ export function FilterPanel({ filters, onFiltersChange }: FilterPanelProps) {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute right-0 mt-2 w-96 bg-white rounded-eoi shadow-eoi-hover border border-light-border p-6 z-50"
+            className="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-96 bg-white rounded-eoi shadow-eoi-hover border border-light-border p-6 z-50"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-dark">Filters</h3>

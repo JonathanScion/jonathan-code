@@ -14,7 +14,7 @@ export function UploadProgress({ uploads }: UploadProgressProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="fixed bottom-4 right-4 w-96 bg-white rounded-eoi shadow-eoi-hover border border-light-border p-4 z-50"
+      className="fixed bottom-4 left-4 right-4 sm:left-auto sm:w-96 bg-white rounded-eoi shadow-eoi-hover border border-light-border p-4 z-50"
     >
       <h3 className="font-semibold text-dark mb-3">
         Uploading {uploads.length} file{uploads.length > 1 ? 's' : ''}

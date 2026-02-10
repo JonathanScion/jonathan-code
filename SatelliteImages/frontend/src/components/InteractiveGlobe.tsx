@@ -16,8 +16,25 @@ interface GlobeMarker {
 
 export function InteractiveGlobe() {
   const globeEl = useRef<any>();
+  const containerRef = useRef<HTMLDivElement>(null);
   const [markers, setMarkers] = useState<GlobeMarker[]>([]);
   const [selectedImage, setSelectedImage] = useState<SatelliteImage | null>(null);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Resize globe to fit container
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        if (clientWidth > 0 && clientHeight > 0) {
+          setDimensions({ width: clientWidth, height: clientHeight });
+        }
+      }
+    };
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
 
   // Fetch all satellite images
   const { data: images } = useQuery<SatelliteImage[]>({
@@ -80,7 +97,7 @@ export function InteractiveGlobe() {
   };
 
   return (
-    <div className="relative w-full h-full">
+    <div ref={containerRef} className="relative w-full h-full">
       <Globe
         ref={globeEl}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
@@ -142,8 +159,8 @@ export function InteractiveGlobe() {
         atmosphereAltitude={0.15}
 
         // Rendering settings
-        width={800}
-        height={600}
+        width={dimensions.width}
+        height={dimensions.height}
         animateIn={true}
       />
 

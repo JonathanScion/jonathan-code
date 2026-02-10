@@ -50,14 +50,14 @@ export function HomePage() {
           }} />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
+        <div className="relative max-w-full mx-auto px-4 sm:px-6 lg:px-8 xl:max-w-7xl py-16 sm:py-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="text-center"
           >
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 text-white">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold mb-6 text-white">
               Satellite Imagery Management
             </h1>
             <p className="text-xl md:text-2xl text-primary-100 mb-8 max-w-3xl mx-auto">
@@ -88,7 +88,7 @@ export function HomePage() {
             transition={{ delay: 0.3, duration: 0.6 }}
             className="mt-16"
           >
-            <div className="mx-auto" style={{ maxWidth: '800px', height: '600px' }}>
+            <div className="mx-auto w-full max-w-[800px] h-[400px] sm:h-[500px] lg:h-[600px]">
               <InteractiveGlobe />
             </div>
           </motion.div>
@@ -97,14 +97,14 @@ export function HomePage() {
 
       {/* Features Section */}
       <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-full xl:max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold text-dark mb-4">
+            <h2 className="text-3xl sm:text-4xl font-bold text-dark mb-4">
               Powerful Features
             </h2>
             <p className="text-xl text-dark-light max-w-2xl mx-auto">
@@ -140,7 +140,7 @@ export function HomePage() {
 
       {/* CTA Section */}
       <section className="py-20 bg-white">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="max-w-full xl:max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
