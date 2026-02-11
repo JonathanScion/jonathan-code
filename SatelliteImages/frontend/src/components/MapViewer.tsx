@@ -270,16 +270,21 @@ export function MapViewer({
     // Add or update enabled layers
     gibsLayers.forEach(config => {
       const date = config.date || getYesterday();
+      const { url: tileUrl, maxZoom } = getGibsTileUrl(config.id, date, projectionMode);
 
       // Check if layer already exists
       const existingLayer = gibsLayersRef.current.get(config.id);
       if (existingLayer) {
-        existingLayer.setOpacity(config.opacity ?? 0.7);
-        return;
+        // Check if the tile URL changed (date or config change) — if so, replace the layer
+        const currentUrl = (existingLayer as any)._url;
+        if (currentUrl === tileUrl) {
+          existingLayer.setOpacity(config.opacity ?? 0.7);
+          return;
+        }
+        // URL changed (new date) — remove old layer so it gets recreated below
+        map.removeLayer(existingLayer);
+        gibsLayersRef.current.delete(config.id);
       }
-
-      // Create new GIBS layer
-      const { url: tileUrl, maxZoom } = getGibsTileUrl(config.id, date, projectionMode);
 
       const layerOptions: L.TileLayerOptions = {
         tileSize: projectionMode === 'nasaMode' ? 512 : 256,
