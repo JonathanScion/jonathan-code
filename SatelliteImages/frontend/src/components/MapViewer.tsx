@@ -275,15 +275,12 @@ export function MapViewer({
       // Check if layer already exists
       const existingLayer = gibsLayersRef.current.get(config.id);
       if (existingLayer) {
-        // Check if the tile URL changed (date or config change) — if so, replace the layer
-        const currentUrl = (existingLayer as any)._url;
-        if (currentUrl === tileUrl) {
-          existingLayer.setOpacity(config.opacity ?? 0.7);
-          return;
+        existingLayer.setOpacity(config.opacity ?? 0.7);
+        // If URL changed (new date), swap tiles in-place — old tiles stay visible until new ones load
+        if ((existingLayer as any)._url !== tileUrl) {
+          existingLayer.setUrl(tileUrl);
         }
-        // URL changed (new date) — remove old layer so it gets recreated below
-        map.removeLayer(existingLayer);
-        gibsLayersRef.current.delete(config.id);
+        return;
       }
 
       const layerOptions: L.TileLayerOptions = {
