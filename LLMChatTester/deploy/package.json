@@ -12,10 +12,15 @@
     "@pinecone-database/pinecone": "^7.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.1",
     "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",
     "openai": "^6.16.0",
-    "pdf-parse": "^2.4.5"
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "postgres": "^3.4.8",
+    "unpdf": "^1.4.0"
   }
 }

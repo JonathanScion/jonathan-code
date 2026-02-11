@@ -39,8 +39,8 @@ const prodPkg = {
 };
 fs.writeFileSync(path.join(deployDir, 'package.json'), JSON.stringify(prodPkg, null, 2));
 
-// Create data directory for document registry
-fs.mkdirSync(path.join(deployDir, 'data'), { recursive: true });
+// Create uploads directory for user files
+fs.mkdirSync(path.join(deployDir, 'uploads'), { recursive: true });
 
 // Create .env.example
 const envExample = `# API Keys - Add your keys here
@@ -54,6 +54,16 @@ PINECONE_INDEX=llm-chat-tester
 
 # Server port (optional, defaults to 3001)
 PORT=3001
+
+# Database (NeonDB PostgreSQL)
+DATABASE_URL=postgres://user:password@host.neon.tech/dbname?sslmode=require
+
+# Authentication
+JWT_SECRET=your_jwt_secret_here
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_CALLBACK_URL=https://llmtester-api.jonathanscode.io/api/auth/google/callback
+FRONTEND_URL=https://llmtester.jonathanscode.io
 `;
 fs.writeFileSync(path.join(deployDir, '.env.example'), envExample);
 

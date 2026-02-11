@@ -17,14 +17,16 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Custom CRS for NASA GIBS EPSG:4326 tiles
-// GIBS uses 512px tiles; default L.CRS.EPSG4326 uses scale=256*2^z which
-// produces wrong tile coordinates (off by factor of 2). GIBS needs scale=512*2^z.
+// GIBS EPSG:4326 resolutions: [0.5625, 0.28125, ...] = 0.5625/2^z deg/px
+// This gives scale = 180 / (0.5625/2^z) = 320 * 2^z (NOT 512 * 2^z!)
+// The 512 * 2^z mistake assumes tile size = scale factor, but GIBS tiles extend
+// beyond the world boundary (e.g., 2 tiles at zoom 0 = 1024px > 640px world width).
 const GIBS_EPSG4326 = L.Util.extend({}, L.CRS.EPSG4326, {
   scale(zoom: number) {
-    return 512 * Math.pow(2, zoom);
+    return 320 * Math.pow(2, zoom);
   },
   zoom(scale: number) {
-    return Math.log(scale / 512) / Math.LN2;
+    return Math.log(scale / 320) / Math.LN2;
   },
 }) as L.CRS;
 
@@ -142,6 +144,8 @@ export function MapViewer({
   const baseLayerRef = useRef<L.TileLayer | null>(null);
   const initialViewSet = useRef(false);
   const currentModeRef = useRef<ProjectionMode>(projectionMode);
+  // Track map view continuously via moveend — plain numbers to avoid CRS object issues
+  const lastViewRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
 
   // Store the first image's bounds/center for initial view (avoid array reference issues)
   const firstImage = images[0];
@@ -152,15 +156,8 @@ export function MapViewer({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // If map exists and mode changed, destroy it first
-    if (mapRef.current && currentModeRef.current !== projectionMode) {
-      mapRef.current.remove();
-      mapRef.current = null;
-      gibsLayersRef.current.clear();
-      baseLayerRef.current = null;
-      initialViewSet.current = false;
-    }
-
+    // Detect mode switch BEFORE updating the ref
+    const isModeSwitch = currentModeRef.current !== projectionMode;
     currentModeRef.current = projectionMode;
 
     // Don't recreate if already exists
@@ -179,12 +176,34 @@ export function MapViewer({
       mapOptions.maxBounds = [[-90, -180], [90, 180]];
     }
 
-    mapRef.current = L.map(containerRef.current, mapOptions).setView([0, 0], 2);
+    // Determine initial view: restore from mode switch, or use image position
+    let initCenter: L.LatLngExpression = [0, 0];
+    let initZoom = 2;
+
+    if (isModeSwitch && lastViewRef.current) {
+      const { lat, lng, zoom } = lastViewRef.current;
+      initCenter = [lat, lng];
+      initZoom = Math.min(zoom, isNasaMode ? 8 : 18);
+    } else if (firstImageBounds) {
+      // Will use fitBounds after creation
+    } else if (firstImageCenter) {
+      initCenter = [firstImageCenter.lat, firstImageCenter.lon];
+      initZoom = 6;
+    }
+
+    // Create map directly at the target position (avoid setView after creation)
+    mapRef.current = L.map(containerRef.current, mapOptions).setView(initCenter, initZoom);
+
+    // Track view position on every move/zoom so we always have the latest
+    mapRef.current.on('moveend', () => {
+      if (mapRef.current) {
+        const c = mapRef.current.getCenter();
+        lastViewRef.current = { lat: c.lat, lng: c.lng, zoom: mapRef.current.getZoom() };
+      }
+    });
 
     // Add appropriate base layer
     if (isNasaMode) {
-      // Use NASA Blue Marble as base layer for EPSG:4326
-      // Blue Marble is a static layer (no time dimension)
       baseLayerRef.current = L.tileLayer(
         'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/{z}/{y}/{x}.jpeg',
         {
@@ -197,7 +216,6 @@ export function MapViewer({
         }
       );
     } else {
-      // Use OpenStreetMap for EPSG:3857
       baseLayerRef.current = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 18,
@@ -208,17 +226,14 @@ export function MapViewer({
     // Force Leaflet to recalculate container size (fixes blank map after mode switch)
     setTimeout(() => mapRef.current?.invalidateSize(), 0);
 
-    // Set initial view based on first image
-    if (firstImageBounds) {
+    // If we need fitBounds (first load with image bounds, not a mode switch)
+    if (!isModeSwitch && firstImageBounds && !lastViewRef.current) {
       mapRef.current.fitBounds([
         [firstImageBounds.south, firstImageBounds.west],
         [firstImageBounds.north, firstImageBounds.east]
       ], { maxZoom: 8, padding: [20, 20] });
-      initialViewSet.current = true;
-    } else if (firstImageCenter) {
-      mapRef.current.setView([firstImageCenter.lat, firstImageCenter.lon], 6);
-      initialViewSet.current = true;
     }
+    initialViewSet.current = true;
 
     return () => {
       if (mapRef.current) {

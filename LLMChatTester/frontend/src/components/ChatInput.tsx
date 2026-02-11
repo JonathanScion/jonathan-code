@@ -226,7 +226,7 @@ export function ChatInput({ onSubmit, isLoading, value, onChange }: ChatInputPro
       }
 
       if (finalTranscript) {
-        setPrompt((prev) => prev + finalTranscript);
+        setPrompt(prompt + finalTranscript);
       }
     };
 

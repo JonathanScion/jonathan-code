@@ -7,7 +7,7 @@ interface DocumentManagerProps {
   selectedCollectionId?: string | null;
 }
 
-const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 // Helper to get auth headers
 function getAuthHeaders(): Record<string, string> {

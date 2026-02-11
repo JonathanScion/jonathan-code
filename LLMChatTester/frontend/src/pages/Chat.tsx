@@ -119,7 +119,7 @@ function RagResultsDisplay({ results }: { results: RagResult[] }) {
       </button>
       {expanded && (
         <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-          {results.map((result, idx) => (
+          {results.map((result) => (
             <div key={result.id} className="p-2 bg-gray-700 rounded text-xs">
               <div className="flex justify-between text-gray-400 mb-1">
                 <span>{result.documentName}</span>

@@ -67,7 +67,9 @@
       "Bash(powershell.exe -NoProfile -Command \"Add-Type -Assembly System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead\\(''C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\SatelliteImages\\\\hostinger-backend.zip''\\); $z.Entries | Select-Object FullName, Length | Format-Table; $z.Dispose\\(\\)\")",
       "Bash(python3:*)",
       "Bash(powershell.exe -NoProfile -Command \"Remove-Item -Force hostinger-backend.zip -ErrorAction SilentlyContinue; Compress-Archive -Path ''hostinger-deploy\\\\server.js'',''hostinger-deploy\\\\server.bundle.mjs'',''hostinger-deploy\\\\package.json'',''hostinger-deploy\\\\.env'',''hostinger-deploy\\\\config.js'',''hostinger-deploy\\\\logs'',''hostinger-deploy\\\\uploads'' -DestinationPath ''hostinger-backend.zip'' -Force\")",
-      "WebFetch(domain:gibs.earthdata.nasa.gov)"
+      "WebFetch(domain:gibs.earthdata.nasa.gov)",
+      "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)",
+      "Bash(zip:*)"
     ]
   }
 }

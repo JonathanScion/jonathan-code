@@ -7,7 +7,7 @@ type UsageState = Record<LLMProvider, TokenUsage | undefined>;
 const INITIAL_STREAMING_STATE: StreamingState = { claude: '', openai: '', gemini: '' };
 const INITIAL_STREAMING_STATUS: StreamingStatus = { claude: 'idle', openai: 'idle', gemini: 'idle' };
 
-const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:3001';
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 // Helper to get auth headers
 function getAuthHeaders(): Record<string, string> {
