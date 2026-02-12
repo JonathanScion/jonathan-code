@@ -102,6 +102,10 @@ export function initPassport() {
 
 // Initiate Google login
 authRouter.get('/google', (req: Request, res: Response, next: NextFunction) => {
+  if (!(passport as any)._strategy('google')) {
+    res.status(503).json({ error: 'Google OAuth not configured on server' });
+    return;
+  }
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     session: false,

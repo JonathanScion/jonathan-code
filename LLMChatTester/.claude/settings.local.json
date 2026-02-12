@@ -4,7 +4,10 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(npm audit fix:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(ls:*)",
+      "Bash(powershell -Command \"Compress-Archive -Path * -DestinationPath ''../deploy.zip'' -Force\")",
+      "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)"
     ]
   }
 }

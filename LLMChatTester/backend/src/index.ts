@@ -37,6 +37,15 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Increased for image uploads
 app.use(passport.initialize());
 
+// Health check
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    database: isDatabaseEnabled(),
+  });
+});
+
 // API routes
 app.use('/api/auth', authRouter);
 app.use('/api/chat', chatRouter);
