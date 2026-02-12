@@ -71,7 +71,8 @@
       "WebFetch(domain:gibs.earthdata.nasa.gov)",
       "WebFetch(domain:nasa-gibs.github.io)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:worldview.earthdata.nasa.gov)"
+      "WebFetch(domain:worldview.earthdata.nasa.gov)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

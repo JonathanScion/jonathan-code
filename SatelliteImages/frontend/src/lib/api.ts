@@ -11,6 +11,7 @@ import type {
   ApiResponse,
   ExportRequest,
   ExportResponse,
+  MapExportRequest,
   Annotation,
   ImagingRequest,
   CreateImagingRequestInput,
@@ -189,6 +190,14 @@ export const exportApi = {
   export: async (request: ExportRequest): Promise<ExportResponse> => {
     const { data} = await api.post<ApiResponse<ExportResponse>>('/export', request);
     return data.data!;
+  },
+
+  exportGeoTIFF: async (request: MapExportRequest): Promise<Blob> => {
+    const { data } = await api.post('/export/geotiff', request, {
+      responseType: 'blob',
+      timeout: 120_000,
+    });
+    return data as Blob;
   },
 };
 

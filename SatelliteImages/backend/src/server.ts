@@ -41,7 +41,8 @@ import { extractLocalGeoTIFFMetadata } from './lib/geotiff-utils';
 import { analyzeAgriculture, classifyNDVI, getCropTypes } from './lib/agriculture';
 import { getOptimalCollectionWindows, findCloudFreeWindows, scoreCollectionRequest } from './lib/tasking';
 import { getVesselsInArea, getAircraftInArea, correlateAssetsWithImage } from './lib/maritime';
-import type { SatelliteImage, Collection, SearchFilters, SearchResult, UserStatistics, ImagingRequest } from '@shared/types';
+import type { SatelliteImage, Collection, SearchFilters, SearchResult, UserStatistics, ImagingRequest, MapExportRequest } from '@shared/types';
+import { exportGeoTIFF } from './lib/export/index';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1554,6 +1555,38 @@ app.post('/api/maritime/all', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Asset tracking error:', err);
     error(res, err.message);
+  }
+});
+
+// ============ GEOTIFF EXPORT ============
+
+app.post('/api/export/geotiff', async (req: Request, res: Response) => {
+  try {
+    const exportReq: MapExportRequest = req.body;
+
+    // Basic validation
+    if (!exportReq.bounds || exportReq.zoom === undefined) {
+      return error(res, 'bounds and zoom are required', 400);
+    }
+    if (!exportReq.layers?.length && !exportReq.includeBaseLayer) {
+      return error(res, 'At least one layer or includeBaseLayer must be specified', 400);
+    }
+
+    // Set 90s timeout for this request
+    req.setTimeout(90_000);
+    res.setTimeout(90_000);
+
+    const geotiffBuffer = await exportGeoTIFF(exportReq);
+
+    res.set({
+      'Content-Type': 'image/tiff',
+      'Content-Disposition': 'attachment; filename="satellite-export.tif"',
+      'Content-Length': String(geotiffBuffer.length),
+    });
+    res.send(geotiffBuffer);
+  } catch (err: any) {
+    console.error('GeoTIFF export error:', err);
+    error(res, err.message || 'Export failed', err.message?.includes('too large') ? 400 : 500);
   }
 });
 

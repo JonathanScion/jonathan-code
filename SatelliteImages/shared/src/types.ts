@@ -205,6 +205,26 @@ export interface ExportResponse {
   expiresAt: string;
 }
 
+// GeoTIFF Map Export
+export interface MapExportLayer {
+  id: string;
+  date: string;
+  opacity: number;
+}
+
+export interface MapExportRequest {
+  bounds: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  };
+  zoom: number;
+  projectionMode: 'streetMap' | 'nasaMode';
+  layers: MapExportLayer[];
+  includeBaseLayer: boolean;
+}
+
 // Imaging Request Scheduling
 export enum RequestStatus {
   PENDING = 'PENDING',

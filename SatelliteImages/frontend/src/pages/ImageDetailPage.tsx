@@ -22,7 +22,7 @@ import {
   AlertTriangle,
   Ship
 } from 'lucide-react';
-import { imagesApi } from '@/lib/api';
+import { imagesApi, exportApi } from '@/lib/api';
 import { formatDate, formatBytes, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -62,6 +62,9 @@ export function ImageDetailPage() {
     return yesterday.toISOString().split('T')[0];
   });
   const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
+  const [mapBounds, setMapBounds] = useState<{ north: number; south: number; east: number; west: number } | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(2);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Layers that only work in NASA mode (EPSG:4326)
   const nasaOnlyLayers = new Set([
@@ -86,6 +89,40 @@ export function ImageDetailPage() {
       setEnabledLayers(prev => prev.filter(id => id !== layerId));
     }
     if (date) setLayerDate(date);
+  };
+
+  const handleBoundsChange = (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => {
+    setMapBounds(bounds);
+    setMapZoom(zoom);
+  };
+
+  const handleExportGeoTIFF = async () => {
+    if (!mapBounds) return;
+    setIsExporting(true);
+    try {
+      const blob = await exportApi.exportGeoTIFF({
+        bounds: mapBounds,
+        zoom: mapZoom,
+        projectionMode,
+        layers: enabledLayers.map(id => ({ id, date: layerDate, opacity: 0.7 })),
+        includeBaseLayer: true,
+      });
+
+      // Trigger browser download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `satellite-export-${layerDate}.tif`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('GeoTIFF export failed:', err);
+      alert(err?.response?.data?.error || err.message || 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const { data: image, isLoading } = useQuery({
@@ -324,6 +361,24 @@ export function ImageDetailPage() {
                           {enabledLayers.length} layer{enabledLayers.length > 1 ? 's' : ''}
                         </span>
                       )}
+                      {/* GeoTIFF Export */}
+                      <button
+                        onClick={handleExportGeoTIFF}
+                        disabled={isExporting || !mapBounds}
+                        className={`px-2 py-1 text-xs flex items-center gap-1 rounded border transition-colors ${
+                          isExporting
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-wait'
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                        title="Export current map view as GeoTIFF"
+                      >
+                        {isExporting ? (
+                          <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                        {isExporting ? 'Exporting...' : 'GeoTIFF'}
+                      </button>
                       {/* Projection Mode Toggle */}
                       <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                         <button
@@ -366,6 +421,7 @@ export function ImageDetailPage() {
                     height="400px"
                     gibsLayers={enabledLayers.map(id => ({ id, date: layerDate }))}
                     projectionMode={projectionMode}
+                    onBoundsChange={handleBoundsChange}
                   />
                 </CardContent>
               </Card>

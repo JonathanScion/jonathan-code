@@ -45,6 +45,7 @@ interface MapViewerProps {
   height?: string;
   gibsLayers?: GIBSLayerConfig[];
   projectionMode?: ProjectionMode;
+  onBoundsChange?: (bounds: { north: number; south: number; east: number; west: number }, zoom: number) => void;
 }
 
 // GIBS layer metadata for EPSG:3857 (Web Mercator / Street Map mode)
@@ -136,7 +137,8 @@ export function MapViewer({
   selectedImage,
   height = '500px',
   gibsLayers = [],
-  projectionMode = 'streetMap'
+  projectionMode = 'streetMap',
+  onBoundsChange
 }: MapViewerProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,7 +200,15 @@ export function MapViewer({
     mapRef.current.on('moveend', () => {
       if (mapRef.current) {
         const c = mapRef.current.getCenter();
-        lastViewRef.current = { lat: c.lat, lng: c.lng, zoom: mapRef.current.getZoom() };
+        const z = mapRef.current.getZoom();
+        lastViewRef.current = { lat: c.lat, lng: c.lng, zoom: z };
+        if (onBoundsChange) {
+          const b = mapRef.current.getBounds();
+          onBoundsChange(
+            { north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() },
+            z
+          );
+        }
       }
     });
 

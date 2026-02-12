@@ -2763,6 +2763,342 @@ function identifyNearbyPorts(lat, lon) {
   return ports.map((p) => ({ ...p, distance: haversineDistance2(lat, lon, p.lat, p.lon) })).filter((p) => p.distance < 200).sort((a, b) => a.distance - b.distance).slice(0, 3).map((p) => p.name);
 }
 
+// dist/backend/src/lib/export/tile-math.js
+function lon2tile3857(lon, zoom) {
+  return (lon + 180) / 360 * Math.pow(2, zoom);
+}
+function lat2tile3857(lat, zoom) {
+  const latRad = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom);
+}
+function lon2tile4326(lon, zoom) {
+  const tileSpan = 288 / Math.pow(2, zoom);
+  return (lon + 180) / tileSpan;
+}
+function lat2tile4326(lat, zoom) {
+  const tileSpan = 288 / Math.pow(2, zoom);
+  return (90 - lat) / tileSpan;
+}
+function boundsToTileRange(bounds, zoom, crs) {
+  if (crs === "EPSG:3857") {
+    return {
+      minX: Math.floor(lon2tile3857(bounds.west, zoom)),
+      maxX: Math.floor(lon2tile3857(bounds.east, zoom)),
+      minY: Math.floor(lat2tile3857(bounds.north, zoom)),
+      maxY: Math.floor(lat2tile3857(bounds.south, zoom))
+    };
+  }
+  return {
+    minX: Math.floor(lon2tile4326(bounds.west, zoom)),
+    maxX: Math.floor(lon2tile4326(bounds.east, zoom)),
+    minY: Math.floor(lat2tile4326(bounds.north, zoom)),
+    maxY: Math.floor(lat2tile4326(bounds.south, zoom))
+  };
+}
+function getCropRegion(bounds, tileRange, zoom, crs, tileSize) {
+  if (crs === "EPSG:3857") {
+    const xOffset2 = (lon2tile3857(bounds.west, zoom) - tileRange.minX) * tileSize;
+    const yOffset2 = (lat2tile3857(bounds.north, zoom) - tileRange.minY) * tileSize;
+    const xEnd2 = (lon2tile3857(bounds.east, zoom) - tileRange.minX) * tileSize;
+    const yEnd2 = (lat2tile3857(bounds.south, zoom) - tileRange.minY) * tileSize;
+    return {
+      x: Math.round(xOffset2),
+      y: Math.round(yOffset2),
+      width: Math.round(xEnd2 - xOffset2),
+      height: Math.round(yEnd2 - yOffset2)
+    };
+  }
+  const xOffset = (lon2tile4326(bounds.west, zoom) - tileRange.minX) * tileSize;
+  const yOffset = (lat2tile4326(bounds.north, zoom) - tileRange.minY) * tileSize;
+  const xEnd = (lon2tile4326(bounds.east, zoom) - tileRange.minX) * tileSize;
+  const yEnd = (lat2tile4326(bounds.south, zoom) - tileRange.minY) * tileSize;
+  return {
+    x: Math.round(xOffset),
+    y: Math.round(yOffset),
+    width: Math.round(xEnd - xOffset),
+    height: Math.round(yEnd - yOffset)
+  };
+}
+function gibsTileUrl4326(layerId, date, z, y, x) {
+  const info = GIBS_LAYER_INFO[layerId] || { tileMatrixSet: "250m", format: "jpg" };
+  return `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/${layerId}/default/${date}/${info.tileMatrixSet}/${z}/${y}/${x}.${info.format}`;
+}
+function gibsTileUrl3857(layerId, date, z, y, x) {
+  const info = GIBS_LAYER_INFO_3857[layerId] || { tileMatrixSet: "GoogleMapsCompatible_Level9", format: "jpg" };
+  return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layerId}/default/${date}/${info.tileMatrixSet}/${z}/${y}/${x}.${info.format}`;
+}
+function osmTileUrl(z, y, x) {
+  const s = ["a", "b", "c"][Math.abs(x + y) % 3];
+  return `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+}
+function blueMarbleTileUrl(z, y, x) {
+  return `https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/BlueMarble_ShadedRelief_Bathymetry/default/500m/${z}/${y}/${x}.jpeg`;
+}
+var GIBS_LAYER_INFO = {
+  "MODIS_Terra_CorrectedReflectance_TrueColor": { tileMatrixSet: "250m", format: "jpg", maxZoom: 8 },
+  "MODIS_Aqua_CorrectedReflectance_TrueColor": { tileMatrixSet: "250m", format: "jpg", maxZoom: 8 },
+  "VIIRS_NOAA20_CorrectedReflectance_TrueColor": { tileMatrixSet: "250m", format: "jpg", maxZoom: 8 },
+  "VIIRS_SNPP_CorrectedReflectance_TrueColor": { tileMatrixSet: "250m", format: "jpg", maxZoom: 8 },
+  "MODIS_Terra_L3_NDVI_Monthly": { tileMatrixSet: "1km", format: "png", maxZoom: 6 },
+  "MODIS_Terra_Land_Surface_Temp_Day": { tileMatrixSet: "1km", format: "png", maxZoom: 6 },
+  "MODIS_Combined_MAIAC_L2G_AerosolOpticalDepth": { tileMatrixSet: "1km", format: "png", maxZoom: 6 },
+  "MODIS_Terra_Cloud_Top_Temp_Day": { tileMatrixSet: "2km", format: "png", maxZoom: 5 }
+};
+var GIBS_LAYER_INFO_3857 = {
+  "MODIS_Terra_CorrectedReflectance_TrueColor": { tileMatrixSet: "GoogleMapsCompatible_Level9", format: "jpg", maxZoom: 9 },
+  "MODIS_Aqua_CorrectedReflectance_TrueColor": { tileMatrixSet: "GoogleMapsCompatible_Level9", format: "jpg", maxZoom: 9 },
+  "VIIRS_NOAA20_CorrectedReflectance_TrueColor": { tileMatrixSet: "GoogleMapsCompatible_Level9", format: "jpg", maxZoom: 9 },
+  "VIIRS_SNPP_CorrectedReflectance_TrueColor": { tileMatrixSet: "GoogleMapsCompatible_Level9", format: "jpg", maxZoom: 9 },
+  "MODIS_Terra_Land_Surface_Temp_Day": { tileMatrixSet: "GoogleMapsCompatible_Level7", format: "png", maxZoom: 7 }
+};
+function getLayerMaxZoom(layerId, crs) {
+  const info = crs === "EPSG:4326" ? GIBS_LAYER_INFO[layerId] : GIBS_LAYER_INFO_3857[layerId];
+  return info?.maxZoom ?? 8;
+}
+function getTileSize(crs) {
+  return crs === "EPSG:4326" ? 512 : 256;
+}
+
+// dist/backend/src/lib/export/tile-fetcher.js
+import axios8 from "axios";
+var TIMEOUT_MS = 1e4;
+var MAX_RETRIES = 2;
+async function fetchTiles(jobs, concurrency = 6) {
+  const results = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < jobs.length) {
+      const job = jobs[idx++];
+      const buf = await fetchWithRetry(job.url, MAX_RETRIES);
+      results.push({ x: job.x, y: job.y, buffer: buf });
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, jobs.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+async function fetchWithRetry(url, retries) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const resp = await axios8.get(url, {
+        responseType: "arraybuffer",
+        timeout: TIMEOUT_MS,
+        headers: {
+          "User-Agent": "SatelliteImages-GeoTIFF-Export/1.0"
+        }
+      });
+      return Buffer.from(resp.data);
+    } catch (err) {
+      if (attempt === retries) {
+        return null;
+      }
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    }
+  }
+  return null;
+}
+
+// dist/backend/src/lib/export/tile-stitcher.js
+import sharp2 from "sharp";
+async function stitchTiles(tiles, tileRange, tileSize) {
+  const cols = tileRange.maxX - tileRange.minX + 1;
+  const rows = tileRange.maxY - tileRange.minY + 1;
+  const canvasW = cols * tileSize;
+  const canvasH = rows * tileSize;
+  const composites = [];
+  for (const tile of tiles) {
+    if (!tile.buffer)
+      continue;
+    const left = (tile.x - tileRange.minX) * tileSize;
+    const top = (tile.y - tileRange.minY) * tileSize;
+    composites.push({
+      input: tile.buffer,
+      left,
+      top
+    });
+  }
+  const canvas = sharp2({
+    create: {
+      width: canvasW,
+      height: canvasH,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  }).png();
+  if (composites.length > 0) {
+    return canvas.composite(composites).png().toBuffer();
+  }
+  return canvas.toBuffer();
+}
+async function compositeLayers(layers, width, height) {
+  if (layers.length === 0) {
+    throw new Error("No layers to composite");
+  }
+  if (layers.length === 1) {
+    const l = layers[0];
+    if (l.opacity < 1) {
+      return applyOpacity(l.buffer, l.opacity);
+    }
+    return l.buffer;
+  }
+  let result = layers[0].opacity < 1 ? await applyOpacity(layers[0].buffer, layers[0].opacity) : layers[0].buffer;
+  for (let i = 1; i < layers.length; i++) {
+    const overlay = layers[i].opacity < 1 ? await applyOpacity(layers[i].buffer, layers[i].opacity) : layers[i].buffer;
+    result = await sharp2(result).composite([{ input: overlay }]).png().toBuffer();
+  }
+  return result;
+}
+async function cropToRegion(imageBuffer, crop) {
+  const cropped = sharp2(imageBuffer).extract({
+    left: crop.x,
+    top: crop.y,
+    width: crop.width,
+    height: crop.height
+  }).removeAlpha().raw();
+  const { data, info } = await cropped.toBuffer({ resolveWithObject: true });
+  return {
+    buffer: data,
+    width: info.width,
+    height: info.height,
+    channels: info.channels
+  };
+}
+async function applyOpacity(pngBuffer, opacity) {
+  const { data, info } = await sharp2(pngBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const factor = Math.round(opacity * 255);
+  for (let i = 3; i < data.length; i += 4) {
+    data[i] = Math.round(data[i] * factor / 255);
+  }
+  return sharp2(data, {
+    raw: {
+      width: info.width,
+      height: info.height,
+      channels: 4
+    }
+  }).png().toBuffer();
+}
+
+// dist/backend/src/lib/export/geotiff-writer.js
+import { writeArrayBuffer } from "geotiff";
+import proj42 from "proj4";
+async function createGeoTIFF(pixelData, width, height, channels, bounds, crs) {
+  if (!width || !height) {
+    throw new Error(`Invalid image dimensions: ${width}x${height}`);
+  }
+  const totalPixels = width * height;
+  const flatValues = new Array(totalPixels * channels);
+  for (let i = 0; i < totalPixels; i++) {
+    for (let b = 0; b < channels; b++) {
+      flatValues[i * channels + b] = pixelData[i * channels + b];
+    }
+  }
+  let metadata;
+  if (crs === "EPSG:4326") {
+    const pixelScaleX = (bounds.east - bounds.west) / width;
+    const pixelScaleY = (bounds.north - bounds.south) / height;
+    metadata = {
+      height,
+      width,
+      ModelTiepoint: [0, 0, 0, bounds.west, bounds.north, 0],
+      ModelPixelScale: [pixelScaleX, pixelScaleY, 0],
+      // GeoKeys as top-level properties — library builds GeoKeyDirectory from these
+      GTModelTypeGeoKey: 2,
+      // ModelTypeGeographic
+      GTRasterTypeGeoKey: 1,
+      // RasterPixelIsArea
+      GeographicTypeGeoKey: 4326
+    };
+  } else {
+    const [westM, southM] = proj42("EPSG:4326", "EPSG:3857", [bounds.west, bounds.south]);
+    const [eastM, northM] = proj42("EPSG:4326", "EPSG:3857", [bounds.east, bounds.north]);
+    const pixelScaleX = (eastM - westM) / width;
+    const pixelScaleY = (northM - southM) / height;
+    metadata = {
+      height,
+      width,
+      ModelTiepoint: [0, 0, 0, westM, northM, 0],
+      ModelPixelScale: [pixelScaleX, pixelScaleY, 0],
+      GTModelTypeGeoKey: 1,
+      // ModelTypeProjected
+      GTRasterTypeGeoKey: 1,
+      // RasterPixelIsArea
+      ProjectedCSTypeGeoKey: 3857
+    };
+  }
+  const arrayBuffer = await writeArrayBuffer(flatValues, metadata);
+  return Buffer.from(arrayBuffer);
+}
+
+// dist/backend/src/lib/export/index.js
+var MAX_CANVAS_DIM = 8192;
+async function exportGeoTIFF(request) {
+  const crs = request.projectionMode === "nasaMode" ? "EPSG:4326" : "EPSG:3857";
+  const tileSize = getTileSize(crs);
+  const bounds = request.bounds;
+  let zoom = request.zoom;
+  for (const layer of request.layers) {
+    const maxZ = getLayerMaxZoom(layer.id, crs);
+    zoom = Math.min(zoom, maxZ);
+  }
+  zoom = Math.max(1, zoom);
+  const tileRange = boundsToTileRange(bounds, zoom, crs);
+  const cols = tileRange.maxX - tileRange.minX + 1;
+  const rows = tileRange.maxY - tileRange.minY + 1;
+  const canvasW = cols * tileSize;
+  const canvasH = rows * tileSize;
+  if (canvasW > MAX_CANVAS_DIM || canvasH > MAX_CANVAS_DIM) {
+    throw new Error(`Export area too large at zoom ${zoom} (${canvasW}x${canvasH}px). Zoom out or select a smaller area. Max: ${MAX_CANVAS_DIM}x${MAX_CANVAS_DIM}px.`);
+  }
+  const crop = getCropRegion(bounds, tileRange, zoom, crs, tileSize);
+  if (crop.width <= 0 || crop.height <= 0) {
+    throw new Error("Invalid export bounds \u2013 cropped region has zero dimensions.");
+  }
+  const layerBuffers = [];
+  if (request.includeBaseLayer) {
+    const baseJobs = [];
+    for (let y = tileRange.minY; y <= tileRange.maxY; y++) {
+      for (let x = tileRange.minX; x <= tileRange.maxX; x++) {
+        const url = crs === "EPSG:4326" ? blueMarbleTileUrl(zoom, y, x) : osmTileUrl(zoom, y, x);
+        baseJobs.push({ url, x, y });
+      }
+    }
+    const baseTiles = await fetchTiles(baseJobs, 6);
+    const basePng = await stitchTiles(baseTiles, tileRange, tileSize);
+    layerBuffers.push({ buffer: basePng, opacity: 1 });
+  }
+  for (const layer of request.layers) {
+    const layerZoom = Math.min(zoom, getLayerMaxZoom(layer.id, crs));
+    const layerTileRange = boundsToTileRange(bounds, layerZoom, crs);
+    const layerTileSize = tileSize;
+    const jobs = [];
+    for (let y = layerTileRange.minY; y <= layerTileRange.maxY; y++) {
+      for (let x = layerTileRange.minX; x <= layerTileRange.maxX; x++) {
+        const url = crs === "EPSG:4326" ? gibsTileUrl4326(layer.id, layer.date, layerZoom, y, x) : gibsTileUrl3857(layer.id, layer.date, layerZoom, y, x);
+        jobs.push({ url, x, y });
+      }
+    }
+    const tiles = await fetchTiles(jobs, 6);
+    const layerPng = await stitchTiles(tiles, layerTileRange, layerTileSize);
+    const layerCols = layerTileRange.maxX - layerTileRange.minX + 1;
+    const layerRows = layerTileRange.maxY - layerTileRange.minY + 1;
+    const layerW = layerCols * layerTileSize;
+    const layerH = layerRows * layerTileSize;
+    let finalLayerPng = layerPng;
+    if (layerW !== canvasW || layerH !== canvasH) {
+      const sharp3 = (await import("sharp")).default;
+      finalLayerPng = await sharp3(layerPng).resize(canvasW, canvasH, { fit: "fill" }).png().toBuffer();
+    }
+    layerBuffers.push({ buffer: finalLayerPng, opacity: layer.opacity });
+  }
+  if (layerBuffers.length === 0) {
+    throw new Error("No layers to export. Enable at least one layer or include the base layer.");
+  }
+  const compositedPng = await compositeLayers(layerBuffers, canvasW, canvasH);
+  const stitched = await cropToRegion(compositedPng, crop);
+  const geotiffBuffer = await createGeoTIFF(stitched.buffer, stitched.width, stitched.height, stitched.channels, bounds, crs);
+  return geotiffBuffer;
+}
+
 // dist/backend/src/server.js
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path3.dirname(__filename);
@@ -3024,15 +3360,15 @@ app.post("/api/images/:id/confirm", async (req, res) => {
       const supportedImageExts = [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
       if (supportedImageExts.includes(ext)) {
         try {
-          const sharp2 = (await import("sharp")).default;
+          const sharp3 = (await import("sharp")).default;
           const thumbnailFilename = `thumbnail.png`;
           const previewFilename = `preview.png`;
           const imageDir = path3.dirname(originalFilePath);
           const thumbnailPath = path3.join(imageDir, thumbnailFilename);
           const previewPath = path3.join(imageDir, previewFilename);
           console.log(`Generating thumbnail and preview for ${ext} file...`);
-          await sharp2(originalFilePath, { limitInputPixels: false }).resize(300, 300, { fit: "inside", withoutEnlargement: true }).png({ quality: 80 }).toFile(thumbnailPath);
-          await sharp2(originalFilePath, { limitInputPixels: false }).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png({ quality: 85 }).toFile(previewPath);
+          await sharp3(originalFilePath, { limitInputPixels: false }).resize(300, 300, { fit: "inside", withoutEnlargement: true }).png({ quality: 80 }).toFile(thumbnailPath);
+          await sharp3(originalFilePath, { limitInputPixels: false }).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png({ quality: 85 }).toFile(previewPath);
           const relThumbnailPath = path3.join("images", imageId, thumbnailFilename).replace(/\\/g, "/");
           const relPreviewPath = path3.join("images", imageId, previewFilename).replace(/\\/g, "/");
           updates.thumbnail_path = relThumbnailPath;
@@ -3835,6 +4171,29 @@ app.post("/api/maritime/all", async (req, res) => {
   } catch (err) {
     console.error("Asset tracking error:", err);
     error(res, err.message);
+  }
+});
+app.post("/api/export/geotiff", async (req, res) => {
+  try {
+    const exportReq = req.body;
+    if (!exportReq.bounds || exportReq.zoom === void 0) {
+      return error(res, "bounds and zoom are required", 400);
+    }
+    if (!exportReq.layers?.length && !exportReq.includeBaseLayer) {
+      return error(res, "At least one layer or includeBaseLayer must be specified", 400);
+    }
+    req.setTimeout(9e4);
+    res.setTimeout(9e4);
+    const geotiffBuffer = await exportGeoTIFF(exportReq);
+    res.set({
+      "Content-Type": "image/tiff",
+      "Content-Disposition": 'attachment; filename="satellite-export.tif"',
+      "Content-Length": String(geotiffBuffer.length)
+    });
+    res.send(geotiffBuffer);
+  } catch (err) {
+    console.error("GeoTIFF export error:", err);
+    error(res, err.message || "Export failed", err.message?.includes("too large") ? 400 : 500);
   }
 });
 app.get("/api/health", (req, res) => {
