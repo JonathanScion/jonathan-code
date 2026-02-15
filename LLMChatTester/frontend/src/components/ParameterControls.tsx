@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { ChatParams, ClaudeParams, OpenAIParams, GeminiParams, GeminiSafetyLevel } from '../types';
-import { MODEL_OPTIONS, SAFETY_LEVEL_OPTIONS } from '../types';
+import type { ChatParams, ClaudeParams, OpenAIParams, GeminiParams, GeminiSafetyLevel, OpenAICompatibleParams, LLMProvider } from '../types';
+import { MODEL_OPTIONS, SAFETY_LEVEL_OPTIONS, PROVIDER_INFO } from '../types';
 
 interface ParameterControlsProps {
   params: ChatParams;
@@ -223,12 +223,81 @@ const TEMPERATURE_PRESETS = [
   { name: 'Creative', temp: 1.0, description: 'More varied, creative outputs' },
 ];
 
+// Reusable section for OpenAI-compatible providers (xAI, Groq, Perplexity)
+function OpenAICompatibleSection({
+  provider,
+  params,
+  useSharedSystemPrompt,
+  onUpdate,
+}: {
+  provider: LLMProvider;
+  params: OpenAICompatibleParams;
+  useSharedSystemPrompt: boolean;
+  onUpdate: (updates: Partial<OpenAICompatibleParams>) => void;
+}) {
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-4">
+        <SelectField
+          label="Model"
+          value={params.model}
+          options={MODEL_OPTIONS[provider]}
+          onChange={(v) => onUpdate({ model: v })}
+        />
+        <NumberField
+          label="Max Tokens"
+          value={params.maxTokens}
+          min={1}
+          max={8192}
+          onChange={(v) => onUpdate({ maxTokens: v ?? 1024 })}
+        />
+        <SliderField
+          label="Temperature"
+          value={params.temperature}
+          min={0}
+          max={2}
+          step={0.1}
+          onChange={(v) => onUpdate({ temperature: v })}
+        />
+        <SliderField
+          label="Top P"
+          value={params.topP ?? 1}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(v) => onUpdate({ topP: v === 1 ? undefined : v })}
+        />
+        <NumberField
+          label="Top K"
+          value={params.topK}
+          min={1}
+          placeholder="Default"
+          onChange={(v) => onUpdate({ topK: v })}
+        />
+      </div>
+      {!useSharedSystemPrompt && (
+        <div className="mt-4">
+          <TextAreaField
+            label={`System Prompt (${PROVIDER_INFO[provider].name})`}
+            value={params.systemPrompt ?? ''}
+            placeholder={`${PROVIDER_INFO[provider].name}-specific instructions...`}
+            onChange={(v) => onUpdate({ systemPrompt: v })}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ParameterControls({ params, onParamsChange }: ParameterControlsProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     system: true,
     claude: false,
     openai: false,
     gemini: false,
+    xai: false,
+    groq: false,
+    perplexity: false,
   });
 
   const toggleSection = (section: string) => {
@@ -236,16 +305,21 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
   };
 
   const applyTemperaturePreset = (temp: number) => {
-    onParamsChange({
-      ...params,
-      claude: { ...params.claude, temperature: Math.min(temp, 1) }, // Claude max is 1
-      openai: { ...params.openai, temperature: temp },
-      gemini: { ...params.gemini, temperature: temp },
-    });
+    const updates: any = { ...params };
+    for (const p of params.enabledProviders) {
+      if (p === 'claude') {
+        updates.claude = { ...params.claude, temperature: Math.min(temp, 1) };
+      } else {
+        updates[p] = { ...params[p], temperature: temp };
+      }
+    }
+    onParamsChange(updates);
   };
 
   const getCurrentPreset = () => {
-    const avgTemp = (params.claude.temperature + params.openai.temperature + params.gemini.temperature) / 3;
+    const enabled = params.enabledProviders;
+    if (enabled.length === 0) return null;
+    const avgTemp = enabled.reduce((sum, p) => sum + params[p].temperature, 0) / enabled.length;
     const preset = TEMPERATURE_PRESETS.find(p => Math.abs(p.temp - avgTemp) < 0.1);
     return preset?.name || null;
   };
@@ -271,7 +345,18 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
     });
   };
 
+  const updateCompatible = (provider: LLMProvider, updates: Partial<OpenAICompatibleParams>) => {
+    onParamsChange({
+      ...params,
+      [provider]: { ...params[provider], ...updates },
+    });
+  };
+
   const currentPreset = getCurrentPreset();
+
+  const tempSummary = params.enabledProviders
+    .map(p => `${PROVIDER_INFO[p].name}: ${params[p].temperature}`)
+    .join(', ');
 
   return (
     <div className="p-4 bg-gray-900 border-b border-gray-700">
@@ -296,7 +381,7 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
             ))}
           </div>
           <span className="text-xs text-gray-500">
-            (Claude: {params.claude.temperature}, OpenAI: {params.openai.temperature}, Gemini: {params.gemini.temperature})
+            ({tempSummary})
           </span>
         </div>
 
@@ -333,227 +418,255 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
           </div>
         </Accordion>
 
-        <Accordion
-          title="Claude"
-          color="bg-orange-600"
-          isOpen={openSections.claude}
-          onToggle={() => toggleSection('claude')}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              label="Model"
-              value={params.claude.model}
-              options={MODEL_OPTIONS.claude}
-              onChange={(v) => updateClaude({ model: v })}
-            />
-            <NumberField
-              label="Max Tokens"
-              value={params.claude.maxTokens}
-              min={1}
-              max={8192}
-              onChange={(v) => updateClaude({ maxTokens: v ?? 1024 })}
-            />
-            <SliderField
-              label="Temperature"
-              value={params.claude.temperature}
-              min={0}
-              max={1}
-              step={0.1}
-              onChange={(v) => updateClaude({ temperature: v })}
-            />
-            <NumberField
-              label="Top K"
-              value={params.claude.topK}
-              min={1}
-              placeholder="Default"
-              onChange={(v) => updateClaude({ topK: v })}
-            />
-            <SliderField
-              label="Top P"
-              value={params.claude.topP ?? 1}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateClaude({ topP: v === 1 ? undefined : v })}
-            />
-          </div>
-          <div className="mt-4">
-            <StopSequencesField
-              value={params.claude.stopSequences ?? []}
-              onChange={(v) => updateClaude({ stopSequences: v })}
-            />
-          </div>
-          {!params.useSharedSystemPrompt && (
-            <div className="mt-4">
-              <TextAreaField
-                label="System Prompt (Claude)"
-                value={params.claude.systemPrompt ?? ''}
-                placeholder="Claude-specific instructions..."
-                onChange={(v) => updateClaude({ systemPrompt: v })}
+        {/* Only render sections for enabled providers */}
+        {params.enabledProviders.includes('claude') && (
+          <Accordion
+            title="Claude"
+            color="bg-orange-600"
+            isOpen={openSections.claude}
+            onToggle={() => toggleSection('claude')}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <SelectField
+                label="Model"
+                value={params.claude.model}
+                options={MODEL_OPTIONS.claude}
+                onChange={(v) => updateClaude({ model: v })}
+              />
+              <NumberField
+                label="Max Tokens"
+                value={params.claude.maxTokens}
+                min={1}
+                max={8192}
+                onChange={(v) => updateClaude({ maxTokens: v ?? 1024 })}
+              />
+              <SliderField
+                label="Temperature"
+                value={params.claude.temperature}
+                min={0}
+                max={1}
+                step={0.1}
+                onChange={(v) => updateClaude({ temperature: v })}
+              />
+              <NumberField
+                label="Top K"
+                value={params.claude.topK}
+                min={1}
+                placeholder="Default"
+                onChange={(v) => updateClaude({ topK: v })}
+              />
+              <SliderField
+                label="Top P"
+                value={params.claude.topP ?? 1}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => updateClaude({ topP: v === 1 ? undefined : v })}
               />
             </div>
-          )}
-        </Accordion>
-
-        <Accordion
-          title="ChatGPT"
-          color="bg-green-600"
-          isOpen={openSections.openai}
-          onToggle={() => toggleSection('openai')}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              label="Model"
-              value={params.openai.model}
-              options={MODEL_OPTIONS.openai}
-              onChange={(v) => updateOpenAI({ model: v })}
-            />
-            <NumberField
-              label="Max Tokens"
-              value={params.openai.maxTokens}
-              min={1}
-              max={8192}
-              onChange={(v) => updateOpenAI({ maxTokens: v ?? 1024 })}
-            />
-            <SliderField
-              label="Temperature"
-              value={params.openai.temperature}
-              min={0}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateOpenAI({ temperature: v })}
-            />
-            <SliderField
-              label="Top P"
-              value={params.openai.topP ?? 1}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateOpenAI({ topP: v === 1 ? undefined : v })}
-            />
-            <SliderField
-              label="Frequency Penalty"
-              value={params.openai.frequencyPenalty ?? 0}
-              min={-2}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateOpenAI({ frequencyPenalty: v })}
-            />
-            <SliderField
-              label="Presence Penalty"
-              value={params.openai.presencePenalty ?? 0}
-              min={-2}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateOpenAI({ presencePenalty: v })}
-            />
-            <SelectField
-              label="Response Format"
-              value={params.openai.responseFormat ?? 'text'}
-              options={['text', 'json_object']}
-              onChange={(v) => updateOpenAI({ responseFormat: v as 'text' | 'json_object' })}
-            />
-            <NumberField
-              label="Seed"
-              value={params.openai.seed}
-              placeholder="Random"
-              onChange={(v) => updateOpenAI({ seed: v })}
-            />
-          </div>
-          {!params.useSharedSystemPrompt && (
             <div className="mt-4">
-              <TextAreaField
-                label="System Prompt (ChatGPT)"
-                value={params.openai.systemPrompt ?? ''}
-                placeholder="ChatGPT-specific instructions..."
-                onChange={(v) => updateOpenAI({ systemPrompt: v })}
+              <StopSequencesField
+                value={params.claude.stopSequences ?? []}
+                onChange={(v) => updateClaude({ stopSequences: v })}
               />
             </div>
-          )}
-        </Accordion>
-
-        <Accordion
-          title="Gemini"
-          color="bg-blue-600"
-          isOpen={openSections.gemini}
-          onToggle={() => toggleSection('gemini')}
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <SelectField
-              label="Model"
-              value={params.gemini.model}
-              options={MODEL_OPTIONS.gemini}
-              onChange={(v) => updateGemini({ model: v })}
-            />
-            <NumberField
-              label="Max Tokens"
-              value={params.gemini.maxTokens}
-              min={1}
-              max={8192}
-              onChange={(v) => updateGemini({ maxTokens: v ?? 1024 })}
-            />
-            <SliderField
-              label="Temperature"
-              value={params.gemini.temperature}
-              min={0}
-              max={2}
-              step={0.1}
-              onChange={(v) => updateGemini({ temperature: v })}
-            />
-            <NumberField
-              label="Top K"
-              value={params.gemini.topK}
-              min={1}
-              placeholder="Default"
-              onChange={(v) => updateGemini({ topK: v })}
-            />
-            <SliderField
-              label="Top P"
-              value={params.gemini.topP ?? 1}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => updateGemini({ topP: v === 1 ? undefined : v })}
-            />
-          </div>
-          <div className="mt-4">
-            <StopSequencesField
-              value={params.gemini.stopSequences ?? []}
-              onChange={(v) => updateGemini({ stopSequences: v })}
-            />
-          </div>
-
-          <div className="mt-4">
-            <p className="text-xs text-gray-400 mb-2">Safety Settings</p>
-            <div className="grid grid-cols-2 gap-3">
-              {(['harassment', 'hateSpeech', 'sexuallyExplicit', 'dangerousContent'] as const).map((category) => (
-                <SelectField
-                  key={category}
-                  label={category.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
-                  value={params.gemini.safetySettings?.[category] ?? 'BLOCK_MEDIUM_AND_ABOVE'}
-                  options={SAFETY_LEVEL_OPTIONS}
-                  onChange={(v) => updateGemini({
-                    safetySettings: {
-                      ...params.gemini.safetySettings!,
-                      [category]: v as GeminiSafetyLevel,
-                    },
-                  })}
+            {!params.useSharedSystemPrompt && (
+              <div className="mt-4">
+                <TextAreaField
+                  label="System Prompt (Claude)"
+                  value={params.claude.systemPrompt ?? ''}
+                  placeholder="Claude-specific instructions..."
+                  onChange={(v) => updateClaude({ systemPrompt: v })}
                 />
-              ))}
-            </div>
-          </div>
+              </div>
+            )}
+          </Accordion>
+        )}
 
-          {!params.useSharedSystemPrompt && (
-            <div className="mt-4">
-              <TextAreaField
-                label="System Prompt (Gemini)"
-                value={params.gemini.systemPrompt ?? ''}
-                placeholder="Gemini-specific instructions..."
-                onChange={(v) => updateGemini({ systemPrompt: v })}
+        {params.enabledProviders.includes('openai') && (
+          <Accordion
+            title="ChatGPT"
+            color="bg-green-600"
+            isOpen={openSections.openai}
+            onToggle={() => toggleSection('openai')}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <SelectField
+                label="Model"
+                value={params.openai.model}
+                options={MODEL_OPTIONS.openai}
+                onChange={(v) => updateOpenAI({ model: v })}
+              />
+              <NumberField
+                label="Max Tokens"
+                value={params.openai.maxTokens}
+                min={1}
+                max={8192}
+                onChange={(v) => updateOpenAI({ maxTokens: v ?? 1024 })}
+              />
+              <SliderField
+                label="Temperature"
+                value={params.openai.temperature}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateOpenAI({ temperature: v })}
+              />
+              <SliderField
+                label="Top P"
+                value={params.openai.topP ?? 1}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => updateOpenAI({ topP: v === 1 ? undefined : v })}
+              />
+              <SliderField
+                label="Frequency Penalty"
+                value={params.openai.frequencyPenalty ?? 0}
+                min={-2}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateOpenAI({ frequencyPenalty: v })}
+              />
+              <SliderField
+                label="Presence Penalty"
+                value={params.openai.presencePenalty ?? 0}
+                min={-2}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateOpenAI({ presencePenalty: v })}
+              />
+              <SelectField
+                label="Response Format"
+                value={params.openai.responseFormat ?? 'text'}
+                options={['text', 'json_object']}
+                onChange={(v) => updateOpenAI({ responseFormat: v as 'text' | 'json_object' })}
+              />
+              <NumberField
+                label="Seed"
+                value={params.openai.seed}
+                placeholder="Random"
+                onChange={(v) => updateOpenAI({ seed: v })}
               />
             </div>
-          )}
-        </Accordion>
+            {!params.useSharedSystemPrompt && (
+              <div className="mt-4">
+                <TextAreaField
+                  label="System Prompt (ChatGPT)"
+                  value={params.openai.systemPrompt ?? ''}
+                  placeholder="ChatGPT-specific instructions..."
+                  onChange={(v) => updateOpenAI({ systemPrompt: v })}
+                />
+              </div>
+            )}
+          </Accordion>
+        )}
+
+        {params.enabledProviders.includes('gemini') && (
+          <Accordion
+            title="Gemini"
+            color="bg-blue-600"
+            isOpen={openSections.gemini}
+            onToggle={() => toggleSection('gemini')}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <SelectField
+                label="Model"
+                value={params.gemini.model}
+                options={MODEL_OPTIONS.gemini}
+                onChange={(v) => updateGemini({ model: v })}
+              />
+              <NumberField
+                label="Max Tokens"
+                value={params.gemini.maxTokens}
+                min={1}
+                max={8192}
+                onChange={(v) => updateGemini({ maxTokens: v ?? 1024 })}
+              />
+              <SliderField
+                label="Temperature"
+                value={params.gemini.temperature}
+                min={0}
+                max={2}
+                step={0.1}
+                onChange={(v) => updateGemini({ temperature: v })}
+              />
+              <NumberField
+                label="Top K"
+                value={params.gemini.topK}
+                min={1}
+                placeholder="Default"
+                onChange={(v) => updateGemini({ topK: v })}
+              />
+              <SliderField
+                label="Top P"
+                value={params.gemini.topP ?? 1}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => updateGemini({ topP: v === 1 ? undefined : v })}
+              />
+            </div>
+            <div className="mt-4">
+              <StopSequencesField
+                value={params.gemini.stopSequences ?? []}
+                onChange={(v) => updateGemini({ stopSequences: v })}
+              />
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-2">Safety Settings</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(['harassment', 'hateSpeech', 'sexuallyExplicit', 'dangerousContent'] as const).map((category) => (
+                  <SelectField
+                    key={category}
+                    label={category.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())}
+                    value={params.gemini.safetySettings?.[category] ?? 'BLOCK_MEDIUM_AND_ABOVE'}
+                    options={SAFETY_LEVEL_OPTIONS}
+                    onChange={(v) => updateGemini({
+                      safetySettings: {
+                        ...params.gemini.safetySettings!,
+                        [category]: v as GeminiSafetyLevel,
+                      },
+                    })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {!params.useSharedSystemPrompt && (
+              <div className="mt-4">
+                <TextAreaField
+                  label="System Prompt (Gemini)"
+                  value={params.gemini.systemPrompt ?? ''}
+                  placeholder="Gemini-specific instructions..."
+                  onChange={(v) => updateGemini({ systemPrompt: v })}
+                />
+              </div>
+            )}
+          </Accordion>
+        )}
+
+        {/* OpenAI-compatible providers */}
+        {(['xai', 'groq', 'perplexity'] as LLMProvider[])
+          .filter(p => params.enabledProviders.includes(p))
+          .map(provider => (
+            <Accordion
+              key={provider}
+              title={PROVIDER_INFO[provider].name}
+              color={PROVIDER_INFO[provider].color}
+              isOpen={openSections[provider]}
+              onToggle={() => toggleSection(provider)}
+            >
+              <OpenAICompatibleSection
+                provider={provider}
+                params={params[provider] as OpenAICompatibleParams}
+                useSharedSystemPrompt={params.useSharedSystemPrompt}
+                onUpdate={(updates) => updateCompatible(provider, updates)}
+              />
+            </Accordion>
+          ))
+        }
       </div>
     </div>
   );

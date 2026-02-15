@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import type { ChatParams, ChatResponse, ConversationTurn, Message, StreamingState, StreamingStatus, LLMProvider, TurnRatings, ResponseRating, TokenUsage, RagResult, ImageData } from '../types';
-import { DEFAULT_PARAMS, DEFAULT_TURN_RATINGS } from '../types';
+import { DEFAULT_PARAMS, DEFAULT_TURN_RATINGS, DEFAULT_RATING, ALL_PROVIDERS, makeProviderRecord } from '../types';
 
 type UsageState = Record<LLMProvider, TokenUsage | undefined>;
 
-const INITIAL_STREAMING_STATE: StreamingState = { claude: '', openai: '', gemini: '' };
-const INITIAL_STREAMING_STATUS: StreamingStatus = { claude: 'idle', openai: 'idle', gemini: 'idle' };
+const INITIAL_STREAMING_STATE: StreamingState = makeProviderRecord(() => '');
+const INITIAL_STREAMING_STATUS: StreamingStatus = makeProviderRecord(() => 'idle' as const);
 
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
@@ -26,9 +26,9 @@ export function useChat() {
   const [useRag, setUseRag] = useState(false);
   const [ragCollectionId, setRagCollectionId] = useState<string | null>('default');
   const [lastRagResults, setLastRagResults] = useState<RagResult[]>([]);
-  const durationsRef = useRef<Record<LLMProvider, number>>({ claude: 0, openai: 0, gemini: 0 });
+  const durationsRef = useRef<Record<LLMProvider, number>>(makeProviderRecord(() => 0));
   const streamingTextRef = useRef<StreamingState>(INITIAL_STREAMING_STATE);
-  const usageRef = useRef<UsageState>({ claude: undefined, openai: undefined, gemini: undefined });
+  const usageRef = useRef<UsageState>(makeProviderRecord(() => undefined));
 
   // Build message history for each provider
   const buildMessageHistory = useCallback((provider: LLMProvider): Message[] => {
@@ -36,7 +36,7 @@ export function useChat() {
     for (const turn of history) {
       messages.push({ role: 'user', content: turn.userMessage });
       const response = turn.responses[provider];
-      if (response.response) {
+      if (response?.response) {
         messages.push({ role: 'assistant', content: response.response });
       }
     }
@@ -55,6 +55,15 @@ export function useChat() {
     setIsLoading(true);
     setError(null);
 
+    // Build provider params and history dynamically
+    const providerBody: Record<string, any> = {};
+    const historyBody: Record<string, Message[]> = {};
+    for (const p of params.enabledProviders) {
+      const pParams = params[p];
+      providerBody[p] = { ...pParams, systemPrompt: getSystemPrompt(pParams.systemPrompt) };
+      historyBody[p] = buildMessageHistory(p);
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
@@ -64,14 +73,9 @@ export function useChat() {
         },
         body: JSON.stringify({
           prompt,
-          claude: { ...params.claude, systemPrompt: getSystemPrompt(params.claude.systemPrompt) },
-          openai: { ...params.openai, systemPrompt: getSystemPrompt(params.openai.systemPrompt) },
-          gemini: { ...params.gemini, systemPrompt: getSystemPrompt(params.gemini.systemPrompt) },
-          history: {
-            claude: buildMessageHistory('claude'),
-            openai: buildMessageHistory('openai'),
-            gemini: buildMessageHistory('gemini'),
-          },
+          enabledProviders: params.enabledProviders,
+          ...providerBody,
+          history: historyBody,
         }),
       });
 
@@ -99,11 +103,25 @@ export function useChat() {
     setIsStreaming(true);
     setError(null);
     setStreamingText(INITIAL_STREAMING_STATE);
-    setStreamingStatus({ claude: 'streaming', openai: 'streaming', gemini: 'streaming' });
+    // Mark enabled providers as streaming, rest idle
+    const initStatus = makeProviderRecord(() => 'idle' as const);
+    for (const p of params.enabledProviders) {
+      (initStatus as any)[p] = 'streaming';
+    }
+    setStreamingStatus(initStatus);
     setLastRagResults([]);
-    streamingTextRef.current = INITIAL_STREAMING_STATE;
-    durationsRef.current = { claude: 0, openai: 0, gemini: 0 };
-    usageRef.current = { claude: undefined, openai: undefined, gemini: undefined };
+    streamingTextRef.current = makeProviderRecord(() => '');
+    durationsRef.current = makeProviderRecord(() => 0);
+    usageRef.current = makeProviderRecord(() => undefined);
+
+    // Build provider params and history dynamically
+    const providerBody: Record<string, any> = {};
+    const historyBody: Record<string, Message[]> = {};
+    for (const p of params.enabledProviders) {
+      const pParams = params[p];
+      providerBody[p] = { ...pParams, systemPrompt: getSystemPrompt(pParams.systemPrompt) };
+      historyBody[p] = buildMessageHistory(p);
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/chat/stream`, {
@@ -115,14 +133,9 @@ export function useChat() {
         body: JSON.stringify({
           prompt,
           images,
-          claude: { ...params.claude, systemPrompt: getSystemPrompt(params.claude.systemPrompt) },
-          openai: { ...params.openai, systemPrompt: getSystemPrompt(params.openai.systemPrompt) },
-          gemini: { ...params.gemini, systemPrompt: getSystemPrompt(params.gemini.systemPrompt) },
-          history: {
-            claude: buildMessageHistory('claude'),
-            openai: buildMessageHistory('openai'),
-            gemini: buildMessageHistory('gemini'),
-          },
+          enabledProviders: params.enabledProviders,
+          ...providerBody,
+          history: historyBody,
           useRag,
           ragTopK: 5,
           ragCollectionId,
@@ -193,27 +206,16 @@ export function useChat() {
         }
       }
 
-      // Add completed responses to history
-      const finalResponses: ChatResponse = {
-        claude: {
-          response: streamingTextRef.current.claude || null,
+      // Build finalResponses dynamically for all providers
+      const finalResponses = {} as ChatResponse;
+      for (const p of ALL_PROVIDERS) {
+        finalResponses[p] = {
+          response: streamingTextRef.current[p] || null,
           error: null,
-          duration: durationsRef.current.claude,
-          usage: usageRef.current.claude,
-        },
-        openai: {
-          response: streamingTextRef.current.openai || null,
-          error: null,
-          duration: durationsRef.current.openai,
-          usage: usageRef.current.openai,
-        },
-        gemini: {
-          response: streamingTextRef.current.gemini || null,
-          error: null,
-          duration: durationsRef.current.gemini,
-          usage: usageRef.current.gemini,
-        },
-      };
+          duration: durationsRef.current[p],
+          usage: usageRef.current[p],
+        };
+      }
 
       setHistory(prev => [...prev, {
         userMessage: prompt,
@@ -253,11 +255,10 @@ export function useChat() {
       // If setting this as winner, clear other winners for this turn
       let updatedRatings: TurnRatings;
       if (rating.isWinner) {
-        updatedRatings = {
-          claude: { ...currentRatings.claude, isWinner: provider === 'claude' && rating.isWinner },
-          openai: { ...currentRatings.openai, isWinner: provider === 'openai' && rating.isWinner },
-          gemini: { ...currentRatings.gemini, isWinner: provider === 'gemini' && rating.isWinner },
-        };
+        updatedRatings = makeProviderRecord(() => ({ ...DEFAULT_RATING }));
+        for (const p of ALL_PROVIDERS) {
+          updatedRatings[p] = { ...currentRatings[p], isWinner: p === provider && rating.isWinner };
+        }
         updatedRatings[provider] = rating;
       } else {
         updatedRatings = {
@@ -277,17 +278,14 @@ export function useChat() {
 
   // Calculate rating stats from history
   const ratingStats = useMemo(() => {
-    const stats = {
-      claude: { wins: 0, totalStars: 0, totalRated: 0 },
-      openai: { wins: 0, totalStars: 0, totalRated: 0 },
-      gemini: { wins: 0, totalStars: 0, totalRated: 0 },
-    };
+    const stats = makeProviderRecord(() => ({ wins: 0, totalStars: 0, totalRated: 0 }));
 
     for (const turn of history) {
       if (!turn.ratings) continue;
 
-      for (const provider of ['claude', 'openai', 'gemini'] as LLMProvider[]) {
+      for (const provider of ALL_PROVIDERS) {
         const rating = turn.ratings[provider];
+        if (!rating) continue;
         if (rating.isWinner) {
           stats[provider].wins++;
         }
@@ -298,23 +296,15 @@ export function useChat() {
       }
     }
 
-    return {
-      claude: {
-        wins: stats.claude.wins,
-        avgStars: stats.claude.totalRated > 0 ? stats.claude.totalStars / stats.claude.totalRated : 0,
-        totalRated: stats.claude.totalRated,
-      },
-      openai: {
-        wins: stats.openai.wins,
-        avgStars: stats.openai.totalRated > 0 ? stats.openai.totalStars / stats.openai.totalRated : 0,
-        totalRated: stats.openai.totalRated,
-      },
-      gemini: {
-        wins: stats.gemini.wins,
-        avgStars: stats.gemini.totalRated > 0 ? stats.gemini.totalStars / stats.gemini.totalRated : 0,
-        totalRated: stats.gemini.totalRated,
-      },
-    };
+    const result = makeProviderRecord(() => ({ wins: 0, avgStars: 0, totalRated: 0 }));
+    for (const p of ALL_PROVIDERS) {
+      result[p] = {
+        wins: stats[p].wins,
+        avgStars: stats[p].totalRated > 0 ? stats[p].totalStars / stats[p].totalRated : 0,
+        totalRated: stats[p].totalRated,
+      };
+    }
+    return result;
   }, [history]);
 
   return {

@@ -46,6 +46,18 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Provider availability - which API keys are configured
+app.get('/api/providers', (_req, res) => {
+  res.json({
+    claude: !!process.env.ANTHROPIC_API_KEY,
+    openai: !!process.env.OPENAI_API_KEY,
+    gemini: !!process.env.GOOGLE_AI_API_KEY,
+    xai: !!process.env.XAI_API_KEY,
+    groq: !!process.env.GROQ_API_KEY,
+    perplexity: !!process.env.PERPLEXITY_API_KEY,
+  });
+});
+
 // API routes
 app.use('/api/auth', authRouter);
 app.use('/api/chat', chatRouter);

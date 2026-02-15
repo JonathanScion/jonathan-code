@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { ResponseRating } from '../types';
+import type { ResponseRating, LLMProvider } from '../types';
+import { PROVIDER_INFO } from '../types';
 
 interface RatingControlsProps {
   rating: ResponseRating;
@@ -108,35 +109,28 @@ export function RatingControls({
 
 // Summary stats component
 interface RatingStatsProps {
-  stats: {
-    claude: { wins: number; avgStars: number; totalRated: number };
-    openai: { wins: number; avgStars: number; totalRated: number };
-    gemini: { wins: number; avgStars: number; totalRated: number };
-  };
+  stats: Record<LLMProvider, { wins: number; avgStars: number; totalRated: number }>;
+  enabledProviders: LLMProvider[];
 }
 
-export function RatingStats({ stats }: RatingStatsProps) {
-  const providers = [
-    { key: 'claude' as const, name: 'Claude', color: 'text-orange-400' },
-    { key: 'openai' as const, name: 'ChatGPT', color: 'text-green-400' },
-    { key: 'gemini' as const, name: 'Gemini', color: 'text-blue-400' },
-  ];
+export function RatingStats({ stats, enabledProviders }: RatingStatsProps) {
+  const totalWins = enabledProviders.reduce((sum, p) => sum + stats[p].wins, 0);
+  const anyRated = enabledProviders.some(p => stats[p].totalRated > 0);
 
-  const totalWins = stats.claude.wins + stats.openai.wins + stats.gemini.wins;
-
-  if (totalWins === 0 && stats.claude.totalRated === 0 && stats.openai.totalRated === 0 && stats.gemini.totalRated === 0) {
+  if (totalWins === 0 && !anyRated) {
     return null;
   }
 
   return (
     <div className="flex items-center gap-4 text-xs">
-      {providers.map(({ key, name, color }) => {
+      {enabledProviders.map((key) => {
+        const info = PROVIDER_INFO[key];
         const { wins, avgStars, totalRated } = stats[key];
         const winPercent = totalWins > 0 ? Math.round((wins / totalWins) * 100) : 0;
 
         return (
           <div key={key} className="flex items-center gap-2">
-            <span className={color}>{name}:</span>
+            <span className={info.textColor}>{info.name}:</span>
             {wins > 0 && (
               <span className="text-yellow-400" title={`${wins} wins`}>
                 🏆 {winPercent}%

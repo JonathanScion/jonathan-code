@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { queryClaude, streamClaude } from '../services/claude.js';
 import { queryChatGPT, streamChatGPT } from '../services/openai.js';
 import { queryGemini, streamGemini } from '../services/gemini.js';
+import { xaiProvider, groqProvider, perplexityProvider } from '../services/openai-compatible.js';
 import { generateEmbedding, isEmbeddingsEnabled } from '../services/embeddings.js';
 import { queryVectors, isPineconeEnabled, type QueryResult } from '../services/pinecone.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/requireAuth.js';
@@ -81,17 +82,28 @@ interface GeminiRequestParams {
   systemPrompt?: string;
 }
 
+interface OpenAICompatibleRequestParams {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  topK?: number;
+  systemPrompt?: string;
+}
+
+type LLMProvider = 'claude' | 'openai' | 'gemini' | 'xai' | 'groq' | 'perplexity';
+
 interface ChatRequest {
   prompt: string;
   images?: ImageData[];
+  enabledProviders?: LLMProvider[];
   claude?: ClaudeRequestParams;
   openai?: OpenAIRequestParams;
   gemini?: GeminiRequestParams;
-  history?: {
-    claude: Message[];
-    openai: Message[];
-    gemini: Message[];
-  };
+  xai?: OpenAICompatibleRequestParams;
+  groq?: OpenAICompatibleRequestParams;
+  perplexity?: OpenAICompatibleRequestParams;
+  history?: Record<string, Message[]>;
   useRag?: boolean;
   ragTopK?: number;
   ragCollectionId?: string;
@@ -114,10 +126,42 @@ interface ServiceResponse {
   usage: TokenUsage;
 }
 
+interface StreamResult {
+  type: 'chunk' | 'usage';
+  data: string | TokenUsage;
+}
+
+// Provider dispatch: maps provider key to query/stream functions
+type ProviderQueryFn = (params: any) => Promise<ServiceResponse>;
+type ProviderStreamFn = (params: any) => AsyncGenerator<StreamResult, void, unknown>;
+
+interface ProviderDispatch {
+  query: ProviderQueryFn;
+  stream: ProviderStreamFn;
+}
+
+const PROVIDER_DISPATCH: Record<LLMProvider, ProviderDispatch> = {
+  claude: { query: queryClaude, stream: streamClaude },
+  openai: { query: queryChatGPT, stream: streamChatGPT },
+  gemini: { query: queryGemini, stream: streamGemini },
+  xai: { query: xaiProvider.query, stream: xaiProvider.stream },
+  groq: { query: groqProvider.query, stream: groqProvider.stream },
+  perplexity: { query: perplexityProvider.query, stream: perplexityProvider.stream },
+};
+
+const DEFAULT_ENABLED: LLMProvider[] = ['claude', 'openai', 'gemini'];
+
 chatRouter.post('/', async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const userId = authReq.user!.userId;
-  const { prompt, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5, ragCollectionId } = req.body as ChatRequest;
+  const {
+    prompt,
+    enabledProviders = DEFAULT_ENABLED,
+    claude = {}, openai = {}, gemini = {},
+    xai = {}, groq = {}, perplexity = {},
+    history,
+    useRag = false, ragTopK = 5, ragCollectionId,
+  } = req.body as ChatRequest;
 
   if (!prompt) {
     res.status(400).json({ error: 'Prompt is required' });
@@ -138,6 +182,8 @@ chatRouter.post('/', async (req: Request, res: Response) => {
   }
 
   const augmentedPrompt = injectRagContext(prompt, ragContext);
+
+  const providerParams: Record<string, any> = { claude, openai, gemini, xai, groq, perplexity };
 
   const executeWithTiming = async (
     fn: () => Promise<ServiceResponse>
@@ -161,22 +207,29 @@ chatRouter.post('/', async (req: Request, res: Response) => {
     }
   };
 
-  const [claudeResult, openaiResult, geminiResult] = await Promise.all([
-    executeWithTiming(
-      () => queryClaude({ prompt: augmentedPrompt, ...claude, messages: history?.claude })
-    ),
-    executeWithTiming(
-      () => queryChatGPT({ prompt: augmentedPrompt, ...openai, messages: history?.openai })
-    ),
-    executeWithTiming(
-      () => queryGemini({ prompt: augmentedPrompt, ...gemini, messages: history?.gemini })
-    ),
-  ]);
+  // Run all enabled providers in parallel
+  const results: Record<string, LLMResponse> = {};
+  const promises = enabledProviders.map(async (provider) => {
+    const dispatch = PROVIDER_DISPATCH[provider];
+    if (!dispatch) return;
+    const params = providerParams[provider] || {};
+    results[provider] = await executeWithTiming(
+      () => dispatch.query({ prompt: augmentedPrompt, ...params, messages: history?.[provider] })
+    );
+  });
+
+  await Promise.all(promises);
+
+  // Fill in empty responses for disabled providers
+  const allProviders: LLMProvider[] = ['claude', 'openai', 'gemini', 'xai', 'groq', 'perplexity'];
+  for (const p of allProviders) {
+    if (!results[p]) {
+      results[p] = { response: null, error: null, duration: 0 };
+    }
+  }
 
   res.json({
-    claude: claudeResult,
-    openai: openaiResult,
-    gemini: geminiResult,
+    ...results,
     ragContext: useRag ? ragResults : undefined,
   });
 });
@@ -185,7 +238,14 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 chatRouter.post('/stream', async (req: Request, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const userId = authReq.user!.userId;
-  const { prompt, images, claude = {}, openai = {}, gemini = {}, history, useRag = false, ragTopK = 5, ragCollectionId } = req.body as ChatRequest;
+  const {
+    prompt, images,
+    enabledProviders = DEFAULT_ENABLED,
+    claude = {}, openai = {}, gemini = {},
+    xai = {}, groq = {}, perplexity = {},
+    history,
+    useRag = false, ragTopK = 5, ragCollectionId,
+  } = req.body as ChatRequest;
 
   if (!prompt && (!images || images.length === 0)) {
     res.status(400).json({ error: 'Prompt or images are required' });
@@ -218,35 +278,32 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
     res.write(`data: ${JSON.stringify({ type: 'rag', data: ragResults })}\n\n`);
   }
 
-  interface StreamResult {
-    type: 'chunk' | 'usage';
-    data: string | TokenUsage;
-  }
-
   const sendEvent = (provider: string, type: 'chunk' | 'done' | 'error' | 'usage', data: string | TokenUsage) => {
     res.write(`data: ${JSON.stringify({ provider, type, data })}\n\n`);
   };
 
-  const startTimes: Record<string, number> = {
-    claude: Date.now(),
-    openai: Date.now(),
-    gemini: Date.now(),
-  };
+  const providerParams: Record<string, any> = { claude, openai, gemini, xai, groq, perplexity };
 
-  // Stream from all providers concurrently
-  const streamProvider = async (
-    name: string,
-    streamFn: () => AsyncGenerator<StreamResult, void, unknown>
-  ) => {
+  // Stream from all enabled providers concurrently
+  const streamProvider = async (name: string) => {
+    const dispatch = PROVIDER_DISPATCH[name as LLMProvider];
+    if (!dispatch) return;
+    const params = providerParams[name] || {};
+    const startTime = Date.now();
     try {
-      for await (const result of streamFn()) {
+      for await (const result of dispatch.stream({
+        prompt: augmentedPrompt,
+        images: (name === 'claude' || name === 'openai' || name === 'gemini') ? images : undefined,
+        ...params,
+        messages: history?.[name],
+      })) {
         if (result.type === 'chunk') {
           sendEvent(name, 'chunk', result.data as string);
         } else if (result.type === 'usage') {
           sendEvent(name, 'usage', result.data as TokenUsage);
         }
       }
-      const duration = Date.now() - startTimes[name];
+      const duration = Date.now() - startTime;
       sendEvent(name, 'done', String(duration));
     } catch (error) {
       const err = error as Error;
@@ -254,11 +311,7 @@ chatRouter.post('/stream', async (req: Request, res: Response) => {
     }
   };
 
-  await Promise.all([
-    streamProvider('claude', () => streamClaude({ prompt: augmentedPrompt, images, ...claude, messages: history?.claude })),
-    streamProvider('openai', () => streamChatGPT({ prompt: augmentedPrompt, images, ...openai, messages: history?.openai })),
-    streamProvider('gemini', () => streamGemini({ prompt: augmentedPrompt, images, ...gemini, messages: history?.gemini })),
-  ]);
+  await Promise.all(enabledProviders.map(p => streamProvider(p)));
 
   res.write('data: [DONE]\n\n');
   res.end();

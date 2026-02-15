@@ -69,7 +69,12 @@
       "Bash(powershell.exe -NoProfile -Command \"Remove-Item -Force hostinger-backend.zip -ErrorAction SilentlyContinue; Compress-Archive -Path ''hostinger-deploy\\\\server.js'',''hostinger-deploy\\\\server.bundle.mjs'',''hostinger-deploy\\\\package.json'',''hostinger-deploy\\\\.env'',''hostinger-deploy\\\\config.js'',''hostinger-deploy\\\\logs'',''hostinger-deploy\\\\uploads'' -DestinationPath ''hostinger-backend.zip'' -Force\")",
       "WebFetch(domain:gibs.earthdata.nasa.gov)",
       "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)",
-      "Bash(zip:*)"
+      "Bash(zip:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx vite build)",
+      "Bash(psql:*)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U postgres -c \"SELECT 1;\")",
+      "Bash(PGPASSWORD=postgres \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)"
     ]
   }
 }

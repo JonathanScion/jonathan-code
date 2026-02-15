@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useChat } from '../hooks/useChat';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, getAuthHeaders } from '../contexts/AuthContext';
 import { ParameterControls } from '../components/ParameterControls';
 import { PromptTemplates } from '../components/PromptTemplates';
 import { DocumentManager } from '../components/DocumentManager';
 import { ChatInput } from '../components/ChatInput';
 import { RatingControls, RatingStats } from '../components/RatingControls';
-import type { LLMProvider, LLMResponse, ResponseRating, RagResult } from '../types';
-import { DEFAULT_RATING, calculateCost } from '../types';
+import { downloadAgentSpec, downloadAgentSpecZip } from '../utils/export';
+import type { RagInfo } from '../utils/export';
+import type { LLMProvider, LLMResponse, ResponseRating, RagResult, Collection, DocumentInfo } from '../types';
+import { DEFAULT_RATING, calculateCost, ALL_PROVIDERS, PROVIDER_INFO } from '../types';
+
+const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 // Response panel with streaming support
 interface StreamingResponsePanelProps {
@@ -134,6 +138,47 @@ function RagResultsDisplay({ results }: { results: RagResult[] }) {
   );
 }
 
+// Provider Toggle component
+function ProviderToggle({
+  enabledProviders,
+  availableProviders,
+  onToggle,
+}: {
+  enabledProviders: LLMProvider[];
+  availableProviders: Record<LLMProvider, boolean>;
+  onToggle: (provider: LLMProvider) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <span className="text-xs text-gray-400 mr-1">Providers:</span>
+      {ALL_PROVIDERS.map((provider) => {
+        const info = PROVIDER_INFO[provider];
+        const isEnabled = enabledProviders.includes(provider);
+        const hasKey = availableProviders[provider];
+
+        return (
+          <button
+            key={provider}
+            onClick={() => hasKey && onToggle(provider)}
+            disabled={!hasKey}
+            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
+              isEnabled
+                ? `${info.color} text-white`
+                : hasKey
+                ? 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
+            } ${isEnabled ? '' : hasKey ? '' : 'line-through'}`}
+            title={hasKey ? (isEnabled ? `Disable ${info.name}` : `Enable ${info.name}`) : `${info.name} (no API key)`}
+          >
+            {info.name}
+            {!hasKey && <span className="ml-1 text-gray-600 no-underline">(no key)</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // User menu dropdown
 function UserMenu() {
   const { user, logout, deleteAccount } = useAuth();
@@ -207,6 +252,128 @@ function UserMenu() {
   );
 }
 
+// Export Spec button with dropdown for .md / .zip
+function ExportSpecButton({
+  disabled,
+  ragEnabled,
+  ragCollectionId,
+  onExportMd,
+  onExportZip,
+}: {
+  disabled: boolean;
+  ragEnabled: boolean;
+  ragCollectionId: string | null;
+  onExportMd: () => void;
+  onExportZip: (ragInfo: RagInfo) => Promise<void>;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportZip = async () => {
+    setIsOpen(false);
+    setIsExporting(true);
+    try {
+      // Fetch collection name and documents list
+      const headers = getAuthHeaders();
+      const collectionId = ragCollectionId || 'default';
+
+      const [collectionsRes, docsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/rag/collections`, { headers }),
+        fetch(`${API_BASE}/api/rag/documents?collectionId=${collectionId}`, { headers }),
+      ]);
+
+      let collectionName = 'default';
+      if (collectionsRes.ok) {
+        const collections: Collection[] = await collectionsRes.json();
+        const match = collections.find(c => c.id === collectionId);
+        if (match) collectionName = match.name;
+      }
+
+      let documents: { id: string; originalName: string }[] = [];
+      if (docsRes.ok) {
+        const docs: DocumentInfo[] = await docsRes.json();
+        documents = docs.map(d => ({ id: d.id, originalName: d.originalName }));
+      }
+
+      await onExportZip({ collectionName, documents, topK: 5 });
+    } catch {
+      // Silently handle errors — zip just won't include docs
+      onExportMd();
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  if (!ragEnabled) {
+    // No RAG — simple button, no dropdown
+    return (
+      <button
+        onClick={onExportMd}
+        disabled={disabled}
+        className={`px-3 py-1.5 text-sm rounded transition-colors ${
+          !disabled
+            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+        }`}
+        title="Export winning provider config as agent spec"
+      >
+        Export Spec
+      </button>
+    );
+  }
+
+  // RAG enabled — dropdown with .md and .zip options
+  return (
+    <div className="relative">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled || isExporting}
+        className={`px-3 py-1.5 text-sm rounded transition-colors flex items-center gap-1 ${
+          !disabled
+            ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+        }`}
+        title="Export winning provider config as agent spec"
+      >
+        {isExporting ? 'Exporting...' : 'Export Spec'}
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 mt-1 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-20">
+            <button
+              onClick={() => { setIsOpen(false); onExportMd(); }}
+              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 rounded-t-lg transition-colors"
+            >
+              Export .md
+              <span className="block text-xs text-gray-500">Agent spec only</span>
+            </button>
+            <button
+              onClick={handleExportZip}
+              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-gray-700 rounded-b-lg transition-colors"
+            >
+              Export .zip
+              <span className="block text-xs text-gray-500">Agent spec + RAG documents</span>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Dynamic grid class based on provider count
+function getGridClass(count: number): string {
+  if (count <= 1) return 'grid-cols-1';
+  if (count === 2) return 'grid-cols-1 lg:grid-cols-2';
+  if (count === 3) return 'grid-cols-1 lg:grid-cols-3';
+  return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+}
+
 export function Chat() {
   const {
     params,
@@ -233,6 +400,21 @@ export function Chat() {
   const [showDocuments, setShowDocuments] = useState(false);
   const [ragEnabled, setRagEnabled] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [availableProviders, setAvailableProviders] = useState<Record<LLMProvider, boolean>>(() => {
+    const rec = {} as Record<LLMProvider, boolean>;
+    for (const p of ALL_PROVIDERS) rec[p] = true; // assume available until fetched
+    return rec;
+  });
+
+  // Fetch available providers on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/providers`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) setAvailableProviders(data);
+      })
+      .catch(() => {}); // silently ignore if backend unavailable
+  }, []);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -282,18 +464,35 @@ export function Chat() {
     setPrompt(templatePrompt);
   }, []);
 
+  const handleProviderToggle = useCallback((provider: LLMProvider) => {
+    setParams(prev => {
+      const current = prev.enabledProviders;
+      const isEnabled = current.includes(provider);
+      // Must keep at least 1 provider
+      if (isEnabled && current.length <= 1) return prev;
+      const next = isEnabled
+        ? current.filter(p => p !== provider)
+        : [...current, provider];
+      return { ...prev, enabledProviders: next };
+    });
+  }, [setParams]);
+
   // Check if any turn has a winner
   const getTurnHasWinner = (turnIndex: number): boolean => {
     const turn = history[turnIndex];
     if (!turn?.ratings) return false;
-    return turn.ratings.claude.isWinner || turn.ratings.openai.isWinner || turn.ratings.gemini.isWinner;
+    return ALL_PROVIDERS.some(p => turn.ratings![p]?.isWinner);
   };
 
-  const providers: { key: LLMProvider; title: string; color: string; model: string }[] = [
-    { key: 'claude', title: 'Claude', color: 'bg-orange-600', model: params.claude.model },
-    { key: 'openai', title: 'ChatGPT', color: 'bg-green-600', model: params.openai.model },
-    { key: 'gemini', title: 'Gemini', color: 'bg-blue-600', model: params.gemini.model },
-  ];
+  // Build active providers list from enabled + info
+  const activeProviders = params.enabledProviders.map(key => ({
+    key,
+    title: PROVIDER_INFO[key].name,
+    color: PROVIDER_INFO[key].color,
+    model: params[key].model,
+  }));
+
+  const gridClass = getGridClass(activeProviders.length);
 
   return (
     <div className={`min-h-screen flex flex-col ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-100 text-gray-900'}`}>
@@ -302,7 +501,7 @@ export function Chat() {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-bold text-white">LLM Chat Tester</h1>
-            <RatingStats stats={ratingStats} />
+            <RatingStats stats={ratingStats} enabledProviders={params.enabledProviders} />
           </div>
           <div className="flex items-center gap-2">
             {/* Theme toggle */}
@@ -330,6 +529,19 @@ export function Chat() {
             >
               Templates
             </button>
+            <ExportSpecButton
+              disabled={history.length === 0}
+              ragEnabled={ragEnabled && useRag}
+              ragCollectionId={ragCollectionId}
+              onExportMd={() => downloadAgentSpec(params, history, ratingStats)}
+              onExportZip={async (ragInfo) => {
+                await downloadAgentSpecZip(
+                  params, history, ratingStats, ragInfo,
+                  API_BASE,
+                  { ...getAuthHeaders() },
+                );
+              }}
+            />
             {ragEnabled && (
               <>
                 <button
@@ -365,6 +577,13 @@ export function Chat() {
           </div>
         </div>
       </header>
+
+      {/* Provider Toggle */}
+      <ProviderToggle
+        enabledProviders={params.enabledProviders}
+        availableProviders={availableProviders}
+        onToggle={handleProviderToggle}
+      />
 
       {/* Parameter Controls */}
       {showParams && (
@@ -405,8 +624,11 @@ export function Chat() {
 
             {history.length === 0 && !isStreaming && (
               <div className="text-center py-12 text-gray-500">
-                <p className="text-lg mb-2">Start a conversation with all three LLMs</p>
-                <p className="text-sm">Enter a prompt below to compare responses from Claude, ChatGPT, and Gemini</p>
+                <p className="text-lg mb-2">Start a conversation with LLMs</p>
+                <p className="text-sm">
+                  Enter a prompt below to compare responses from{' '}
+                  {activeProviders.map(p => p.title).join(', ')}
+                </p>
               </div>
             )}
 
@@ -441,22 +663,26 @@ export function Chat() {
                   <RagResultsDisplay results={lastRagResults} />
                 )}
 
-                {/* Provider responses */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {providers.map(({ key, title, color, model }) => (
-                    <StreamingResponsePanel
-                      key={key}
-                      title={title}
-                      model={model}
-                      response={turn.responses[key]}
-                      streamingText=""
-                      status="done"
-                      color={color}
-                      rating={turn.ratings?.[key] || DEFAULT_RATING}
-                      hasWinner={getTurnHasWinner(turnIndex)}
-                      onRatingChange={(rating) => updateRating(turnIndex, key, rating)}
-                    />
-                  ))}
+                {/* Provider responses - show all that have data */}
+                <div className={`grid ${gridClass} gap-4`}>
+                  {activeProviders.map(({ key, title, color, model }) => {
+                    const resp = turn.responses[key];
+                    if (!resp || (!resp.response && !resp.error && resp.duration === 0)) return null;
+                    return (
+                      <StreamingResponsePanel
+                        key={key}
+                        title={title}
+                        model={model}
+                        response={resp}
+                        streamingText=""
+                        status="done"
+                        color={color}
+                        rating={turn.ratings?.[key] || DEFAULT_RATING}
+                        hasWinner={getTurnHasWinner(turnIndex)}
+                        onRatingChange={(rating) => updateRating(turnIndex, key, rating)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -484,8 +710,8 @@ export function Chat() {
                 )}
 
                 {/* Streaming panels */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                  {providers.map(({ key, title, color, model }) => (
+                <div className={`grid ${gridClass} gap-4`}>
+                  {activeProviders.map(({ key, title, color, model }) => (
                     <StreamingResponsePanel
                       key={key}
                       title={title}

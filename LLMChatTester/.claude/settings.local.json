@@ -7,7 +7,10 @@
       "WebSearch",
       "Bash(ls:*)",
       "Bash(powershell -Command \"Compress-Archive -Path * -DestinationPath ''../deploy.zip'' -Force\")",
-      "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)"
+      "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)",
+      "WebFetch(domain:docs.x.ai)",
+      "WebFetch(domain:console.groq.com)",
+      "WebFetch(domain:docs.perplexity.ai)"
     ]
   }
 }

@@ -1,5 +1,30 @@
 // Common types
-export type LLMProvider = 'claude' | 'openai' | 'gemini';
+export type LLMProvider = 'claude' | 'openai' | 'gemini' | 'xai' | 'groq' | 'perplexity';
+
+export const ALL_PROVIDERS: LLMProvider[] = ['claude', 'openai', 'gemini', 'xai', 'groq', 'perplexity'];
+
+export interface ProviderMeta {
+  name: string;
+  color: string;        // Tailwind bg class e.g. 'bg-orange-600'
+  textColor: string;    // Tailwind text class e.g. 'text-orange-400'
+  apiKeyEnv: string;    // env var name checked on backend
+}
+
+export const PROVIDER_INFO: Record<LLMProvider, ProviderMeta> = {
+  claude:     { name: 'Claude',      color: 'bg-orange-600',  textColor: 'text-orange-400', apiKeyEnv: 'ANTHROPIC_API_KEY' },
+  openai:     { name: 'ChatGPT',     color: 'bg-green-600',   textColor: 'text-green-400',  apiKeyEnv: 'OPENAI_API_KEY' },
+  gemini:     { name: 'Gemini',      color: 'bg-blue-600',    textColor: 'text-blue-400',   apiKeyEnv: 'GOOGLE_AI_API_KEY' },
+  xai:        { name: 'Grok',        color: 'bg-gray-600',    textColor: 'text-gray-300',   apiKeyEnv: 'XAI_API_KEY' },
+  groq:       { name: 'Llama (Groq)',color: 'bg-indigo-600',  textColor: 'text-indigo-400', apiKeyEnv: 'GROQ_API_KEY' },
+  perplexity: { name: 'Perplexity',  color: 'bg-teal-600',    textColor: 'text-teal-400',   apiKeyEnv: 'PERPLEXITY_API_KEY' },
+};
+
+/** Create a Record keyed by every LLMProvider with the same initial value */
+export function makeProviderRecord<T>(init: () => T): Record<LLMProvider, T> {
+  const rec = {} as Record<LLMProvider, T>;
+  for (const p of ALL_PROVIDERS) rec[p] = init();
+  return rec;
+}
 
 // Prompt template types
 export interface PromptTemplate {
@@ -99,13 +124,27 @@ export interface GeminiParams {
   systemPrompt?: string;
 }
 
+// OpenAI-compatible provider params (xAI, Groq, Perplexity)
+export interface OpenAICompatibleParams {
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  topP?: number;
+  topK?: number;
+  systemPrompt?: string;
+}
+
 // Combined chat params
 export interface ChatParams {
   sharedSystemPrompt: string;
   useSharedSystemPrompt: boolean;
+  enabledProviders: LLMProvider[];
   claude: ClaudeParams;
   openai: OpenAIParams;
   gemini: GeminiParams;
+  xai: OpenAICompatibleParams;
+  groq: OpenAICompatibleParams;
+  perplexity: OpenAICompatibleParams;
 }
 
 // Token usage types
@@ -122,23 +161,9 @@ export interface LLMResponse {
   usage?: TokenUsage;
 }
 
-export interface StreamingState {
-  claude: string;
-  openai: string;
-  gemini: string;
-}
-
-export interface StreamingStatus {
-  claude: 'idle' | 'streaming' | 'done' | 'error';
-  openai: 'idle' | 'streaming' | 'done' | 'error';
-  gemini: 'idle' | 'streaming' | 'done' | 'error';
-}
-
-export interface ChatResponse {
-  claude: LLMResponse;
-  openai: LLMResponse;
-  gemini: LLMResponse;
-}
+export type StreamingState = Record<LLMProvider, string>;
+export type StreamingStatus = Record<LLMProvider, 'idle' | 'streaming' | 'done' | 'error'>;
+export type ChatResponse = Record<LLMProvider, LLMResponse>;
 
 // Rating types
 export interface ResponseRating {
@@ -147,11 +172,7 @@ export interface ResponseRating {
   notes: string;
 }
 
-export interface TurnRatings {
-  claude: ResponseRating;
-  openai: ResponseRating;
-  gemini: ResponseRating;
-}
+export type TurnRatings = Record<LLMProvider, ResponseRating>;
 
 export const DEFAULT_RATING: ResponseRating = {
   stars: 0,
@@ -159,11 +180,7 @@ export const DEFAULT_RATING: ResponseRating = {
   notes: '',
 };
 
-export const DEFAULT_TURN_RATINGS: TurnRatings = {
-  claude: { ...DEFAULT_RATING },
-  openai: { ...DEFAULT_RATING },
-  gemini: { ...DEFAULT_RATING },
-};
+export const DEFAULT_TURN_RATINGS: TurnRatings = makeProviderRecord(() => ({ ...DEFAULT_RATING }));
 
 export interface ConversationTurn {
   userMessage: string;
@@ -184,6 +201,7 @@ export const DEFAULT_GEMINI_SAFETY: GeminiSafetySettings = {
 export const DEFAULT_PARAMS: ChatParams = {
   sharedSystemPrompt: '',
   useSharedSystemPrompt: true,
+  enabledProviders: ['claude', 'openai', 'gemini'],
   claude: {
     model: 'claude-sonnet-4-20250514',
     temperature: 0.7,
@@ -214,12 +232,39 @@ export const DEFAULT_PARAMS: ChatParams = {
     safetySettings: DEFAULT_GEMINI_SAFETY,
     systemPrompt: '',
   },
+  xai: {
+    model: 'grok-3-mini-beta',
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: undefined,
+    topK: undefined,
+    systemPrompt: '',
+  },
+  groq: {
+    model: 'llama-3.3-70b-versatile',
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: undefined,
+    topK: undefined,
+    systemPrompt: '',
+  },
+  perplexity: {
+    model: 'sonar',
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: undefined,
+    topK: undefined,
+    systemPrompt: '',
+  },
 };
 
-export const MODEL_OPTIONS = {
+export const MODEL_OPTIONS: Record<LLMProvider, string[]> = {
   claude: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  xai: ['grok-3-mini-beta', 'grok-3-beta', 'grok-2'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+  perplexity: ['sonar', 'sonar-pro', 'sonar-reasoning'],
 };
 
 export const SAFETY_LEVEL_OPTIONS: GeminiSafetyLevel[] = [
@@ -244,6 +289,18 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'gemini-2.5-flash': { input: 0.15, output: 0.6 },
   'gemini-2.5-pro': { input: 1.25, output: 10 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  // xAI (Grok) models
+  'grok-3-mini-beta': { input: 0.3, output: 0.5 },
+  'grok-3-beta': { input: 3, output: 15 },
+  'grok-2': { input: 2, output: 10 },
+  // Groq (Llama) models
+  'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
+  'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
+  'mixtral-8x7b-32768': { input: 0.24, output: 0.24 },
+  // Perplexity models
+  'sonar': { input: 1, output: 1 },
+  'sonar-pro': { input: 3, output: 15 },
+  'sonar-reasoning': { input: 1, output: 5 },
 };
 
 export function calculateCost(model: string, usage?: TokenUsage): number {
