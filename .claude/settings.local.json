@@ -74,7 +74,16 @@
       "Bash(npx vite build)",
       "Bash(psql:*)",
       "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U postgres -c \"SELECT 1;\")",
-      "Bash(PGPASSWORD=postgres \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)"
+      "Bash(PGPASSWORD=postgres \"/c/Program Files/PostgreSQL/18/bin/psql.exe\":*)",
+      "Bash(npx esbuild:*)",
+      "Bash(npm run build:deploy:*)",
+      "Bash(if exist node_modules rmdir /s /q node_modules)",
+      "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$zip.Entries | Where-Object { $_.FullName -notlike \"node_modules*\" } | Select-Object FullName | Format-Table -AutoSize\n$zip.Dispose\\(\\)\nPS1)",
+      "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$entry = $zip.GetEntry\\(\"package.json\"\\)\n$stream = $entry.Open\\(\\)\n$reader = New-Object System.IO.StreamReader\\($stream\\)\n$content = $reader.ReadToEnd\\(\\)\n$reader.Close\\(\\)\n$stream.Close\\(\\)\n$zip.Dispose\\(\\)\nWrite-Host \"Length: $\\($content.Length\\)\"\nWrite-Host \"Content:\"\nWrite-Host $content\nPS1)",
+      "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$zip.Entries | Select-Object -First 15 FullName | Format-Table -AutoSize\n$zip.Dispose\\(\\)\nPS1)",
+      "Bash(tar:*)",
+      "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$zip.Entries | Select-Object FullName | Format-Table -AutoSize\n$zip.Dispose\\(\\)\nPS1)",
+      "Bash(set VITE_API_URL=https://api-llmtester.jonathanscode.io)"
     ]
   }
 }
