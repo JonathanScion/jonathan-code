@@ -24,7 +24,7 @@ export function useChat() {
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>(INITIAL_STREAMING_STATUS);
   const [isStreaming, setIsStreaming] = useState(false);
   const [useRag, setUseRag] = useState(false);
-  const [ragCollectionId, setRagCollectionId] = useState<string | null>('default');
+  const [ragCollectionId, setRagCollectionId] = useState<string | null>(null);
   const [lastRagResults, setLastRagResults] = useState<RagResult[]>([]);
   const durationsRef = useRef<Record<LLMProvider, number>>(makeProviderRecord(() => 0));
   const streamingTextRef = useRef<StreamingState>(INITIAL_STREAMING_STATE);

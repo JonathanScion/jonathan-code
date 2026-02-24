@@ -275,23 +275,30 @@ function ExportSpecButton({
     try {
       // Fetch collection name and documents list
       const headers = getAuthHeaders();
-      const collectionId = ragCollectionId || 'default';
+      const collectionId = ragCollectionId;
+
+      if (!collectionId) {
+        await onExportZip({ collectionName: 'none', documents: [], topK: 5 });
+        return;
+      }
 
       const [collectionsRes, docsRes] = await Promise.all([
         fetch(`${API_BASE}/api/rag/collections`, { headers }),
         fetch(`${API_BASE}/api/rag/documents?collectionId=${collectionId}`, { headers }),
       ]);
 
-      let collectionName = 'default';
+      let collectionName = 'unknown';
       if (collectionsRes.ok) {
-        const collections: Collection[] = await collectionsRes.json();
-        const match = collections.find(c => c.id === collectionId);
+        const data = await collectionsRes.json();
+        const cols: Collection[] = data.collections || data;
+        const match = cols.find(c => c.id === collectionId);
         if (match) collectionName = match.name;
       }
 
       let documents: { id: string; originalName: string }[] = [];
       if (docsRes.ok) {
-        const docs: DocumentInfo[] = await docsRes.json();
+        const data = await docsRes.json();
+        const docs: DocumentInfo[] = data.documents || data;
         documents = docs.map(d => ({ id: d.id, originalName: d.originalName }));
       }
 

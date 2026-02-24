@@ -1,6 +1,7 @@
 import { extractText as extractPdfText } from 'unpdf';
 import mammoth from 'mammoth';
 import path from 'path';
+import { randomUUID } from 'crypto';
 
 // Types
 export interface TextChunk {
@@ -107,7 +108,7 @@ export function chunkText(text: string): TextChunk[] {
   return chunks;
 }
 
-// Generate a unique document ID
+// Generate a unique document ID (UUID for PostgreSQL compatibility)
 export function generateDocumentId(): string {
-  return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return randomUUID();
 }

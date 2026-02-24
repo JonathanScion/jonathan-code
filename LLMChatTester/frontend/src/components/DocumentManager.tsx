@@ -70,8 +70,8 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
       const data = await res.json();
       const cols = data.collections || [];
       setCollections(cols);
-      // Set first collection as active if none selected
-      if (!activeCollectionId && cols.length > 0) {
+      // Set first collection as active if none selected or current selection not found
+      if (cols.length > 0 && (!activeCollectionId || !cols.find((c: Collection) => c.id === activeCollectionId))) {
         setActiveCollectionId(cols[0].id);
       }
     } catch (err) {
@@ -218,8 +218,8 @@ export function DocumentManager({ onRagStatusChange, onCollectionChange, selecte
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const formatDate = (timestamp: number | Date): string => {
-    const date = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
+  const formatDate = (timestamp: number | Date | string): string => {
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
     return date.toLocaleDateString();
   };
 
