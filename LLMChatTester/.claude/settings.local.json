@@ -10,7 +10,11 @@
       "Bash(VITE_API_URL=https://llmtester-api.jonathanscode.io npm run build:*)",
       "WebFetch(domain:docs.x.ai)",
       "WebFetch(domain:console.groq.com)",
-      "WebFetch(domain:docs.perplexity.ai)"
+      "WebFetch(domain:docs.perplexity.ai)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:deploy:*)",
+      "Bash(node:*)",
+      "Bash(python:*)"
     ]
   }
 }

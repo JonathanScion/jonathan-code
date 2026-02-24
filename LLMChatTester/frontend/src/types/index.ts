@@ -8,15 +8,17 @@ export interface ProviderMeta {
   color: string;        // Tailwind bg class e.g. 'bg-orange-600'
   textColor: string;    // Tailwind text class e.g. 'text-orange-400'
   apiKeyEnv: string;    // env var name checked on backend
+  sdkPackage: string;   // npm package name e.g. 'openai'
+  baseURL: string | null; // custom API base URL for OpenAI-compatible providers
 }
 
 export const PROVIDER_INFO: Record<LLMProvider, ProviderMeta> = {
-  claude:     { name: 'Claude',      color: 'bg-orange-600',  textColor: 'text-orange-400', apiKeyEnv: 'ANTHROPIC_API_KEY' },
-  openai:     { name: 'ChatGPT',     color: 'bg-green-600',   textColor: 'text-green-400',  apiKeyEnv: 'OPENAI_API_KEY' },
-  gemini:     { name: 'Gemini',      color: 'bg-blue-600',    textColor: 'text-blue-400',   apiKeyEnv: 'GOOGLE_AI_API_KEY' },
-  xai:        { name: 'Grok',        color: 'bg-gray-600',    textColor: 'text-gray-300',   apiKeyEnv: 'XAI_API_KEY' },
-  groq:       { name: 'Llama (Groq)',color: 'bg-indigo-600',  textColor: 'text-indigo-400', apiKeyEnv: 'GROQ_API_KEY' },
-  perplexity: { name: 'Perplexity',  color: 'bg-teal-600',    textColor: 'text-teal-400',   apiKeyEnv: 'PERPLEXITY_API_KEY' },
+  claude:     { name: 'Claude',      color: 'bg-orange-600',  textColor: 'text-orange-400', apiKeyEnv: 'ANTHROPIC_API_KEY',   sdkPackage: '@anthropic-ai/sdk',     baseURL: null },
+  openai:     { name: 'ChatGPT',     color: 'bg-green-600',   textColor: 'text-green-400',  apiKeyEnv: 'OPENAI_API_KEY',      sdkPackage: 'openai',                baseURL: null },
+  gemini:     { name: 'Gemini',      color: 'bg-blue-600',    textColor: 'text-blue-400',   apiKeyEnv: 'GOOGLE_AI_API_KEY',   sdkPackage: '@google/generative-ai', baseURL: null },
+  xai:        { name: 'Grok',        color: 'bg-gray-600',    textColor: 'text-gray-300',   apiKeyEnv: 'XAI_API_KEY',         sdkPackage: 'openai',                baseURL: 'https://api.x.ai/v1' },
+  groq:       { name: 'Llama (Groq)',color: 'bg-indigo-600',  textColor: 'text-indigo-400', apiKeyEnv: 'GROQ_API_KEY',        sdkPackage: 'openai',                baseURL: 'https://api.groq.com/openai/v1' },
+  perplexity: { name: 'Perplexity',  color: 'bg-teal-600',    textColor: 'text-teal-400',   apiKeyEnv: 'PERPLEXITY_API_KEY',  sdkPackage: 'openai',                baseURL: 'https://api.perplexity.ai' },
 };
 
 /** Create a Record keyed by every LLMProvider with the same initial value */
@@ -225,7 +227,7 @@ export const DEFAULT_PARAMS: ChatParams = {
   gemini: {
     model: 'gemini-2.5-flash',
     temperature: 0.7,
-    maxTokens: 1024,
+    maxTokens: 8192,  // Gemini 2.5 thinking models use internal reasoning tokens that count against this limit
     topK: undefined,
     topP: undefined,
     stopSequences: [],

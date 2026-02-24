@@ -208,6 +208,48 @@ export function downloadMarkdown(history: ConversationTurn[], params: ChatParams
   downloadFile(content, `llm-chat-${timestamp}.md`, 'text/markdown');
 }
 
+// --- Integration Notes (English-language, LLM-consumable) ---
+
+const PROVIDER_NOTES: Record<LLMProvider, string[]> = {
+  claude: [
+    'Uses the Anthropic SDK (`@anthropic-ai/sdk`). The API key is auto-detected from the `ANTHROPIC_API_KEY` environment variable.',
+    'System prompts are passed as a top-level `system` parameter, not as a message in the conversation history.',
+    'Supports streaming via the `messages.stream()` method.',
+  ],
+  openai: [
+    'Uses the OpenAI SDK (`openai`). The API key is auto-detected from the `OPENAI_API_KEY` environment variable.',
+    'System prompts are passed as the first message with role `system`.',
+    'Supports streaming by setting `stream: true` in the request.',
+  ],
+  gemini: [
+    'Uses Google\'s Generative AI SDK (`@google/generative-ai`), which has a different API pattern from OpenAI.',
+    'The API key must be passed to the `GoogleGenerativeAI` constructor; read it from the `GOOGLE_AI_API_KEY` environment variable.',
+    'System prompts are set via `systemInstruction` in the model configuration, not as a message.',
+    'Gemini 2.5 models are "thinking" models — internal reasoning tokens count against the `maxOutputTokens` budget. Set this value significantly higher than the expected visible output length (e.g., 8192+ instead of 1024).',
+    'Supports streaming via `sendMessageStream()`.',
+  ],
+  xai: [
+    'Uses the OpenAI SDK (`openai`) with a custom base URL (`https://api.x.ai/v1`). This is an OpenAI-compatible API.',
+    'The API key must be explicitly provided when creating the client (it is not auto-detected). Read it from the `XAI_API_KEY` environment variable.',
+    'System prompts are passed as the first message with role `system`, following the OpenAI convention.',
+    'Supports streaming by setting `stream: true` in the request.',
+  ],
+  groq: [
+    'Uses the OpenAI SDK (`openai`) with a custom base URL (`https://api.groq.com/openai/v1`). This is an OpenAI-compatible API.',
+    'The API key must be explicitly provided when creating the client. Read it from the `GROQ_API_KEY` environment variable.',
+    'Groq is optimized for fast inference — expect significantly lower latency than other providers.',
+    'System prompts follow the OpenAI convention (first message with role `system`).',
+    'Supports streaming by setting `stream: true` in the request.',
+  ],
+  perplexity: [
+    'Uses the OpenAI SDK (`openai`) with a custom base URL (`https://api.perplexity.ai`). This is an OpenAI-compatible API.',
+    'The API key must be explicitly provided when creating the client. Read it from the `PERPLEXITY_API_KEY` environment variable.',
+    'Perplexity models perform live web searches as part of their response. Responses may include a `citations` array with source URLs — check for this in the API response and surface them to users if applicable.',
+    'System prompts follow the OpenAI convention (first message with role `system`).',
+    'Supports streaming by setting `stream: true` in the request.',
+  ],
+};
+
 // --- Agent Spec Export ---
 
 export interface RagInfo {
@@ -251,14 +293,50 @@ export function exportAgentSpec(
 
   lines.push('# Agent Specification');
   lines.push('');
+  lines.push('## How to Use This Spec');
+  lines.push('This spec is an LLM-readable integration brief. It contains everything an AI coding assistant needs to build a working chatbot integration — provider, model, parameters, system prompt, behavioral examples, and provider-specific quirks. Don\'t implement it manually; give it to your LLM assistant and let it generate the right code for your architecture.');
+  lines.push('');
+  lines.push('**Setup by tool:**');
+  lines.push('- **Claude Code:** Save this file in your repo (e.g., `docs/agent-spec.md`) and reference it in your `CLAUDE.md`. Then ask: *"Build a streaming chat endpoint using the provider spec in docs/agent-spec.md."*');
+  lines.push('- **Cursor / GitHub Copilot:** Drop this file into your project directory so it\'s part of the codebase context. Reference it in your prompt or let the tool pick it up automatically.');
+  lines.push('- **ChatGPT / Claude web:** Paste this file as the first message in a conversation, or add it to a project\'s custom instructions. Then describe your app\'s architecture and ask it to build the integration.');
+  lines.push('');
+  lines.push('The LLM will combine this spec with its knowledge of your codebase, framework, and current best practices to generate the correct integration code.');
+  lines.push('');
 
   // Provider section
   lines.push('## Provider');
   lines.push(`- Provider: ${info.name}`);
-  lines.push(`- Model: ${winnerParams.model}`);
-  lines.push(`- API Key Env Var: ${info.apiKeyEnv}`);
+  lines.push(`- Model: \`${winnerParams.model}\``);
+  lines.push(`- SDK Package: \`${info.sdkPackage}\``);
+  if (info.baseURL) {
+    lines.push(`- API Base URL: \`${info.baseURL}\``);
+  }
+  lines.push(`- API Key Env Var: \`${info.apiKeyEnv}\``);
+  lines.push('');
+
+  // Selection Rationale
+  lines.push('## Selection Rationale');
+  const testedCount = params.enabledProviders.length;
+  const turnCount = history.length;
   if (!hasRatings) {
-    lines.push(`- *Note: No ratings recorded. Using first enabled provider.*`);
+    lines.push(`${testedCount} provider(s) were tested over ${turnCount} conversation turn(s). No ratings were recorded, so the first enabled provider was selected as the default.`);
+  } else {
+    const winnerStats = ratingStats[winner];
+    const runnersUp = params.enabledProviders
+      .filter(p => p !== winner)
+      .map(p => ({ name: PROVIDER_INFO[p].name, ...ratingStats[p] }))
+      .filter(r => r.wins > 0 || r.totalRated > 0);
+
+    lines.push(`${testedCount} providers were compared over ${turnCount} conversation turn(s). **${info.name}** (${winnerParams.model}) was selected with ${winnerStats.wins} win(s) and an average rating of ${winnerStats.avgStars.toFixed(1)}/5 across ${winnerStats.totalRated} rated response(s).`);
+
+    if (runnersUp.length > 0) {
+      lines.push('');
+      lines.push('Runners-up:');
+      for (const r of runnersUp) {
+        lines.push(`- ${r.name}: ${r.wins} win(s), ${r.avgStars.toFixed(1)}/5 avg (${r.totalRated} rated)`);
+      }
+    }
   }
   lines.push('');
 
@@ -301,6 +379,16 @@ export function exportAgentSpec(
   }
   if ('seed' in winnerParams && (winnerParams as any).seed != null) {
     lines.push(`| Seed | ${(winnerParams as any).seed} |`);
+  }
+  lines.push('');
+
+  // Integration Notes
+  lines.push('## Integration Notes');
+  lines.push('This configuration was tested with streaming enabled. Streaming is recommended for responsive user-facing chat experiences.');
+  lines.push('');
+  const notes_list = PROVIDER_NOTES[winner];
+  for (const note of notes_list) {
+    lines.push(`- ${note}`);
   }
   lines.push('');
 

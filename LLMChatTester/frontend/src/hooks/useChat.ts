@@ -193,14 +193,17 @@ export function useChat() {
                 setStreamingStatus(prev => ({ ...prev, [provider]: 'done' }));
               } else if (type === 'error') {
                 setStreamingStatus(prev => ({ ...prev, [provider]: 'error' }));
+                const existing = streamingTextRef.current[provider];
                 streamingTextRef.current = {
                   ...streamingTextRef.current,
-                  [provider]: `Error: ${content as string}`,
+                  [provider]: existing
+                    ? `${existing}\n\n[Error: ${content as string}]`
+                    : `Error: ${content as string}`,
                 };
                 setStreamingText({ ...streamingTextRef.current });
               }
-            } catch {
-              // Ignore parse errors for malformed chunks
+            } catch (e) {
+              console.warn('[SSE] Failed to parse chunk:', data, e);
             }
           }
         }

@@ -1015,6 +1015,7 @@ function isDatabaseEnabled() {
 import { extractText as extractPdfText } from "unpdf";
 import mammoth from "mammoth";
 import path from "path";
+import { randomUUID } from "crypto";
 var CHUNK_SIZE = 1e3;
 var CHUNK_OVERLAP = 200;
 async function extractText(buffer, mimeType, filename) {
@@ -1073,7 +1074,7 @@ function chunkText(text2) {
   return chunks;
 }
 function generateDocumentId() {
-  return `doc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return randomUUID();
 }
 
 // src/services/fileStorage.ts
