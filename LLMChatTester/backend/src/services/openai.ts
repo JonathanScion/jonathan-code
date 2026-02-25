@@ -74,7 +74,7 @@ export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse
   const {
     prompt,
     images,
-    model = 'gpt-4o',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topP,
@@ -85,6 +85,8 @@ export async function queryChatGPT(params: OpenAIParams): Promise<OpenAIResponse
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('OpenAI model not specified');
 
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -149,7 +151,7 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<Strea
   const {
     prompt,
     images,
-    model = 'gpt-4o',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topP,
@@ -159,6 +161,8 @@ export async function* streamChatGPT(params: OpenAIParams): AsyncGenerator<Strea
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('OpenAI model not specified');
 
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,

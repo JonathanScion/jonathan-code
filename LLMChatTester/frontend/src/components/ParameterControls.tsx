@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import type { ChatParams, ClaudeParams, OpenAIParams, GeminiParams, GeminiSafetyLevel, OpenAICompatibleParams, LLMProvider } from '../types';
-import { MODEL_OPTIONS, SAFETY_LEVEL_OPTIONS, PROVIDER_INFO } from '../types';
+import { SAFETY_LEVEL_OPTIONS, PROVIDER_INFO } from '../types';
+import type { ModelOptions } from '../hooks/useModels';
 
 interface ParameterControlsProps {
   params: ChatParams;
   onParamsChange: (params: ChatParams) => void;
+  modelOptions: ModelOptions;
 }
 
 interface AccordionProps {
@@ -229,11 +231,13 @@ function OpenAICompatibleSection({
   params,
   useSharedSystemPrompt,
   onUpdate,
+  modelOptions,
 }: {
   provider: LLMProvider;
   params: OpenAICompatibleParams;
   useSharedSystemPrompt: boolean;
   onUpdate: (updates: Partial<OpenAICompatibleParams>) => void;
+  modelOptions: Record<LLMProvider, string[]>;
 }) {
   return (
     <>
@@ -241,7 +245,7 @@ function OpenAICompatibleSection({
         <SelectField
           label="Model"
           value={params.model}
-          options={MODEL_OPTIONS[provider]}
+          options={modelOptions[provider]}
           onChange={(v) => onUpdate({ model: v })}
         />
         <NumberField
@@ -289,7 +293,7 @@ function OpenAICompatibleSection({
   );
 }
 
-export function ParameterControls({ params, onParamsChange }: ParameterControlsProps) {
+export function ParameterControls({ params, onParamsChange, modelOptions }: ParameterControlsProps) {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     system: true,
     claude: false,
@@ -430,7 +434,7 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
               <SelectField
                 label="Model"
                 value={params.claude.model}
-                options={MODEL_OPTIONS.claude}
+                options={modelOptions.claude}
                 onChange={(v) => updateClaude({ model: v })}
               />
               <NumberField
@@ -494,7 +498,7 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
               <SelectField
                 label="Model"
                 value={params.openai.model}
-                options={MODEL_OPTIONS.openai}
+                options={modelOptions.openai}
                 onChange={(v) => updateOpenAI({ model: v })}
               />
               <NumberField
@@ -573,7 +577,7 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
               <SelectField
                 label="Model"
                 value={params.gemini.model}
-                options={MODEL_OPTIONS.gemini}
+                options={modelOptions.gemini}
                 onChange={(v) => updateGemini({ model: v })}
               />
               <NumberField
@@ -663,6 +667,7 @@ export function ParameterControls({ params, onParamsChange }: ParameterControlsP
                 params={params[provider] as OpenAICompatibleParams}
                 useSharedSystemPrompt={params.useSharedSystemPrompt}
                 onUpdate={(updates) => updateCompatible(provider, updates)}
+                modelOptions={modelOptions}
               />
             </Accordion>
           ))

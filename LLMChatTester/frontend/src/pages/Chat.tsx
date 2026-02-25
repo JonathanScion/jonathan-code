@@ -9,7 +9,9 @@ import { RatingControls, RatingStats } from '../components/RatingControls';
 import { downloadAgentSpec, downloadAgentSpecZip } from '../utils/export';
 import type { RagInfo } from '../utils/export';
 import type { LLMProvider, LLMResponse, ResponseRating, RagResult, Collection, DocumentInfo } from '../types';
+import type { ModelPricingMap } from '../types';
 import { DEFAULT_RATING, calculateCost, ALL_PROVIDERS, PROVIDER_INFO } from '../types';
+import { useModels } from '../hooks/useModels';
 
 const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
@@ -21,6 +23,7 @@ interface StreamingResponsePanelProps {
   streamingText: string;
   status: 'idle' | 'streaming' | 'done' | 'error';
   color: string;
+  pricing: ModelPricingMap;
   rating?: ResponseRating;
   hasWinner?: boolean;
   onRatingChange?: (rating: ResponseRating) => void;
@@ -33,6 +36,7 @@ function StreamingResponsePanel({
   streamingText,
   status,
   color,
+  pricing,
   rating,
   hasWinner,
   onRatingChange,
@@ -51,7 +55,7 @@ function StreamingResponsePanel({
     }
   };
 
-  const cost = response?.usage ? calculateCost(model, response.usage) : 0;
+  const cost = response?.usage ? calculateCost(model, response.usage, pricing) : 0;
 
   return (
     <div className="flex flex-col h-full bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
@@ -401,6 +405,24 @@ export function Chat() {
     lastRagResults,
   } = useChat();
 
+  const { modelOptions, pricing } = useModels();
+
+  // Auto-select first (newest) model for each provider when live list arrives
+  useEffect(() => {
+    setParams(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const provider of ALL_PROVIDERS) {
+        const models = modelOptions[provider];
+        if (models.length > 0 && (!prev[provider].model || !models.includes(prev[provider].model))) {
+          (next as any)[provider] = { ...prev[provider], model: models[0] };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [modelOptions, setParams]);
+
   const [prompt, setPrompt] = useState('');
   const [showParams, setShowParams] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -540,12 +562,13 @@ export function Chat() {
               disabled={history.length === 0}
               ragEnabled={ragEnabled && useRag}
               ragCollectionId={ragCollectionId}
-              onExportMd={() => downloadAgentSpec(params, history, ratingStats)}
+              onExportMd={() => downloadAgentSpec(params, history, ratingStats, undefined, pricing)}
               onExportZip={async (ragInfo) => {
                 await downloadAgentSpecZip(
                   params, history, ratingStats, ragInfo,
                   API_BASE,
                   { ...getAuthHeaders() },
+                  pricing,
                 );
               }}
             />
@@ -594,7 +617,7 @@ export function Chat() {
 
       {/* Parameter Controls */}
       {showParams && (
-        <ParameterControls params={params} onParamsChange={setParams} />
+        <ParameterControls params={params} onParamsChange={setParams} modelOptions={modelOptions} />
       )}
 
       {/* Templates */}
@@ -684,6 +707,7 @@ export function Chat() {
                         streamingText=""
                         status="done"
                         color={color}
+                        pricing={pricing}
                         rating={turn.ratings?.[key] || DEFAULT_RATING}
                         hasWinner={getTurnHasWinner(turnIndex)}
                         onRatingChange={(rating) => updateRating(turnIndex, key, rating)}
@@ -727,6 +751,7 @@ export function Chat() {
                       streamingText={streamingText[key]}
                       status={streamingStatus[key]}
                       color={color}
+                      pricing={pricing}
                     />
                   ))}
                 </div>

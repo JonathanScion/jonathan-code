@@ -115,7 +115,7 @@ export async function queryGemini(params: GeminiParams): Promise<GeminiResponse>
   const {
     prompt,
     images,
-    model = 'gemini-2.5-flash',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -125,6 +125,8 @@ export async function queryGemini(params: GeminiParams): Promise<GeminiResponse>
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('Gemini model not specified');
 
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
@@ -182,7 +184,7 @@ export async function* streamGemini(params: GeminiParams): AsyncGenerator<Stream
   const {
     prompt,
     images,
-    model = 'gemini-2.5-flash',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -192,6 +194,8 @@ export async function* streamGemini(params: GeminiParams): AsyncGenerator<Stream
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('Gemini model not specified');
 
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
 

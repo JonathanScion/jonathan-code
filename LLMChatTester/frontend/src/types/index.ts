@@ -205,7 +205,7 @@ export const DEFAULT_PARAMS: ChatParams = {
   useSharedSystemPrompt: true,
   enabledProviders: ['claude', 'openai', 'gemini'],
   claude: {
-    model: 'claude-sonnet-4-20250514',
+    model: '',
     temperature: 0.7,
     maxTokens: 1024,
     topK: undefined,
@@ -214,7 +214,7 @@ export const DEFAULT_PARAMS: ChatParams = {
     systemPrompt: '',
   },
   openai: {
-    model: 'gpt-4o',
+    model: '',
     temperature: 0.7,
     maxTokens: 1024,
     topP: undefined,
@@ -225,7 +225,7 @@ export const DEFAULT_PARAMS: ChatParams = {
     systemPrompt: '',
   },
   gemini: {
-    model: 'gemini-2.5-flash',
+    model: '',
     temperature: 0.7,
     maxTokens: 8192,  // Gemini 2.5 thinking models use internal reasoning tokens that count against this limit
     topK: undefined,
@@ -235,7 +235,7 @@ export const DEFAULT_PARAMS: ChatParams = {
     systemPrompt: '',
   },
   xai: {
-    model: 'grok-3-mini-beta',
+    model: '',
     temperature: 0.7,
     maxTokens: 1024,
     topP: undefined,
@@ -243,7 +243,7 @@ export const DEFAULT_PARAMS: ChatParams = {
     systemPrompt: '',
   },
   groq: {
-    model: 'llama-3.3-70b-versatile',
+    model: '',
     temperature: 0.7,
     maxTokens: 1024,
     topP: undefined,
@@ -251,22 +251,13 @@ export const DEFAULT_PARAMS: ChatParams = {
     systemPrompt: '',
   },
   perplexity: {
-    model: 'sonar',
+    model: '',
     temperature: 0.7,
     maxTokens: 1024,
     topP: undefined,
     topK: undefined,
     systemPrompt: '',
   },
-};
-
-export const MODEL_OPTIONS: Record<LLMProvider, string[]> = {
-  claude: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022', 'claude-3-opus-20240229'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
-  xai: ['grok-3-mini-beta', 'grok-3-beta', 'grok-2'],
-  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
-  perplexity: ['sonar', 'sonar-pro', 'sonar-reasoning'],
 };
 
 export const SAFETY_LEVEL_OPTIONS: GeminiSafetyLevel[] = [
@@ -276,40 +267,14 @@ export const SAFETY_LEVEL_OPTIONS: GeminiSafetyLevel[] = [
   'BLOCK_LOW_AND_ABOVE',
 ];
 
-// Pricing per 1M tokens (USD)
-export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Claude models
-  'claude-sonnet-4-20250514': { input: 3, output: 15 },
-  'claude-3-5-haiku-20241022': { input: 1, output: 5 },
-  'claude-3-opus-20240229': { input: 15, output: 75 },
-  // OpenAI models
-  'gpt-4o': { input: 2.5, output: 10 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4-turbo': { input: 10, output: 30 },
-  'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-  // Gemini models
-  'gemini-2.5-flash': { input: 0.15, output: 0.6 },
-  'gemini-2.5-pro': { input: 1.25, output: 10 },
-  'gemini-2.0-flash': { input: 0.1, output: 0.4 },
-  // xAI (Grok) models
-  'grok-3-mini-beta': { input: 0.3, output: 0.5 },
-  'grok-3-beta': { input: 3, output: 15 },
-  'grok-2': { input: 2, output: 10 },
-  // Groq (Llama) models
-  'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
-  'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
-  'mixtral-8x7b-32768': { input: 0.24, output: 0.24 },
-  // Perplexity models
-  'sonar': { input: 1, output: 1 },
-  'sonar-pro': { input: 3, output: 15 },
-  'sonar-reasoning': { input: 1, output: 5 },
-};
+// Pricing map type (served from backend)
+export type ModelPricingMap = Record<string, { input: number; output: number }>;
 
-export function calculateCost(model: string, usage?: TokenUsage): number {
+export function calculateCost(model: string, usage: TokenUsage | undefined, pricing: ModelPricingMap): number {
   if (!usage) return 0;
-  const pricing = MODEL_PRICING[model];
-  if (!pricing) return 0;
-  const inputCost = (usage.inputTokens / 1_000_000) * pricing.input;
-  const outputCost = (usage.outputTokens / 1_000_000) * pricing.output;
+  const p = pricing[model];
+  if (!p) return 0;
+  const inputCost = (usage.inputTokens / 1_000_000) * p.input;
+  const outputCost = (usage.outputTokens / 1_000_000) * p.output;
   return inputCost + outputCost;
 }

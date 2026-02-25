@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type { ConversationTurn, ChatParams, LLMProvider } from '../types';
-import { calculateCost, ALL_PROVIDERS, PROVIDER_INFO, MODEL_PRICING } from '../types';
+import type { ModelPricingMap } from '../types';
+import { calculateCost, ALL_PROVIDERS, PROVIDER_INFO } from '../types';
 
 interface ExportData {
   exportedAt: string;
@@ -14,7 +15,7 @@ interface ExportData {
   };
 }
 
-function calculateStats(history: ConversationTurn[], params: ChatParams) {
+function calculateStats(history: ConversationTurn[], params: ChatParams, pricing: ModelPricingMap = {}) {
   const stats = {
     totalTurns: history.length,
     totalTokens: { input: 0, output: 0 },
@@ -32,7 +33,7 @@ function calculateStats(history: ConversationTurn[], params: ChatParams) {
       if (response?.usage) {
         stats.totalTokens.input += response.usage.inputTokens;
         stats.totalTokens.output += response.usage.outputTokens;
-        stats.totalCost += calculateCost(params[provider].model, response.usage);
+        stats.totalCost += calculateCost(params[provider].model, response.usage, pricing);
       }
       if (turn.ratings) {
         const rating = turn.ratings[provider];
@@ -65,18 +66,18 @@ function calculateStats(history: ConversationTurn[], params: ChatParams) {
   };
 }
 
-export function exportToJSON(history: ConversationTurn[], params: ChatParams): string {
+export function exportToJSON(history: ConversationTurn[], params: ChatParams, pricing: ModelPricingMap = {}): string {
   const data: ExportData = {
     exportedAt: new Date().toISOString(),
     params,
     history,
-    stats: calculateStats(history, params),
+    stats: calculateStats(history, params, pricing),
   };
   return JSON.stringify(data, null, 2);
 }
 
-export function exportToMarkdown(history: ConversationTurn[], params: ChatParams): string {
-  const stats = calculateStats(history, params);
+export function exportToMarkdown(history: ConversationTurn[], params: ChatParams, pricing: ModelPricingMap = {}): string {
+  const stats = calculateStats(history, params, pricing);
   const lines: string[] = [];
 
   // Header
@@ -165,7 +166,7 @@ export function exportToMarkdown(history: ConversationTurn[], params: ChatParams
 
       // Token/cost info
       if (response.usage) {
-        const cost = calculateCost(params[provider].model, response.usage);
+        const cost = calculateCost(params[provider].model, response.usage, pricing);
         lines.push(`*${response.usage.inputTokens} in / ${response.usage.outputTokens} out | $${cost.toFixed(4)} | ${(response.duration / 1000).toFixed(2)}s*`);
         lines.push('');
       }
@@ -196,14 +197,14 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadJSON(history: ConversationTurn[], params: ChatParams) {
-  const content = exportToJSON(history, params);
+export function downloadJSON(history: ConversationTurn[], params: ChatParams, pricing: ModelPricingMap = {}) {
+  const content = exportToJSON(history, params, pricing);
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
   downloadFile(content, `llm-chat-${timestamp}.json`, 'application/json');
 }
 
-export function downloadMarkdown(history: ConversationTurn[], params: ChatParams) {
-  const content = exportToMarkdown(history, params);
+export function downloadMarkdown(history: ConversationTurn[], params: ChatParams, pricing: ModelPricingMap = {}) {
+  const content = exportToMarkdown(history, params, pricing);
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
   downloadFile(content, `llm-chat-${timestamp}.md`, 'text/markdown');
 }
@@ -285,6 +286,7 @@ export function exportAgentSpec(
   history: ConversationTurn[],
   ratingStats: RatingStatsMap,
   ragInfo?: RagInfo,
+  pricing: ModelPricingMap = {},
 ): string {
   const { provider: winner, hasRatings } = determineWinner(ratingStats, params.enabledProviders);
   const info = PROVIDER_INFO[winner];
@@ -447,11 +449,11 @@ export function exportAgentSpec(
   }
 
   // Cost Estimate
-  const pricing = MODEL_PRICING[winnerParams.model];
-  if (pricing) {
+  const modelPricing = pricing[winnerParams.model];
+  if (modelPricing) {
     lines.push('## Cost Estimate');
-    lines.push(`- Input: $${pricing.input.toFixed(2)} per 1M tokens`);
-    lines.push(`- Output: $${pricing.output.toFixed(2)} per 1M tokens`);
+    lines.push(`- Input: $${modelPricing.input.toFixed(2)} per 1M tokens`);
+    lines.push(`- Output: $${modelPricing.output.toFixed(2)} per 1M tokens`);
     lines.push('');
   }
 
@@ -463,8 +465,9 @@ export function downloadAgentSpec(
   history: ConversationTurn[],
   ratingStats: RatingStatsMap,
   ragInfo?: RagInfo,
+  pricing: ModelPricingMap = {},
 ) {
-  const content = exportAgentSpec(params, history, ratingStats, ragInfo);
+  const content = exportAgentSpec(params, history, ratingStats, ragInfo, pricing);
   const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
   downloadFile(content, `agent-spec-${timestamp}.md`, 'text/markdown');
 }
@@ -487,8 +490,9 @@ export async function downloadAgentSpecZip(
   ragInfo: RagInfo,
   apiBase: string,
   authHeaders: Record<string, string>,
+  pricing: ModelPricingMap = {},
 ) {
-  const specContent = exportAgentSpec(params, history, ratingStats, ragInfo);
+  const specContent = exportAgentSpec(params, history, ratingStats, ragInfo, pricing);
 
   const zip = new JSZip();
   zip.file('agent-spec.md', specContent);

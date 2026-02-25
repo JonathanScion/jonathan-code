@@ -10,6 +10,7 @@ import { authRouter, initPassport } from './routes/auth.js';
 import { initPinecone } from './services/pinecone.js';
 import { initEmbeddings } from './services/embeddings.js';
 import { initDatabase, isDatabaseEnabled } from './db/index.js';
+import { getAllModels, MODEL_PRICING } from './services/modelFetcher.js';
 
 // ES module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,17 @@ app.get('/api/providers', (_req, res) => {
     groq: !!process.env.GROQ_API_KEY,
     perplexity: !!process.env.PERPLEXITY_API_KEY,
   });
+});
+
+// Provider models - live model lists from each provider API
+app.get('/api/providers/models', async (_req, res) => {
+  try {
+    const models = await getAllModels();
+    res.json({ models, pricing: MODEL_PRICING });
+  } catch (err) {
+    console.error('Failed to fetch models:', err);
+    res.status(500).json({ error: 'Failed to fetch models' });
+  }
 });
 
 // API routes

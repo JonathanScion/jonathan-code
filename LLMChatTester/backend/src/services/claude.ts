@@ -69,7 +69,7 @@ export async function queryClaude(params: ClaudeParams): Promise<ClaudeResponse>
   const {
     prompt,
     images,
-    model = 'claude-sonnet-4-20250514',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -78,6 +78,8 @@ export async function queryClaude(params: ClaudeParams): Promise<ClaudeResponse>
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('Claude model not specified');
 
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -135,7 +137,7 @@ export async function* streamClaude(params: ClaudeParams): AsyncGenerator<Stream
   const {
     prompt,
     images,
-    model = 'claude-sonnet-4-20250514',
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -144,6 +146,8 @@ export async function* streamClaude(params: ClaudeParams): AsyncGenerator<Stream
     systemPrompt,
     messages = [],
   } = params;
+
+  if (!model) throw new Error('Claude model not specified');
 
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,

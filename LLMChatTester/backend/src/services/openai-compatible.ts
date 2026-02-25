@@ -35,7 +35,6 @@ interface ProviderConfig {
   name: string;
   apiKeyEnv: string;
   baseURL: string;
-  defaultModel: string;
 }
 
 interface ProviderInstance {
@@ -44,18 +43,20 @@ interface ProviderInstance {
 }
 
 function createOpenAICompatibleProvider(config: ProviderConfig): ProviderInstance {
-  const { name, apiKeyEnv, baseURL, defaultModel } = config;
+  const { name, apiKeyEnv, baseURL } = config;
 
   async function query(params: ProviderQueryParams): Promise<ServiceResponse> {
     const {
       prompt,
-      model = defaultModel,
+      model,
       temperature = 0.7,
       maxTokens = 1024,
       topP,
       systemPrompt,
       messages = [],
     } = params;
+
+    if (!model) throw new Error(`${name} model not specified`);
 
     const apiKey = process.env[apiKeyEnv];
     if (!apiKey) {
@@ -109,13 +110,15 @@ function createOpenAICompatibleProvider(config: ProviderConfig): ProviderInstanc
   async function* stream(params: ProviderQueryParams): AsyncGenerator<StreamResult, void, unknown> {
     const {
       prompt,
-      model = defaultModel,
+      model,
       temperature = 0.7,
       maxTokens = 1024,
       topP,
       systemPrompt,
       messages = [],
     } = params;
+
+    if (!model) throw new Error(`${name} model not specified`);
 
     const apiKey = process.env[apiKeyEnv];
     if (!apiKey) {
@@ -175,19 +178,16 @@ export const xaiProvider = createOpenAICompatibleProvider({
   name: 'xAI (Grok)',
   apiKeyEnv: 'XAI_API_KEY',
   baseURL: 'https://api.x.ai/v1',
-  defaultModel: 'grok-3-mini-beta',
 });
 
 export const groqProvider = createOpenAICompatibleProvider({
   name: 'Groq (Llama)',
   apiKeyEnv: 'GROQ_API_KEY',
   baseURL: 'https://api.groq.com/openai/v1',
-  defaultModel: 'llama-3.3-70b-versatile',
 });
 
 export const perplexityProvider = createOpenAICompatibleProvider({
   name: 'Perplexity',
   apiKeyEnv: 'PERPLEXITY_API_KEY',
   baseURL: 'https://api.perplexity.ai',
-  defaultModel: 'sonar',
 });
