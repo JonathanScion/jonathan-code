@@ -48,7 +48,7 @@ async function queryClaude(params) {
   const {
     prompt,
     images,
-    model = "claude-sonnet-4-20250514",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -57,6 +57,7 @@ async function queryClaude(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("Claude model not specified");
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY
   });
@@ -101,7 +102,7 @@ async function* streamClaude(params) {
   const {
     prompt,
     images,
-    model = "claude-sonnet-4-20250514",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -110,6 +111,7 @@ async function* streamClaude(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("Claude model not specified");
   const client = new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY
   });
@@ -178,7 +180,7 @@ async function queryChatGPT(params) {
   const {
     prompt,
     images,
-    model = "gpt-4o",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topP,
@@ -189,6 +191,7 @@ async function queryChatGPT(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("OpenAI model not specified");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
@@ -239,7 +242,7 @@ async function* streamChatGPT(params) {
   const {
     prompt,
     images,
-    model = "gpt-4o",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topP,
@@ -249,6 +252,7 @@ async function* streamChatGPT(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("OpenAI model not specified");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
   });
@@ -356,7 +360,7 @@ async function queryGemini(params) {
   const {
     prompt,
     images,
-    model = "gemini-2.5-flash",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -366,6 +370,7 @@ async function queryGemini(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("Gemini model not specified");
   try {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
     const generationConfig = {
@@ -412,7 +417,7 @@ async function* streamGemini(params) {
   const {
     prompt,
     images,
-    model = "gemini-2.5-flash",
+    model,
     temperature = 0.7,
     maxTokens = 1024,
     topK,
@@ -422,6 +427,7 @@ async function* streamGemini(params) {
     systemPrompt,
     messages = []
   } = params;
+  if (!model) throw new Error("Gemini model not specified");
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
   const generationConfig = {
     temperature,
@@ -470,17 +476,18 @@ async function* streamGemini(params) {
 // src/services/openai-compatible.ts
 import OpenAI2 from "openai";
 function createOpenAICompatibleProvider(config) {
-  const { name, apiKeyEnv, baseURL, defaultModel } = config;
+  const { name, apiKeyEnv, baseURL } = config;
   async function query(params) {
     const {
       prompt,
-      model = defaultModel,
+      model,
       temperature = 0.7,
       maxTokens = 1024,
       topP,
       systemPrompt,
       messages = []
     } = params;
+    if (!model) throw new Error(`${name} model not specified`);
     const apiKey2 = process.env[apiKeyEnv];
     if (!apiKey2) {
       throw new Error(`${name} API key not configured (${apiKeyEnv})`);
@@ -520,13 +527,14 @@ function createOpenAICompatibleProvider(config) {
   async function* stream(params) {
     const {
       prompt,
-      model = defaultModel,
+      model,
       temperature = 0.7,
       maxTokens = 1024,
       topP,
       systemPrompt,
       messages = []
     } = params;
+    if (!model) throw new Error(`${name} model not specified`);
     const apiKey2 = process.env[apiKeyEnv];
     if (!apiKey2) {
       throw new Error(`${name} API key not configured (${apiKeyEnv})`);
@@ -573,20 +581,17 @@ function createOpenAICompatibleProvider(config) {
 var xaiProvider = createOpenAICompatibleProvider({
   name: "xAI (Grok)",
   apiKeyEnv: "XAI_API_KEY",
-  baseURL: "https://api.x.ai/v1",
-  defaultModel: "grok-3-mini-beta"
+  baseURL: "https://api.x.ai/v1"
 });
 var groqProvider = createOpenAICompatibleProvider({
   name: "Groq (Llama)",
   apiKeyEnv: "GROQ_API_KEY",
-  baseURL: "https://api.groq.com/openai/v1",
-  defaultModel: "llama-3.3-70b-versatile"
+  baseURL: "https://api.groq.com/openai/v1"
 });
 var perplexityProvider = createOpenAICompatibleProvider({
   name: "Perplexity",
   apiKeyEnv: "PERPLEXITY_API_KEY",
-  baseURL: "https://api.perplexity.ai",
-  defaultModel: "sonar"
+  baseURL: "https://api.perplexity.ai"
 });
 
 // src/services/embeddings.ts
@@ -1552,6 +1557,227 @@ authRouter.delete("/account", requireAuth, async (req, res) => {
   }
 });
 
+// src/services/modelFetcher.ts
+import Anthropic2 from "@anthropic-ai/sdk";
+import OpenAI3 from "openai";
+var cache = /* @__PURE__ */ new Map();
+var CACHE_TTL = 5 * 60 * 1e3;
+var ERROR_BACKOFF = 60 * 1e3;
+function getCached(provider) {
+  const entry = cache.get(provider);
+  if (!entry) return null;
+  const ttl = entry.isError ? ERROR_BACKOFF : CACHE_TTL;
+  if (Date.now() - entry.fetchedAt > ttl) return null;
+  return entry.models;
+}
+function setCache(provider, models, isError = false) {
+  cache.set(provider, { models, fetchedAt: Date.now(), isError });
+}
+var PREFERRED_ORDER = {
+  claude: ["claude-sonnet-4-6", "claude-sonnet-4-5-20250929", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
+  openai: ["gpt-4o", "gpt-4o-mini", "o4-mini", "o3-mini", "gpt-4-turbo"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
+  xai: ["grok-4-0709", "grok-3", "grok-3-mini"],
+  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3-32b"],
+  perplexity: ["sonar", "sonar-pro", "sonar-reasoning", "sonar-reasoning-pro", "sonar-deep-research"]
+};
+function sortModels(provider, models) {
+  const preferred = PREFERRED_ORDER[provider] || [];
+  const preferredSet = new Set(preferred);
+  const top = preferred.filter((m) => models.includes(m));
+  const rest = models.filter((m) => !preferredSet.has(m)).sort().reverse();
+  return [...top, ...rest];
+}
+async function fetchClaudeModels() {
+  const apiKey2 = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey2) return [];
+  const client = new Anthropic2({ apiKey: apiKey2 });
+  const response = await client.models.list({ limit: 100 });
+  const models = response.data.map((m) => m.id);
+  return sortModels("claude", models);
+}
+async function fetchOpenAIModels() {
+  const apiKey2 = process.env.OPENAI_API_KEY;
+  if (!apiKey2) return [];
+  const client = new OpenAI3({ apiKey: apiKey2 });
+  const response = await client.models.list();
+  const allModels = [];
+  for await (const model of response) {
+    allModels.push(model.id);
+  }
+  const includePatterns = [/^gpt-[345]/, /^gpt-4o/, /^o[134]-/];
+  const excludePatterns = [
+    /instruct/i,
+    /realtime/i,
+    /audio/i,
+    /embedding/i,
+    /dall-e/i,
+    /whisper/i,
+    /tts/i,
+    /babbage/i,
+    /davinci/i,
+    /image/i,
+    /sora/i,
+    /codex/i,
+    /search/i,
+    /transcribe/i,
+    /deep-research/i,
+    /moderation/i,
+    /diarize/i
+  ];
+  const filtered = allModels.filter((id) => includePatterns.some((p) => p.test(id))).filter((id) => !excludePatterns.some((p) => p.test(id)));
+  return sortModels("openai", filtered);
+}
+async function fetchGeminiModels() {
+  const apiKey2 = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey2) return [];
+  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey2}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Gemini list models: ${res.status}`);
+  const data = await res.json();
+  const excludePatterns = [
+    /embedding/i,
+    /aqa/i,
+    /bison/i,
+    /image/i,
+    /tts/i,
+    /robotics/i,
+    /computer-use/i,
+    /gemma/i,
+    /nano-/i,
+    /deep-research/i,
+    /customtools/i
+  ];
+  const filtered = data.models.filter((m) => m.supportedGenerationMethods?.includes("generateContent")).map((m) => m.name.replace("models/", "")).filter((id) => id.startsWith("gemini-")).filter((id) => !excludePatterns.some((p) => p.test(id)));
+  return sortModels("gemini", filtered);
+}
+async function fetchXAIModels() {
+  const apiKey2 = process.env.XAI_API_KEY;
+  if (!apiKey2) return [];
+  const client = new OpenAI3({ apiKey: apiKey2, baseURL: "https://api.x.ai/v1" });
+  const response = await client.models.list();
+  const allModels = [];
+  for await (const model of response) {
+    allModels.push(model.id);
+  }
+  const excludePatterns = [/embedding/i, /image/i, /imagine/i, /vision/i, /video/i];
+  const filtered = allModels.filter((id) => id.startsWith("grok-")).filter((id) => !excludePatterns.some((p) => p.test(id)));
+  return sortModels("xai", filtered);
+}
+async function fetchGroqModels() {
+  const apiKey2 = process.env.GROQ_API_KEY;
+  if (!apiKey2) return [];
+  const client = new OpenAI3({ apiKey: apiKey2, baseURL: "https://api.groq.com/openai/v1" });
+  const response = await client.models.list();
+  const allModels = [];
+  for await (const model of response) {
+    allModels.push(model.id);
+  }
+  const includePatterns = [
+    /^llama-/,
+    /^meta-llama\/llama-4/,
+    /^mixtral-/,
+    /^gemma-/,
+    /^deepseek-/,
+    /^qwen/,
+    /^moonshotai\/kimi/,
+    /^openai\/gpt-oss-(?!safeguard)/
+  ];
+  const excludePatterns = [/whisper/i, /distil/i, /guard/i, /orpheus/i, /compound/i, /allam/i];
+  const filtered = allModels.filter((id) => includePatterns.some((p) => p.test(id))).filter((id) => !excludePatterns.some((p) => p.test(id)));
+  return sortModels("groq", filtered);
+}
+async function fetchPerplexityModels() {
+  return ["sonar-deep-research", "sonar-reasoning-pro", "sonar-reasoning", "sonar-pro", "sonar"];
+}
+var fetchers = {
+  claude: fetchClaudeModels,
+  openai: fetchOpenAIModels,
+  gemini: fetchGeminiModels,
+  xai: fetchXAIModels,
+  groq: fetchGroqModels,
+  perplexity: fetchPerplexityModels
+};
+var apiKeyEnvVars = {
+  claude: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GOOGLE_AI_API_KEY",
+  xai: "XAI_API_KEY",
+  groq: "GROQ_API_KEY",
+  perplexity: "PERPLEXITY_API_KEY"
+};
+var MODEL_PRICING = {
+  // Claude
+  "claude-sonnet-4-20250514": { input: 3, output: 15 },
+  "claude-sonnet-4-5-20250929": { input: 3, output: 15 },
+  "claude-sonnet-4-6": { input: 3, output: 15 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+  "claude-opus-4-20250514": { input: 15, output: 75 },
+  "claude-opus-4-1-20250805": { input: 15, output: 75 },
+  "claude-opus-4-5-20251101": { input: 15, output: 75 },
+  "claude-opus-4-6": { input: 15, output: 75 },
+  "claude-3-haiku-20240307": { input: 0.25, output: 1.25 },
+  // OpenAI
+  "gpt-4o": { input: 2.5, output: 10 },
+  "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  "gpt-4-turbo": { input: 10, output: 30 },
+  "gpt-4": { input: 30, output: 60 },
+  "gpt-4.1": { input: 2, output: 8 },
+  "gpt-4.1-mini": { input: 0.4, output: 1.6 },
+  "gpt-4.1-nano": { input: 0.1, output: 0.4 },
+  "gpt-3.5-turbo": { input: 0.5, output: 1.5 },
+  "o1": { input: 15, output: 60 },
+  "o3": { input: 10, output: 40 },
+  "o3-mini": { input: 1.1, output: 4.4 },
+  "o4-mini": { input: 1.1, output: 4.4 },
+  // Gemini
+  "gemini-2.5-flash": { input: 0.15, output: 0.6 },
+  "gemini-2.5-pro": { input: 1.25, output: 10 },
+  "gemini-2.0-flash": { input: 0.1, output: 0.4 },
+  "gemini-2.0-flash-lite": { input: 0.075, output: 0.3 },
+  // xAI (Grok)
+  "grok-3": { input: 3, output: 15 },
+  "grok-3-mini": { input: 0.3, output: 0.5 },
+  "grok-4-0709": { input: 3, output: 15 },
+  // Groq (Llama)
+  "llama-3.3-70b-versatile": { input: 0.59, output: 0.79 },
+  "llama-3.1-8b-instant": { input: 0.05, output: 0.08 },
+  "mixtral-8x7b-32768": { input: 0.24, output: 0.24 },
+  // Perplexity
+  "sonar": { input: 1, output: 1 },
+  "sonar-pro": { input: 3, output: 15 },
+  "sonar-reasoning": { input: 1, output: 5 },
+  "sonar-reasoning-pro": { input: 2, output: 8 },
+  "sonar-deep-research": { input: 2, output: 8 }
+};
+async function getAllModels() {
+  const providers = Object.keys(fetchers);
+  const results = {};
+  await Promise.all(
+    providers.map(async (provider) => {
+      if (provider !== "perplexity" && !process.env[apiKeyEnvVars[provider]]) {
+        results[provider] = [];
+        return;
+      }
+      const cached = getCached(provider);
+      if (cached !== null) {
+        results[provider] = cached;
+        return;
+      }
+      try {
+        const models = await fetchers[provider]();
+        setCache(provider, models);
+        results[provider] = models;
+      } catch (err) {
+        console.error(`Failed to fetch models for ${provider}:`, err instanceof Error ? err.message : err);
+        setCache(provider, [], true);
+        results[provider] = [];
+      }
+    })
+  );
+  return results;
+}
+
 // src/index.ts
 var __filename2 = fileURLToPath2(import.meta.url);
 var __dirname2 = path4.dirname(__filename2);
@@ -1585,6 +1811,15 @@ app.get("/api/providers", (_req, res) => {
     groq: !!process.env.GROQ_API_KEY,
     perplexity: !!process.env.PERPLEXITY_API_KEY
   });
+});
+app.get("/api/providers/models", async (_req, res) => {
+  try {
+    const models = await getAllModels();
+    res.json({ models, pricing: MODEL_PRICING });
+  } catch (err) {
+    console.error("Failed to fetch models:", err);
+    res.status(500).json({ error: "Failed to fetch models" });
+  }
 });
 app.use("/api/auth", authRouter);
 app.use("/api/chat", chatRouter);

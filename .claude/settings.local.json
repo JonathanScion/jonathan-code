@@ -83,7 +83,13 @@
       "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$zip.Entries | Select-Object -First 15 FullName | Format-Table -AutoSize\n$zip.Dispose\\(\\)\nPS1)",
       "Bash(tar:*)",
       "Bash(powershell -File - <<'PS1'\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n$zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\jonat\\\\source\\\\repos\\\\jonathan-code\\\\LLMChatTester\\\\hostinger-backend.zip\"\\)\n$zip.Entries | Select-Object FullName | Format-Table -AutoSize\n$zip.Dispose\\(\\)\nPS1)",
-      "Bash(set VITE_API_URL=https://api-llmtester.jonathanscode.io)"
+      "Bash(set VITE_API_URL=https://api-llmtester.jonathanscode.io)",
+      "Bash(echo.)",
+      "Bash(npm run dev:*)",
+      "Bash(npx drizzle-kit push:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)"
     ]
   }
 }

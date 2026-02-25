@@ -27,6 +27,29 @@ function setCache(provider: LLMProvider, models: string[], isError = false) {
   cache.set(provider, { models, fetchedAt: Date.now(), isError });
 }
 
+// --- Sorting ---
+// Preferred models appear first (in this order), then the rest reverse-alpha.
+// This controls which model gets auto-selected as the default.
+const PREFERRED_ORDER: Record<LLMProvider, string[]> = {
+  claude: ['claude-sonnet-4-6', 'claude-sonnet-4-5-20250929', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3-mini', 'gpt-4-turbo'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  xai: ['grok-4-0709', 'grok-3', 'grok-3-mini'],
+  groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'qwen/qwen3-32b'],
+  perplexity: ['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro', 'sonar-deep-research'],
+};
+
+function sortModels(provider: LLMProvider, models: string[]): string[] {
+  const preferred = PREFERRED_ORDER[provider] || [];
+  const preferredSet = new Set(preferred);
+  const top = preferred.filter(m => models.includes(m));
+  const rest = models
+    .filter(m => !preferredSet.has(m))
+    .sort()
+    .reverse();
+  return [...top, ...rest];
+}
+
 // --- Per-provider fetchers ---
 
 async function fetchClaudeModels(): Promise<string[]> {
@@ -35,11 +58,8 @@ async function fetchClaudeModels(): Promise<string[]> {
 
   const client = new Anthropic({ apiKey });
   const response = await client.models.list({ limit: 100 });
-  const models = response.data
-    .map((m: { id: string }) => m.id)
-    .sort()
-    .reverse();
-  return models;
+  const models = response.data.map((m: { id: string }) => m.id);
+  return sortModels('claude', models);
 }
 
 async function fetchOpenAIModels(): Promise<string[]> {
@@ -53,14 +73,19 @@ async function fetchOpenAIModels(): Promise<string[]> {
     allModels.push(model.id);
   }
 
-  const includePatterns = [/^gpt-4/, /^gpt-3\.5/, /^o1/, /^o3/, /^o4/, /^chatgpt-/];
-  const excludePatterns = [/instruct/i, /realtime/i, /audio/i, /embedding/i, /dall-e/i, /whisper/i, /tts/i, /babbage/i, /davinci/i];
+  // Only include chat-completion-compatible text models
+  const includePatterns = [/^gpt-[345]/, /^gpt-4o/, /^o[134]-/];
+  const excludePatterns = [
+    /instruct/i, /realtime/i, /audio/i, /embedding/i,
+    /dall-e/i, /whisper/i, /tts/i, /babbage/i, /davinci/i,
+    /image/i, /sora/i, /codex/i, /search/i, /transcribe/i,
+    /deep-research/i, /moderation/i, /diarize/i,
+  ];
 
-  return allModels
+  const filtered = allModels
     .filter(id => includePatterns.some(p => p.test(id)))
-    .filter(id => !excludePatterns.some(p => p.test(id)))
-    .sort()
-    .reverse();
+    .filter(id => !excludePatterns.some(p => p.test(id)));
+  return sortModels('openai', filtered);
 }
 
 interface GeminiModel {
@@ -77,14 +102,19 @@ async function fetchGeminiModels(): Promise<string[]> {
   if (!res.ok) throw new Error(`Gemini list models: ${res.status}`);
   const data = await res.json() as { models: GeminiModel[] };
 
-  const excludePatterns = [/embedding/i, /aqa/i, /bison/i];
+  // Only keep gemini-* text chat models
+  const excludePatterns = [
+    /embedding/i, /aqa/i, /bison/i,
+    /image/i, /tts/i, /robotics/i, /computer-use/i,
+    /gemma/i, /nano-/i, /deep-research/i, /customtools/i,
+  ];
 
-  return data.models
+  const filtered = data.models
     .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
     .map(m => m.name.replace('models/', ''))
-    .filter(id => !excludePatterns.some(p => p.test(id)))
-    .sort()
-    .reverse();
+    .filter(id => id.startsWith('gemini-'))
+    .filter(id => !excludePatterns.some(p => p.test(id)));
+  return sortModels('gemini', filtered);
 }
 
 async function fetchXAIModels(): Promise<string[]> {
@@ -98,13 +128,13 @@ async function fetchXAIModels(): Promise<string[]> {
     allModels.push(model.id);
   }
 
-  const excludePatterns = [/embedding/i, /image/i];
+  // Only keep grok text chat models, exclude image/video/vision
+  const excludePatterns = [/embedding/i, /image/i, /imagine/i, /vision/i, /video/i];
 
-  return allModels
+  const filtered = allModels
     .filter(id => id.startsWith('grok-'))
-    .filter(id => !excludePatterns.some(p => p.test(id)))
-    .sort()
-    .reverse();
+    .filter(id => !excludePatterns.some(p => p.test(id)));
+  return sortModels('xai', filtered);
 }
 
 async function fetchGroqModels(): Promise<string[]> {
@@ -118,31 +148,26 @@ async function fetchGroqModels(): Promise<string[]> {
     allModels.push(model.id);
   }
 
-  const includePatterns = [/^llama-/, /^mixtral-/, /^gemma-/, /^deepseek-/, /^qwen-/];
-  const excludePatterns = [/whisper/i, /distil/i, /guard/i];
+  // Include known chat model families, exclude non-chat models
+  const includePatterns = [
+    /^llama-/, /^meta-llama\/llama-4/,
+    /^mixtral-/, /^gemma-/,
+    /^deepseek-/, /^qwen/,
+    /^moonshotai\/kimi/,
+    /^openai\/gpt-oss-(?!safeguard)/,
+  ];
+  const excludePatterns = [/whisper/i, /distil/i, /guard/i, /orpheus/i, /compound/i, /allam/i];
 
-  return allModels
+  const filtered = allModels
     .filter(id => includePatterns.some(p => p.test(id)))
-    .filter(id => !excludePatterns.some(p => p.test(id)))
-    .sort()
-    .reverse();
+    .filter(id => !excludePatterns.some(p => p.test(id)));
+  return sortModels('groq', filtered);
 }
 
+// Perplexity doesn't support models.list() — returns 404.
+// Hardcoded list is the only option. This is the one exception.
 async function fetchPerplexityModels(): Promise<string[]> {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) return [];
-
-  const client = new OpenAI({ apiKey, baseURL: 'https://api.perplexity.ai' });
-  const response = await client.models.list();
-  const allModels = [];
-  for await (const model of response) {
-    allModels.push(model.id);
-  }
-
-  return allModels
-    .filter(id => id.startsWith('sonar'))
-    .sort()
-    .reverse();
+  return ['sonar-deep-research', 'sonar-reasoning-pro', 'sonar-reasoning', 'sonar-pro', 'sonar'];
 }
 
 // --- Provider map ---
@@ -170,21 +195,36 @@ const apiKeyEnvVars: Record<LLMProvider, string> = {
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   // Claude
   'claude-sonnet-4-20250514': { input: 3, output: 15 },
-  'claude-3-5-haiku-20241022': { input: 1, output: 5 },
-  'claude-3-opus-20240229': { input: 15, output: 75 },
+  'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
+  'claude-sonnet-4-6': { input: 3, output: 15 },
+  'claude-haiku-4-5-20251001': { input: 1, output: 5 },
+  'claude-opus-4-20250514': { input: 15, output: 75 },
+  'claude-opus-4-1-20250805': { input: 15, output: 75 },
+  'claude-opus-4-5-20251101': { input: 15, output: 75 },
+  'claude-opus-4-6': { input: 15, output: 75 },
+  'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
   // OpenAI
   'gpt-4o': { input: 2.5, output: 10 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4-turbo': { input: 10, output: 30 },
+  'gpt-4': { input: 30, output: 60 },
+  'gpt-4.1': { input: 2, output: 8 },
+  'gpt-4.1-mini': { input: 0.4, output: 1.6 },
+  'gpt-4.1-nano': { input: 0.1, output: 0.4 },
   'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+  'o1': { input: 15, output: 60 },
+  'o3': { input: 10, output: 40 },
+  'o3-mini': { input: 1.1, output: 4.4 },
+  'o4-mini': { input: 1.1, output: 4.4 },
   // Gemini
   'gemini-2.5-flash': { input: 0.15, output: 0.6 },
   'gemini-2.5-pro': { input: 1.25, output: 10 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  'gemini-2.0-flash-lite': { input: 0.075, output: 0.3 },
   // xAI (Grok)
-  'grok-3-mini-beta': { input: 0.3, output: 0.5 },
-  'grok-3-beta': { input: 3, output: 15 },
-  'grok-2': { input: 2, output: 10 },
+  'grok-3': { input: 3, output: 15 },
+  'grok-3-mini': { input: 0.3, output: 0.5 },
+  'grok-4-0709': { input: 3, output: 15 },
   // Groq (Llama)
   'llama-3.3-70b-versatile': { input: 0.59, output: 0.79 },
   'llama-3.1-8b-instant': { input: 0.05, output: 0.08 },
@@ -193,6 +233,8 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'sonar': { input: 1, output: 1 },
   'sonar-pro': { input: 3, output: 15 },
   'sonar-reasoning': { input: 1, output: 5 },
+  'sonar-reasoning-pro': { input: 2, output: 8 },
+  'sonar-deep-research': { input: 2, output: 8 },
 };
 
 // --- Public API ---
@@ -203,8 +245,8 @@ export async function getAllModels(): Promise<Record<string, string[]>> {
 
   await Promise.all(
     providers.map(async (provider) => {
-      // Skip providers without API keys
-      if (!process.env[apiKeyEnvVars[provider]]) {
+      // Skip providers without API keys (except perplexity which is hardcoded)
+      if (provider !== 'perplexity' && !process.env[apiKeyEnvVars[provider]]) {
         results[provider] = [];
         return;
       }
