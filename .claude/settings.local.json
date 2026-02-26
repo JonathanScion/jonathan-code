@@ -89,7 +89,16 @@
       "Bash(npx drizzle-kit push:*)",
       "Bash(npx kill-port:*)",
       "Bash(lsof:*)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(aws s3api put-bucket-cors:*)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_OwningProcess -Force }; Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_OwningProcess -Force }; echo ''Done''\")",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(aws s3api get-bucket-cors:*)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api get-bucket-cors --bucket geotiffmarket-files)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api get-bucket-location --bucket geotiffmarket-files)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3 presign s3://geotiffmarket-files/test-upload.txt --expires-in 60)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api put-bucket-cors --bucket geotiffmarket-files --cors-configuration '{\"\"CORSRules\"\":[{\"\"AllowedHeaders\"\":[\"\"*\"\"],\"\"AllowedMethods\"\":[\"\"GET\"\",\"\"PUT\"\",\"\"POST\"\",\"\"HEAD\"\"],\"\"AllowedOrigins\"\":[\"\"http://localhost:5173\"\"],\"\"ExposeHeaders\"\":[\"\"ETag\"\"],\"\"MaxAgeSeconds\"\":3600}]}')"
     ]
   }
 }
