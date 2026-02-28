@@ -98,7 +98,20 @@
       "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api get-bucket-cors --bucket geotiffmarket-files)",
       "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api get-bucket-location --bucket geotiffmarket-files)",
       "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3 presign s3://geotiffmarket-files/test-upload.txt --expires-in 60)",
-      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api put-bucket-cors --bucket geotiffmarket-files --cors-configuration '{\"\"CORSRules\"\":[{\"\"AllowedHeaders\"\":[\"\"*\"\"],\"\"AllowedMethods\"\":[\"\"GET\"\",\"\"PUT\"\",\"\"POST\"\",\"\"HEAD\"\"],\"\"AllowedOrigins\"\":[\"\"http://localhost:5173\"\"],\"\"ExposeHeaders\"\":[\"\"ETag\"\"],\"\"MaxAgeSeconds\"\":3600}]}')"
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" s3api put-bucket-cors --bucket geotiffmarket-files --cors-configuration '{\"\"CORSRules\"\":[{\"\"AllowedHeaders\"\":[\"\"*\"\"],\"\"AllowedMethods\"\":[\"\"GET\"\",\"\"PUT\"\",\"\"POST\"\",\"\"HEAD\"\"],\"\"AllowedOrigins\"\":[\"\"http://localhost:5173\"\"],\"\"ExposeHeaders\"\":[\"\"ETag\"\"],\"\"MaxAgeSeconds\"\":3600}]}')",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:cesium.com)",
+      "WebFetch(domain:community.cesium.com)",
+      "WebFetch(domain:blog.banesullivan.com)",
+      "WebFetch(domain:bundlephobia.com)",
+      "Bash(npm ls:*)",
+      "Bash(npm info:*)",
+      "Bash(gdalinfo:*)",
+      "Bash(python:*)",
+      "WebFetch(domain:helpdesk.microsurvey.com)",
+      "WebFetch(domain:bluesky-world.com)",
+      "WebFetch(domain:download.bluesky-world.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }

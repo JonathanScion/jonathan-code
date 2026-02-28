@@ -15,6 +15,13 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// Handle expired/invalid token — clear and redirect to login
+function handleAuthExpired(): never {
+  localStorage.removeItem('token');
+  window.location.href = '/login';
+  throw new Error('Session expired');
+}
+
 export function useChat() {
   const [params, setParams] = useState<ChatParams>(DEFAULT_PARAMS);
   const [history, setHistory] = useState<ConversationTurn[]>([]);
@@ -79,6 +86,7 @@ export function useChat() {
         }),
       });
 
+      if (res.status === 401) handleAuthExpired();
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
       }
@@ -142,6 +150,7 @@ export function useChat() {
         }),
       });
 
+      if (res.status === 401) handleAuthExpired();
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
       }

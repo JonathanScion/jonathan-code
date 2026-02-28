@@ -43,7 +43,7 @@ function StreamingResponsePanel({
 }: StreamingResponsePanelProps) {
   const [copied, setCopied] = useState(false);
 
-  const displayText = status === 'streaming' ? streamingText : response?.response || '';
+  const displayText = response?.response || streamingText || '';
   const isError = status === 'error' || response?.error;
   const errorText = response?.error || (status === 'error' ? streamingText : '');
 
@@ -741,7 +741,7 @@ export function Chat() {
                 )}
 
                 {/* Streaming panels */}
-                <div className={`grid ${gridClass} gap-4`}>
+                <div className={`grid ${gridClass} gap-4`} style={{ gridAutoRows: 'minmax(200px, auto)' }}>
                   {activeProviders.map(({ key, title, color, model }) => (
                     <StreamingResponsePanel
                       key={key}
