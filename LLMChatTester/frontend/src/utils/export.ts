@@ -296,14 +296,12 @@ export function exportAgentSpec(
   lines.push('# Agent Specification');
   lines.push('');
   lines.push('## How to Use This Spec');
-  lines.push('This spec is an LLM-readable integration brief. It contains everything an AI coding assistant needs to build a working chatbot integration — provider, model, parameters, system prompt, behavioral examples, and provider-specific quirks. Don\'t implement it manually; give it to your LLM assistant and let it generate the right code for your architecture.');
+  lines.push('This is an LLM-readable integration brief. Give it to your AI coding assistant — paste it, reference it by path, or add it to project context — then describe what you want built.');
   lines.push('');
-  lines.push('**Setup by tool:**');
-  lines.push('- **Claude Code:** Save this file in your repo (e.g., `docs/agent-spec.md`) and reference it in your `CLAUDE.md`. Then ask: *"Build a streaming chat endpoint using the provider spec in docs/agent-spec.md."*');
-  lines.push('- **Cursor / GitHub Copilot:** Drop this file into your project directory so it\'s part of the codebase context. Reference it in your prompt or let the tool pick it up automatically.');
-  lines.push('- **ChatGPT / Claude web:** Paste this file as the first message in a conversation, or add it to a project\'s custom instructions. Then describe your app\'s architecture and ask it to build the integration.');
-  lines.push('');
-  lines.push('The LLM will combine this spec with its knowledge of your codebase, framework, and current best practices to generate the correct integration code.');
+  lines.push('**Examples:**');
+  lines.push('- Save this file in your repo (e.g., `docs/agent-spec.md`) and ask: *"Read docs/agent-spec.md and build a chat endpoint based on it."*');
+  lines.push('- Paste the contents directly into a conversation with any AI assistant.');
+  lines.push('- Drop it into your project directory so tools like Cursor or Copilot pick it up automatically.');
   lines.push('');
 
   // Provider section

@@ -14,7 +14,8 @@
       "Bash(npx tsc:*)",
       "Bash(npm run build:deploy:*)",
       "Bash(node:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(xargs wc:*)"
     ]
   }
 }
