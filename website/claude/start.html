@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solutions | Jonathan's Code</title>
+    <link rel="icon" type="image/jpeg" href="logo.jpg">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Animated gradient orbs */
+        .bg-orbs {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.5;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        .orb-1 {
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, #00ced1 0%, transparent 70%);
+            top: -200px;
+            left: -100px;
+        }
+
+        .orb-2 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, #9b30ff 0%, transparent 70%);
+            bottom: -150px;
+            right: -100px;
+            animation-delay: -5s;
+            animation-duration: 25s;
+        }
+
+        .orb-3 {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, #00ced1 0%, transparent 70%);
+            top: 60%;
+            left: 10%;
+            animation-delay: -10s;
+            animation-duration: 30s;
+        }
+
+        .orb-4 {
+            width: 350px;
+            height: 350px;
+            background: radial-gradient(circle, #9b30ff 0%, transparent 70%);
+            top: 30%;
+            right: 15%;
+            animation-delay: -7s;
+            animation-duration: 22s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(50px, -50px) scale(1.1); }
+            50% { transform: translate(-30px, 30px) scale(0.95); }
+            75% { transform: translate(-50px, -30px) scale(1.05); }
+        }
+
+        /* Grid overlay */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+            background-image:
+                linear-gradient(rgba(0, 206, 209, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 206, 209, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            mask-image: radial-gradient(ellipse at center, black 0%, transparent 75%);
+            -webkit-mask-image: radial-gradient(ellipse at center, black 0%, transparent 75%);
+        }
+
+        /* Scan line effect */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            background: linear-gradient(
+                to bottom,
+                transparent 50%,
+                rgba(0, 0, 0, 0.02) 51%
+            );
+            background-size: 100% 4px;
+        }
+
+        /* Navigation */
+        .top-nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0, 206, 209, 0.2);
+            padding: 0.8rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-home {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: #00ced1;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+
+        .nav-home:hover {
+            color: #9b30ff;
+        }
+
+        .nav-home img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #00ced1;
+        }
+
+        .nav-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1.2rem;
+            background: linear-gradient(135deg, #00ced1, #9b30ff);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .nav-cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(0, 206, 209, 0.4);
+        }
+
+        /* Content wrapper */
+        .content {
+            position: relative;
+            z-index: 10;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 2rem 4rem;
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 5rem 1rem 3rem;
+        }
+
+        .hero-quote {
+            font-size: 1.6rem;
+            font-style: italic;
+            line-height: 1.5;
+            color: #fff;
+            max-width: 750px;
+            margin: 0 auto 1.5rem;
+        }
+
+        .hero-quote span {
+            background: linear-gradient(90deg, #00ced1, #9b30ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-sub {
+            font-size: 1.05rem;
+            color: #999;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        /* Section headings */
+        .section {
+            margin-top: 4rem;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(90deg, #00ced1, #9b30ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            color: #999;
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+
+        /* Differentiators */
+        .diff-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.2rem;
+        }
+
+        .diff-item {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.08), rgba(155, 48, 255, 0.08));
+            border: 1px solid rgba(0, 206, 209, 0.2);
+            border-radius: 12px;
+            padding: 1.2rem 1.4rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .diff-item:hover {
+            border-color: rgba(0, 206, 209, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .diff-item strong {
+            color: #00ced1;
+        }
+
+        /* Promo banner */
+        .promo-banner {
+            margin-top: 4rem;
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.15), rgba(155, 48, 255, 0.2));
+            border: 2px solid rgba(155, 48, 255, 0.5);
+            border-radius: 16px;
+            padding: 2rem 2.5rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .promo-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent 0deg, rgba(0, 206, 209, 0.1) 60deg, transparent 120deg);
+            animation: promoSpin 8s linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes promoSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .promo-banner > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .promo-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #00ced1, #9b30ff);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0.35rem 1rem;
+            border-radius: 20px;
+            margin-bottom: 0.8rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .promo-banner h2 {
+            font-size: 1.6rem;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .promo-banner p {
+            color: #ccc;
+            font-size: 1rem;
+        }
+
+        /* Package cards */
+        .packages {
+            display: grid;
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .package-card {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.06), rgba(155, 48, 255, 0.06));
+            border: 1px solid rgba(0, 206, 209, 0.25);
+            border-radius: 16px;
+            padding: 2rem 2.5rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .package-card:hover {
+            border-color: rgba(0, 206, 209, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 206, 209, 0.1);
+        }
+
+        .package-card.featured {
+            border-color: rgba(155, 48, 255, 0.5);
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.1), rgba(155, 48, 255, 0.12));
+        }
+
+        .package-card.featured:hover {
+            border-color: #9b30ff;
+            box-shadow: 0 10px 40px rgba(155, 48, 255, 0.2);
+        }
+
+        .package-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .package-name {
+            font-size: 1.3rem;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .package-tier {
+            color: #00ced1;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .package-pricing {
+            margin-bottom: 1rem;
+        }
+
+        .price-standard {
+            color: #666;
+            text-decoration: line-through;
+            font-size: 0.95rem;
+            margin-right: 0.5rem;
+        }
+
+        .price-promo {
+            color: #00ced1;
+            font-size: 1.4rem;
+            font-weight: 700;
+        }
+
+        .package-desc {
+            color: #999;
+            font-size: 0.95rem;
+            margin-bottom: 1.2rem;
+            line-height: 1.5;
+        }
+
+        .package-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .package-features li {
+            padding: 0.4rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: #ccc;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        .package-features li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.7rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00ced1, #9b30ff);
+        }
+
+        .includes-note {
+            color: #9b30ff;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        /* Retainer cards */
+        .retainer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .retainer-card {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.06), rgba(155, 48, 255, 0.06));
+            border: 1px solid rgba(0, 206, 209, 0.25);
+            border-radius: 16px;
+            padding: 1.8rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .retainer-card:hover {
+            border-color: rgba(0, 206, 209, 0.5);
+            transform: translateY(-3px);
+        }
+
+        .retainer-name {
+            color: #fff;
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .retainer-hours {
+            color: #9b30ff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+        }
+
+        .retainer-features {
+            list-style: none;
+            padding: 0;
+        }
+
+        .retainer-features li {
+            padding: 0.3rem 0;
+            padding-left: 1.2rem;
+            position: relative;
+            color: #bbb;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+
+        .retainer-features li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.65rem;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #00ced1;
+        }
+
+        .retainer-overage {
+            text-align: center;
+            color: #777;
+            font-size: 0.85rem;
+            margin-top: 1.5rem;
+        }
+
+        /* A la carte table */
+        .alacarte-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 1.5rem;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 206, 209, 0.2);
+        }
+
+        .alacarte-table th {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.15), rgba(155, 48, 255, 0.15));
+            color: #00ced1;
+            font-weight: 600;
+            text-align: left;
+            padding: 1rem 1.2rem;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .alacarte-table td {
+            padding: 0.9rem 1.2rem;
+            border-top: 1px solid rgba(0, 206, 209, 0.1);
+            font-size: 0.92rem;
+        }
+
+        .alacarte-table tr:hover td {
+            background: rgba(0, 206, 209, 0.05);
+        }
+
+        .alacarte-table td:last-child {
+            color: #00ced1;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* How it works */
+        .steps {
+            display: grid;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .step {
+            display: flex;
+            gap: 1.2rem;
+            align-items: flex-start;
+        }
+
+        .step-number {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00ced1, #9b30ff);
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-content h3 {
+            color: #fff;
+            font-size: 1.05rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .step-content p {
+            color: #999;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .testimonial {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.06), rgba(155, 48, 255, 0.06));
+            border: 1px solid rgba(0, 206, 209, 0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            font-style: italic;
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+        .testimonial-author {
+            margin-top: 0.8rem;
+            font-style: normal;
+            color: #00ced1;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* FAQs */
+        .faq-list {
+            margin-top: 2rem;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid rgba(0, 206, 209, 0.15);
+        }
+
+        .faq-question {
+            width: 100%;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: left;
+            padding: 1.2rem 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: inherit;
+            transition: color 0.3s ease;
+        }
+
+        .faq-question:hover {
+            color: #00ced1;
+        }
+
+        .faq-chevron {
+            width: 20px;
+            height: 20px;
+            fill: #00ced1;
+            transition: transform 0.3s ease;
+            flex-shrink: 0;
+            margin-left: 1rem;
+        }
+
+        .faq-item.open .faq-chevron {
+            transform: rotate(180deg);
+        }
+
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+        }
+
+        .faq-item.open .faq-answer {
+            max-height: 200px;
+            padding-bottom: 1.2rem;
+        }
+
+        .faq-answer p {
+            color: #999;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* CTA section */
+        .cta-section {
+            margin-top: 5rem;
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.08), rgba(155, 48, 255, 0.12));
+            border: 1px solid rgba(155, 48, 255, 0.3);
+            border-radius: 20px;
+        }
+
+        .cta-section h2 {
+            font-size: 1.8rem;
+            color: #fff;
+            margin-bottom: 1rem;
+        }
+
+        .cta-section p {
+            color: #999;
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.9rem 2rem;
+            border-radius: 30px;
+            text-decoration: none;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .cta-btn-primary {
+            background: linear-gradient(135deg, #00ced1, #9b30ff);
+            color: #fff;
+        }
+
+        .cta-btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(0, 206, 209, 0.4);
+        }
+
+        .cta-btn-secondary {
+            background: rgba(0, 206, 209, 0.1);
+            border: 2px solid rgba(0, 206, 209, 0.5);
+            color: #00ced1;
+        }
+
+        .cta-btn-secondary:hover {
+            background: rgba(0, 206, 209, 0.2);
+            border-color: #00ced1;
+            transform: translateY(-3px);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: #555;
+            font-size: 0.8rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .hero-quote {
+                font-size: 1.2rem;
+            }
+
+            .section-title {
+                font-size: 1.4rem;
+            }
+
+            .package-card {
+                padding: 1.5rem;
+            }
+
+            .package-header {
+                flex-direction: column;
+            }
+
+            .step {
+                gap: 0.8rem;
+            }
+
+            .content {
+                padding: 0 1rem 3rem;
+            }
+
+            .hero {
+                padding: 3rem 0.5rem 2rem;
+            }
+
+            .promo-banner {
+                padding: 1.5rem;
+            }
+
+            .alacarte-table td,
+            .alacarte-table th {
+                padding: 0.7rem 0.8rem;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Background effects -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+        <div class="orb orb-4"></div>
+    </div>
+    <div class="grid-overlay"></div>
+    <div class="scanline"></div>
+
+    <!-- Sticky Nav -->
+    <nav class="top-nav">
+        <a href="index.html" class="nav-home">
+            <img src="logo.jpg" alt="Logo">
+            Jonathan's Code
+        </a>
+        <a href="mailto:jonathan.scion@gmail.com" class="nav-cta">Book a Discovery Call</a>
+    </nav>
+
+    <div class="content">
+
+        <!-- Hero -->
+        <section class="hero">
+            <p class="hero-quote">
+                <span>"I spend time understanding how your business actually works &mdash; before I write a single line of code."</span>
+            </p>
+            <p class="hero-sub">
+                You're not hiring a template agency. You're getting a software engineer and marketer in one &mdash; someone who sits down with you, learns your business, and builds a digital presence that actually reflects it. From domain to database to AI&#8209;powered chat agents, everything is custom, intentional, and built to grow with you.
+            </p>
+        </section>
+
+        <!-- What Makes This Different -->
+        <section class="section">
+            <h2 class="section-title">What Makes This Different</h2>
+            <div class="diff-grid">
+                <div class="diff-item">
+                    <strong>Discovery-first</strong> &mdash; Every engagement starts with a 1&ndash;2 hour session to understand your business, customers, and goals.
+                </div>
+                <div class="diff-item">
+                    <strong>Full-stack + marketing</strong> &mdash; Most agencies build sites. Most marketers don't code. You get both.
+                </div>
+                <div class="diff-item">
+                    <strong>AI-native</strong> &mdash; AI video, AI chat agents, and intelligent automation are standard offerings &mdash; not expensive add-ons.
+                </div>
+                <div class="diff-item">
+                    <strong>Context engineering</strong> &mdash; Your AI tools are trained to sound like <em>your</em> business, not a generic bot.
+                </div>
+                <div class="diff-item">
+                    <strong>Long-term partner</strong> &mdash; Retainer options mean you always have a technical partner in your corner.
+                </div>
+            </div>
+        </section>
+
+        <!-- How It Works -->
+        <section class="section">
+            <h2 class="section-title">How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Discovery Session</h3>
+                        <p>We meet for 1&ndash;2 hours. I ask questions, you talk. I learn your business, your customers, your pain points, and your goals.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Proposal</h3>
+                        <p>I send a clear scope of work with fixed pricing. No surprises.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Build</h3>
+                        <p>I design, develop, and configure everything. You review at milestones.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Launch</h3>
+                        <p>We go live. I stay available for support.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <h3>Grow</h3>
+                        <p>Optional retainer keeps me in your corner month to month.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Promo Banner -->
+        <div class="promo-banner">
+            <span class="promo-badge">Limited Time</span>
+            <h2>Everything 50% Off</h2>
+            <p>All packages and retainers are available at half the standard price. This is a founding-client offer and will not last. Lock in your rate now.</p>
+        </div>
+
+        <!-- Service Packages -->
+        <section class="section">
+            <h2 class="section-title">Service Packages</h2>
+
+            <!-- Tier 1 -->
+            <div class="packages">
+                <div class="package-card featured">
+                    <div class="package-header">
+                        <div>
+                            <span class="package-tier">Tier 1</span>
+                            <div class="package-name">Starter Presence</div>
+                        </div>
+                        <div class="package-pricing">
+                            <span class="price-standard">$2,000</span>
+                            <span class="price-promo">$1,000</span>
+                        </div>
+                    </div>
+                    <p class="package-desc">Perfect for businesses that need a clean, professional online presence fast.</p>
+                    <ul class="package-features">
+                        <li>1&ndash;2 hour discovery session</li>
+                        <li>Domain registration + hosting setup</li>
+                        <li>5&ndash;7 page website (static or CMS-based)</li>
+                        <li>Mobile-responsive design</li>
+                        <li>Basic on-page SEO</li>
+                        <li>Professional copywriting for all pages</li>
+                        <li>Logo creation</li>
+                        <li>AI-generated brand video (intro, explainer, or homepage hero)</li>
+                        <li>AI-generated brand imagery</li>
+                        <li>Contact form</li>
+                        <li>2 weeks post-launch support</li>
+                    </ul>
+                </div>
+
+                <!-- Tier 2 -->
+                <div class="package-card featured">
+                    <div class="package-header">
+                        <div>
+                            <span class="package-tier">Tier 2</span>
+                            <div class="package-name">Smart Presence</div>
+                        </div>
+                        <div class="package-pricing">
+                            <span class="price-standard">$5,000</span>
+                            <span class="price-promo">$2,500</span>
+                        </div>
+                    </div>
+                    <p class="package-desc">For businesses that need their website to <em>do</em> something &mdash; take bookings, manage inventory, show dynamic content.</p>
+                    <p class="includes-note">Everything in Tier 1, plus:</p>
+                    <ul class="package-features">
+                        <li>Database-backed site (bookings, products, inventory, user accounts)</li>
+                        <li>AI brand voice profile &mdash; a documented tone, voice, and knowledge config ready to plug into any future AI tool</li>
+                        <li>Google Analytics 4 setup + traffic dashboard</li>
+                        <li>1 month post-launch support</li>
+                    </ul>
+                </div>
+
+                <!-- Tier 3 -->
+                <div class="package-card featured">
+                    <div class="package-header">
+                        <div>
+                            <span class="package-tier">Tier 3</span>
+                            <div class="package-name">AI-Powered Business</div>
+                        </div>
+                        <div class="package-pricing">
+                            <span class="price-standard">$10,000</span>
+                            <span class="price-promo">$5,000</span>
+                        </div>
+                    </div>
+                    <p class="package-desc">For businesses that want to automate, convert, and scale from day one.</p>
+                    <p class="includes-note">Everything in Tier 2, plus:</p>
+                    <ul class="package-features">
+                        <li>Custom RAG-based AI chat agent &mdash; trained on your documents, FAQs, products, and services. Answers customer questions 24/7.</li>
+                        <li>Lead capture integration (form &rarr; CRM &rarr; automated follow-up)</li>
+                        <li>Email/SMS automation sequences (welcome flow, follow-up, re-engagement)</li>
+                        <li>Stripe or payment gateway integration</li>
+                        <li>Custom integrations with your existing tools (Calendly, Zapier, etc.)</li>
+                        <li>Staff-facing internal tool or dashboard (if needed)</li>
+                        <li>3 months post-launch support</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Monthly Retainers -->
+        <section class="section">
+            <h2 class="section-title">Monthly Retainers</h2>
+            <p class="section-subtitle">A dedicated technical and marketing partner every month. No scrambling when something breaks or when you want to grow.</p>
+
+            <div class="retainer-grid">
+                <div class="retainer-card">
+                    <div class="retainer-name">Maintenance Plan</div>
+                    <div class="package-pricing">
+                        <span class="price-standard">$600/mo</span>
+                        <span class="price-promo">$300/mo</span>
+                    </div>
+                    <div class="retainer-hours">Up to 4 hrs/month</div>
+                    <ul class="retainer-features">
+                        <li>Hosting and uptime monitoring</li>
+                        <li>Security updates and backups</li>
+                        <li>Two content updates per month</li>
+                    </ul>
+                </div>
+
+                <div class="retainer-card">
+                    <div class="retainer-name">Growth Plan</div>
+                    <div class="package-pricing">
+                        <span class="price-standard">$1,200/mo</span>
+                        <span class="price-promo">$600/mo</span>
+                    </div>
+                    <div class="retainer-hours">Up to 8 hrs/month</div>
+                    <ul class="retainer-features">
+                        <li>Everything in Maintenance</li>
+                        <li>Monthly SEO report + recommendations</li>
+                        <li>Four content/blog posts per month</li>
+                        <li>Google Analytics review with plain-English summary</li>
+                        <li>AI agent retraining as your business content changes</li>
+                    </ul>
+                </div>
+
+                <div class="retainer-card">
+                    <div class="retainer-name">Full Partner Plan</div>
+                    <div class="package-pricing">
+                        <span class="price-standard">$2,500/mo</span>
+                        <span class="price-promo">$1,250/mo</span>
+                    </div>
+                    <div class="retainer-hours">Up to 20 hrs/month</div>
+                    <ul class="retainer-features">
+                        <li>Everything in Growth</li>
+                        <li>Active ad campaign management (Google/Meta)</li>
+                        <li>Monthly strategy call</li>
+                        <li>Feature additions and site improvements</li>
+                        <li>Priority response time (within 4 business hours)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <p class="retainer-overage">Work beyond your hours bucket is billed at the standard overage rate of $125/hr.</p>
+        </section>
+
+        <!-- A La Carte -->
+        <section class="section">
+            <h2 class="section-title">Additional Services</h2>
+            <table class="alacarte-table">
+                <thead>
+                    <tr>
+                        <th>Service</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Extra AI brand video</td><td>$300</td></tr>
+                    <tr><td>Additional AI-generated image set (10 images)</td><td>$150</td></tr>
+                    <tr><td>Google/Meta ad campaign setup</td><td>$500</td></tr>
+                    <tr><td>Google Business Profile optimization</td><td>$200</td></tr>
+                    <tr><td>Custom API integration</td><td>From $500</td></tr>
+                    <tr><td>Internal staff dashboard / tool</td><td>From $1,500</td></tr>
+                    <tr><td>Franchise / multi-location site template</td><td>From $2,000</td></tr>
+                    <tr><td>Voice agent for inbound calls</td><td>From $1,200</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Testimonials -->
+        <section class="section">
+            <h2 class="section-title">What Clients Say</h2>
+            <div class="testimonials">
+                <div class="testimonial">
+                    "He actually understood our business before touching the keyboard. The result felt like <em>us</em>."
+                    <div class="testimonial-author">&mdash; Coming Soon</div>
+                </div>
+                <div class="testimonial">
+                    "Our AI chat agent handles about 40% of our customer questions now. The time savings alone paid for everything."
+                    <div class="testimonial-author">&mdash; Coming Soon</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQs -->
+        <section class="section">
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <div class="faq-list">
+                <div class="faq-item">
+                    <button class="faq-question">
+                        Do I need to know anything about technology?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>No. That's the whole point. You explain your business, I handle everything else.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        How long does a project take?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Tier 1: ~1 week. Tier 2: 2&ndash;3 weeks. Tier 3: 4&ndash;6 weeks depending on complexity.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        What if I just want the discovery session first?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>You can book a standalone discovery session for $300, fully credited toward any package you choose afterward.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        What is a RAG chat agent?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>It's an AI assistant trained specifically on your business &mdash; your products, your FAQs, your policies. It lives on your website and answers customer questions 24/7 in your brand's voice.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        What does "context engineering" mean?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>It means I write the instructions that make your AI tools behave like your business. The tone, the rules, the knowledge, the guardrails &mdash; all customized so the AI sounds like you hired it, not like a generic chatbot.</p>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <button class="faq-question">
+                        Can I upgrade my package later?
+                        <svg class="faq-chevron" viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+                    </button>
+                    <div class="faq-answer">
+                        <p>Yes. Packages are designed to stack. Starting with Tier 1 and adding Tier 2 features later is straightforward.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA -->
+        <section class="cta-section">
+            <h2>Ready to Build Something Real?</h2>
+            <p>Let's start with a conversation about your business.</p>
+            <div class="cta-buttons">
+                <a href="mailto:jonathan.scion@gmail.com?subject=I'm%20Interested%20-%20Discovery%20Call" class="cta-btn cta-btn-primary">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                    Get Started
+                </a>
+            </div>
+        </section>
+
+    </div>
+
+    <footer>
+        &copy; 2026 Jonathan's Code
+    </footer>
+
+    <script>
+        // FAQ accordion
+        document.querySelectorAll('.faq-question').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const item = btn.parentElement;
+                const wasOpen = item.classList.contains('open');
+                // Close all
+                document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+                // Toggle current
+                if (!wasOpen) item.classList.add('open');
+            });
+        });
+    </script>
+</body>
+</html>

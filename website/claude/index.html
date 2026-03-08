@@ -279,6 +279,25 @@
             box-shadow: 0 10px 30px rgba(155, 48, 255, 0.3);
         }
 
+        .solutions-btn {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.3), rgba(155, 48, 255, 0.3));
+            border: 2px solid rgba(0, 206, 209, 0.6);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            animation: solutionsPulse 3s ease-in-out infinite;
+        }
+
+        .solutions-btn:hover {
+            background: linear-gradient(135deg, rgba(0, 206, 209, 0.5), rgba(155, 48, 255, 0.5));
+            border-color: #00ced1;
+            box-shadow: 0 10px 40px rgba(0, 206, 209, 0.4), 0 0 20px rgba(155, 48, 255, 0.3);
+        }
+
+        @keyframes solutionsPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(0, 206, 209, 0.2); }
+            50% { box-shadow: 0 0 20px rgba(0, 206, 209, 0.35), 0 0 10px rgba(155, 48, 255, 0.2); }
+        }
+
         footer {
             position: fixed;
             bottom: 1rem;
@@ -380,6 +399,13 @@
                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                 </svg>
                 My Downloads
+            </a>
+
+            <a href="start.html" class="link-btn solutions-btn" title="Solutions">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M7 2v11h3v9l7-12h-4l4-8z"/>
+                </svg>
+                Solutions
             </a>
         </div>
     </div>
