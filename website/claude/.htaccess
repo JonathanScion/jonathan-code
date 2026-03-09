@@ -1,0 +1,6 @@
+RewriteEngine On
+
+# Remove .html extension - serve file.html when /file is requested
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+)$ $1.html [L]

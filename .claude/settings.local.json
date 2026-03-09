@@ -111,7 +111,9 @@
       "WebFetch(domain:helpdesk.microsurvey.com)",
       "WebFetch(domain:bluesky-world.com)",
       "WebFetch(domain:download.bluesky-world.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cp:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }
