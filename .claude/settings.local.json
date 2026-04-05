@@ -113,7 +113,18 @@
       "WebFetch(domain:download.bluesky-world.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(cp:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Bash(xargs wc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(docker compose:*)",
+      "Bash(where psql:*)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/pg_isready\":*)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql\":*)",
+      "Bash(PGPASSWORD=postgres \"/c/Program Files/PostgreSQL/18/bin/psql\":*)",
+      "Bash(docker exec:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(npx playwright:*)"
     ]
   }
 }
