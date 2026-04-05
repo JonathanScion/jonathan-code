@@ -55,7 +55,7 @@ export default function DoctorsPage() {
       field: 'consultationFee',
       headerName: 'Fee',
       width: 100,
-      valueFormatter: (value: number) => `$${value?.toFixed(2) ?? '0.00'}`,
+      valueFormatter: (value: number | string) => `$${Number(value)?.toFixed(2) ?? '0.00'}`,
     },
     {
       field: 'appointments',

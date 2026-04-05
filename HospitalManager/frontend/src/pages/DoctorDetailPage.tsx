@@ -112,7 +112,7 @@ export default function DoctorDetailPage() {
         <InfoRow label="License Number" value={doctor.licenseNumber} />
         <InfoRow label="Specialization" value={doctor.specialization} />
         <InfoRow label="Years of Experience" value={doctor.yearsExperience} />
-        <InfoRow label="Consultation Fee" value={`$${doctor.consultationFee?.toFixed(2)}`} />
+        <InfoRow label="Consultation Fee" value={`$${Number(doctor.consultationFee)?.toFixed(2)}`} />
       </Grid2>
     </Card>
   ) : null;
