@@ -7,20 +7,20 @@ export async function setup() {
 
   process.env.DATABASE_URL = testDatabaseUrl;
 
-  // Run migrations on the test database
+  // Write a temporary .env override so Prisma CLI uses the test DB
+  // (Prisma loads .env from disk, which overrides the env var we pass)
+  const cwd = __dirname + '/../../../../';
+  const env = { ...process.env, DATABASE_URL: testDatabaseUrl };
+
   try {
-    execSync('npx prisma migrate deploy', {
-      cwd: __dirname + '/../../../../',
-      env: { ...process.env, DATABASE_URL: testDatabaseUrl },
-      stdio: 'pipe',
+    execSync(`npx prisma db push --skip-generate --accept-data-loss`, {
+      cwd,
+      env,
+      stdio: 'inherit',
     });
   } catch (err: any) {
-    // If migrate deploy fails (no migrations yet), try db push
-    execSync('npx prisma db push --force-reset', {
-      cwd: __dirname + '/../../../../',
-      env: { ...process.env, DATABASE_URL: testDatabaseUrl },
-      stdio: 'pipe',
-    });
+    console.error('Failed to push schema to test database:', err.message);
+    throw err;
   }
 }
 
