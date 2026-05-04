@@ -124,7 +124,8 @@
       "Bash(docker exec:*)",
       "Bash(npm run:*)",
       "Bash(npm test:*)",
-      "Bash(npx playwright:*)"
+      "Bash(npx playwright:*)",
+      "Bash(git *)"
     ]
   }
 }
