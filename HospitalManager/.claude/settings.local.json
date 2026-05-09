@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import graphify; print\\('installed'\\)\")",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(grep -i \"store\\\\|job\\\\|conversation\\\\|db\\\\|prisma\" echo \"---\" ls C:/Users/jonat/source/repos/jonathan-code/redacted/backend/prisma/ echo \"---deps---\" grep -E \"neon|@prisma|drizzle|kysely|postgres\" C:/Users/jonat/source/repos/jonathan-code/redacted/backend/package.json)"
+    ]
+  }
+}
