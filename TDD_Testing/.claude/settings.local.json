@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(grep -rln \"{test,spec}\" \"C:/Users/jonat/source/repos/jonathan-code/TDD_Testing/node_modules/\")",
+      "Bash(grep *)"
+    ]
+  }
+}

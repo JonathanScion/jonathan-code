@@ -126,7 +126,8 @@
       "Bash(npm test:*)",
       "Bash(npx playwright:*)",
       "Bash(git *)",
-      "Bash(grep -n \"main\\\\|aside\\\\|grid-cols\\\\|flex-row\\\\|w-\\\\\\\\[\\\\|className=\\\\\"main\\\\|<main\\\\|<aside\" C:/Users/jonat/source/repos/jonathan-code/redacted/frontend/src/pages/BuilderPage.tsx)"
+      "Bash(grep -n \"main\\\\|aside\\\\|grid-cols\\\\|flex-row\\\\|w-\\\\\\\\[\\\\|className=\\\\\"main\\\\|<main\\\\|<aside\" C:/Users/jonat/source/repos/jonathan-code/redacted/frontend/src/pages/BuilderPage.tsx)",
+      "Bash(PORT=4011 npm run start)"
     ]
   }
 }

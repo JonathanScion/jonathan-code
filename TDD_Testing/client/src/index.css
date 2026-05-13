@@ -1,0 +1,138 @@
+:root {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light;
+  --border: #d0d7de;
+  --muted: #6b7280;
+  --bg-alt: #f6f8fa;
+  --primary: #0969da;
+  --danger: #cf222e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #fff;
+  color: #1f2328;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+h1 { margin: 0; font-size: 22px; }
+
+button {
+  font: inherit;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+input, select, textarea {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 100%;
+}
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.toolbar .grow { flex: 1; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  background: var(--bg-alt);
+  user-select: none;
+}
+th.sortable { cursor: pointer; }
+tr.client-row { cursor: pointer; }
+tr.client-row:hover { background: var(--bg-alt); }
+
+.form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.form .full { grid-column: 1 / -1; }
+
+.field label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.field .error {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.empty, .loading, .error-banner {
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+.error-banner {
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  color: var(--danger);
+  background: #fff5f5;
+  text-align: left;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.status-pill.Active { background: #dcfce7; border-color: #86efac; }
+.status-pill.Inactive { background: #f3f4f6; border-color: #d1d5db; }
+.status-pill.Prospect { background: #dbeafe; border-color: #93c5fd; }
