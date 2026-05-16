@@ -1,0 +1,55 @@
+name: TDD_Testing Nightly
+
+on:
+  schedule:
+    - cron: '0 9 * * *' # 3am CST / 9am UTC
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: TDD_Testing
+
+jobs:
+  e2e:
+    name: E2E Tests (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: TDD_Testing/package-lock.json
+
+      - run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: TDD_Testing/test-results/
+          retention-days: 7
+
+  perf:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: TDD_Testing/package-lock.json
+
+      - run: npm ci
+      - run: npm run test:perf
