@@ -85,7 +85,7 @@ Controls what gets scripted and how.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `remove_all_extra_ents` | bool | `false` | When `true`, generates DROP statements for entities that exist in the target database but not in the source. **Use with caution!** |
+| `remove_all_extra_ents` | bool | `true` | When `true`, generates DROP statements for entities that exist in the target database but not in the source. **Use with caution!** |
 | `script_schemas` | bool | `true` | Include schema (namespace) DDL in output |
 | `all_schemas` | bool | `true` | Script all schemas. If `false`, only scripts schemas used by selected entities |
 | `script_security` | bool | `true` | Include security objects: roles, permissions, RLS policies |
