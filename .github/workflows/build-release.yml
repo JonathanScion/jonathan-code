@@ -74,13 +74,25 @@ jobs:
         with:
           path: artifacts
 
+      # install.sh checks the binary against this, and it lets users verify a manual download
+      - name: Checksums
+        working-directory: .
+        run: |
+          cp artifacts/contextfreesql.exe/contextfreesql.exe \
+             artifacts/contextfreesql-macos/contextfreesql-macos \
+             artifacts/contextfreesql-linux/contextfreesql-linux .
+          chmod +x contextfreesql-linux contextfreesql-macos
+          sha256sum contextfreesql.exe contextfreesql-macos contextfreesql-linux | tee SHA256SUMS
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/contextfreesql.exe/contextfreesql.exe
-            artifacts/contextfreesql-macos/contextfreesql-macos
-            artifacts/contextfreesql-linux/contextfreesql-linux
+            contextfreesql.exe
+            contextfreesql-macos
+            contextfreesql-linux
+            SHA256SUMS
+            ContextFreeSQL/install.sh
             ContextFreeSQL/config.sample.json
           generate_release_notes: true
         env:

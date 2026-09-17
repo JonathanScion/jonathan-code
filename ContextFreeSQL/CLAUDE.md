@@ -55,7 +55,7 @@ It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped in
 header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
 
 ```bash
-python -m src.main --version      # contextfreesql 0.3.0
+python -m src.main --version      # contextfreesql 0.4.0
 ```
 
 ### Testing
