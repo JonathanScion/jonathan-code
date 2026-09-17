@@ -70,7 +70,7 @@ def create_db_state_indexes(
     
     # Add index_columns for PostgreSQL
     if db_type == DBType.PostgreSQL:
-        script_db_state_tables.write(f"{align}\tindex_columns {db_syntax.nvarchar_type} (100) NULL,\n")
+        script_db_state_tables.write(f"{align}\tindex_columns {db_syntax.nvarchar_type}{db_syntax.max_length_str} NULL,\n")
     
     # Add SQL_CheckUnqData if scripting_data is True
     if scripting_data:
@@ -193,7 +193,7 @@ def create_db_state_indexes(
         script_db_state_tables.write(f"{align}{bool_to_sql_bit_boolean_val(index_row['filter_definition'], db_type != DBType.MSSQL)},\n")
         
         if db_type == DBType.PostgreSQL:
-            script_db_state_tables.write(f"{align}'{index_row['index_columns']}',\n")
+            script_db_state_tables.write(f"{align}{quote_str_or_null(index_row['index_columns'])},\n")
         
         script_db_state_tables.write(f"{align}{quote_str_or_null(create_index_sql)}")
         
@@ -381,7 +381,7 @@ WHERE EXISTS (
       AND LOWER(scm.nspname) = LOWER(ScriptIndexes.table_schema)
       AND LOWER(t.relname) = LOWER(ScriptIndexes.table_name)
       AND LOWER(i.relname) = LOWER(ScriptIndexes.index_name)
-      AND ScriptIndexes.index_columns <> substring(idx.indexdef, '\\((.*?)\\)'));""")
+      AND ScriptIndexes.index_columns <> substring(idx.indexdef from ' USING (.*)$'));""")
         
         script_db_state_tables.write(f"{align}\n")
     

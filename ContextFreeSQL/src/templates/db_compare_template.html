@@ -81,6 +81,121 @@
             user-select: none;
         }
 
+        /* Status count badges */
+        .status-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 8px;
+            background: #e9ecef;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            color: #495057;
+        }
+
+        /* Status filter dropdown (in the filter row) */
+        .filter-cell.status-filter-cell {
+            overflow: visible;
+            position: relative;
+        }
+
+        .status-dropdown-button {
+            width: 100%;
+            padding: 6px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background: white;
+            font-size: 13px;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .status-dropdown-button:focus,
+        .status-dropdown-button.active {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+
+        .status-dropdown-button .dropdown-arrow {
+            font-size: 10px;
+            color: #6c757d;
+            transition: transform 0.2s ease;
+        }
+
+        .status-dropdown-button.active .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .status-dropdown-menu {
+            position: absolute;
+            top: calc(100% - 2px);
+            right: 8px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            min-width: 210px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .status-dropdown-menu.show {
+            display: block;
+        }
+
+        .status-dropdown-actions {
+            display: flex;
+            gap: 12px;
+            padding: 8px 14px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            border-radius: 8px 8px 0 0;
+            font-size: 12px;
+        }
+
+        .status-dropdown-actions a {
+            color: #667eea;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .status-dropdown-actions a:hover {
+            text-decoration: underline;
+        }
+
+        .status-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .status-dropdown-item:hover {
+            background: #f8f9fa;
+        }
+
+        .status-dropdown-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #667eea;
+        }
+
+        .status-dropdown-item .item-label {
+            flex: 1;
+        }
+
         .equal { color: #28a745; }
         .left-only { color: #007bff; }
         .right-only { color: #fd7e14; }
@@ -334,20 +449,24 @@
         <div class="controls">
             <div class="status-filters">
                 <div class="checkbox-group">
-                    <input type="checkbox" id="equal" checked onchange="filterByStatus()">
+                    <input type="checkbox" id="equal" data-status="equal" checked onchange="setStatusFilter('equal', this.checked)">
                     <label for="equal" class="equal">● Equal</label>
+                    <span class="status-count" data-count-status="equal">0</span>
                 </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" id="leftOnly" checked onchange="filterByStatus()">
+                    <input type="checkbox" id="leftOnly" data-status="left-only" checked onchange="setStatusFilter('left-only', this.checked)">
                     <label for="leftOnly" class="left-only">● Only on Left Side</label>
+                    <span class="status-count" data-count-status="left-only">0</span>
                 </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" id="rightOnly" checked onchange="filterByStatus()">
+                    <input type="checkbox" id="rightOnly" data-status="right-only" checked onchange="setStatusFilter('right-only', this.checked)">
                     <label for="rightOnly" class="right-only">● Only on Right Side</label>
+                    <span class="status-count" data-count-status="right-only">0</span>
                 </div>
                 <div class="checkbox-group">
-                    <input type="checkbox" id="different" checked onchange="filterByStatus()">
+                    <input type="checkbox" id="different" data-status="different" checked onchange="setStatusFilter('different', this.checked)">
                     <label for="different" class="different">● Different</label>
+                    <span class="status-count" data-count-status="different">0</span>
                 </div>
             </div>
         </div>
@@ -382,9 +501,7 @@
                     <div class="filter-cell">
                         <input type="text" class="filter-input" placeholder="Filter type..." onkeyup="filterData()" id="type1">
                     </div>
-                    <div class="filter-cell">
-                        <input type="text" class="filter-input" placeholder="Filter status..." onkeyup="filterData()" id="status1">
-                    </div>
+                    <div class="filter-cell status-filter-cell" id="status1"></div>
                 </div>
                 <div class="data-rows" id="database1-rows">
                     <!-- Data will be populated by JavaScript -->
@@ -422,9 +539,7 @@
                     <div class="filter-cell">
                         <input type="text" class="filter-input" placeholder="Filter type..." onkeyup="filterData()" id="type2">
                     </div>
-                    <div class="filter-cell">
-                        <input type="text" class="filter-input" placeholder="Filter status..." onkeyup="filterData()" id="status2">
-                    </div>
+                    <div class="filter-cell status-filter-cell" id="status2"></div>
                 </div>
                 <div class="data-rows" id="database2-rows">
                     <!-- Data will be populated by JavaScript -->
@@ -445,8 +560,9 @@
         // Report titles
         const CONFIG = {
             reportTitle: "Database Schema Comparison Report",
-            leftPanelTitle: "Database 1",
-            rightPanelTitle: "Database 2",
+            // [[...]] placeholders are filled in when the script generates the report
+            leftPanelTitle: "[[leftPanelTitle]]",
+            rightPanelTitle: "[[rightPanelTitle]]",
             
             // Column headers
             columnHeaders: {
@@ -567,24 +683,86 @@ END; --of cursor
             return row;
         }
 
-        function filterByStatus() {
-            const equalChecked = document.getElementById('equal').checked;
-            const leftOnlyChecked = document.getElementById('leftOnly').checked;
-            const rightOnlyChecked = document.getElementById('rightOnly').checked;
-            const differentChecked = document.getElementById('different').checked;
+        // Status filter state, shared by the top checkboxes and the Status dropdowns on both sides
+        const STATUSES = [
+            { key: 'equal', label: 'Equal' },
+            { key: 'left-only', label: 'Only on Left Side' },
+            { key: 'right-only', label: 'Only on Right Side' },
+            { key: 'different', label: 'Different' }
+        ];
+        const statusFilter = { 'equal': true, 'left-only': true, 'right-only': true, 'different': true };
 
-            filteredData = reportData.filter(item => {
-                switch(item.status) {
-                    case 'equal': return equalChecked;
-                    case 'left-only': return leftOnlyChecked;
-                    case 'right-only': return rightOnlyChecked;
-                    case 'different': return differentChecked;
-                    default: return true;
-                }
-            });
-
+        function setStatusFilter(status, checked) {
+            statusFilter[status] = checked;
+            syncStatusControls();
             applyTextFilters();
         }
+
+        function setAllStatusFilters(checked) {
+            STATUSES.forEach(s => statusFilter[s.key] = checked);
+            syncStatusControls();
+            applyTextFilters();
+        }
+
+        // Reflect statusFilter in every checkbox (top panel + both dropdowns) and the dropdown button captions
+        function syncStatusControls() {
+            document.querySelectorAll('input[data-status]').forEach(cb => {
+                cb.checked = statusFilter[cb.dataset.status];
+            });
+
+            const selected = STATUSES.filter(s => statusFilter[s.key]);
+            let caption;
+            if (selected.length === STATUSES.length) caption = 'All';
+            else if (selected.length === 0) caption = 'None';
+            else if (selected.length === 1) caption = selected[0].label;
+            else caption = `${selected.length} selected`;
+
+            document.querySelectorAll('.status-dropdown-caption').forEach(el => el.textContent = caption);
+        }
+
+        function buildStatusDropdown(containerId) {
+            const container = document.getElementById(containerId);
+            const items = STATUSES.map(s => `
+                <label class="status-dropdown-item">
+                    <input type="checkbox" data-status="${s.key}" checked onchange="setStatusFilter('${s.key}', this.checked)">
+                    <span class="item-label ${s.key}">● ${s.label}</span>
+                    <span class="status-count" data-count-status="${s.key}">0</span>
+                </label>`).join('');
+
+            container.innerHTML = `
+                <button type="button" class="status-dropdown-button" onclick="toggleStatusDropdown(this)">
+                    <span class="status-dropdown-caption">All</span>
+                    <span class="dropdown-arrow">▼</span>
+                </button>
+                <div class="status-dropdown-menu">
+                    <div class="status-dropdown-actions">
+                        <a onclick="setAllStatusFilters(true)">Select all</a>
+                        <a onclick="setAllStatusFilters(false)">Clear</a>
+                    </div>
+                    ${items}
+                </div>`;
+        }
+
+        function toggleStatusDropdown(button) {
+            const menu = button.nextElementSibling;
+            const opening = !menu.classList.contains('show');
+            closeStatusDropdowns();
+            if (opening) {
+                menu.classList.add('show');
+                button.classList.add('active');
+            }
+        }
+
+        function closeStatusDropdowns() {
+            document.querySelectorAll('.status-dropdown-menu.show').forEach(menu => {
+                menu.classList.remove('show');
+                menu.previousElementSibling.classList.remove('active');
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.status-filter-cell')) closeStatusDropdowns();
+        });
 
         function filterData() {
             applyTextFilters();
@@ -600,23 +778,9 @@ END; --of cursor
                 type2: document.getElementById('type2').value.toLowerCase()
             };
 
-            const statusFiltered = reportData.filter(item => {
-                const equalChecked = document.getElementById('equal').checked;
-                const leftOnlyChecked = document.getElementById('leftOnly').checked;
-                const rightOnlyChecked = document.getElementById('rightOnly').checked;
-                const differentChecked = document.getElementById('different').checked;
-
-                switch(item.status) {
-                    case 'equal': return equalChecked;
-                    case 'left-only': return leftOnlyChecked;
-                    case 'right-only': return rightOnlyChecked;
-                    case 'different': return differentChecked;
-                    default: return true;
-                }
-            });
-
-            filteredData = statusFiltered.filter(item => {
+            filteredData = reportData.filter(item => {
                 return (
+                    (statusFilter[item.status] ?? true) &&
                     item.schema.toLowerCase().includes(filters.schema1) &&
                     item.name.toLowerCase().includes(filters.name1) &&
                     item.type.toLowerCase().includes(filters.type1) &&
@@ -626,7 +790,32 @@ END; --of cursor
                 );
             });
 
+            updateStatusCounts();
             renderData();
+        }
+
+        // Counts of the rows currently shown (after all filters), per status
+        function updateStatusCounts() {
+            const counts = { 'equal': 0, 'left-only': 0, 'right-only': 0, 'different': 0 };
+            filteredData.forEach(item => {
+                if (item.status in counts) counts[item.status]++;
+            });
+            document.querySelectorAll('[data-count-status]').forEach(el => {
+                el.textContent = counts[el.dataset.countStatus];
+            });
+        }
+
+        // Scroll both sides together
+        function initializeScrollSync() {
+            const panes = [document.getElementById('database1-rows'), document.getElementById('database2-rows')];
+            panes.forEach((pane, i) => {
+                const other = panes[1 - i];
+                pane.addEventListener('scroll', () => {
+                    // Only copy when positions differ, so the echoed scroll event on the other pane is a no-op
+                    if (other.scrollTop !== pane.scrollTop) other.scrollTop = pane.scrollTop;
+                    if (other.scrollLeft !== pane.scrollLeft) other.scrollLeft = pane.scrollLeft;
+                });
+            });
         }
 
         // Initialize
@@ -634,10 +823,14 @@ END; --of cursor
         
         // Apply configuration
         document.getElementById('reportTitle').textContent = CONFIG.reportTitle;
-        document.getElementById('leftPanelTitle').textContent = CONFIG.leftPanelTitle;
-        document.getElementById('rightPanelTitle').textContent = CONFIG.rightPanelTitle;
+        const panelTitle = (title, fallback) => title.startsWith('[[') ? fallback : title;
+        document.getElementById('leftPanelTitle').textContent = panelTitle(CONFIG.leftPanelTitle, 'Database 1');
+        document.getElementById('rightPanelTitle').textContent = panelTitle(CONFIG.rightPanelTitle, 'Database 2');
         
-        renderData();
+        buildStatusDropdown('status1');
+        buildStatusDropdown('status2');
+        applyTextFilters();
+        initializeScrollSync();
         initializeResizer();
         initializeColumnResizers();
 

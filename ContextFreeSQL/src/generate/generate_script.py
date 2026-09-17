@@ -23,7 +23,7 @@ from src.generate.generate_final_security import (
 )
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables | None = None, sql_script_params: SQLScriptParams | None = None) -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables | None = None, sql_script_params: SQLScriptParams | None = None, source_db_label: str = "") -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -144,7 +144,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Split coded entities: DROP before columns, CREATE after columns
     generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
     generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables)
-    generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output)
+    generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, include_security=scrpt_ops.script_security, source_db_label=source_db_label)
     generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output)
 
 
@@ -187,6 +187,20 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     buffer.write("\n\n")
     buffer.write(script_db_state_check_constraints.getvalue())
     buffer.write("\n\n")
+
+    if db_type == DBType.PostgreSQL:
+        # Bubble up index/FK/check constraint differences to the table, so the table shows as different (report, diff files)
+        buffer.write("\t--Bubble up index, FK and check constraint differences to tables\n")
+        buffer.write("\tUPDATE ScriptTables SET index_diff = True, tableStat = 3\n")
+        buffer.write("\tWHERE (ScriptTables.tableStat NOT IN (1,2) OR ScriptTables.tableStat IS NULL)\n")
+        buffer.write("\t\tAND EXISTS (SELECT 1 FROM ScriptIndexes I WHERE LOWER(I.table_schema) = LOWER(ScriptTables.table_schema) AND LOWER(I.table_name) = LOWER(ScriptTables.table_name) AND I.indexStat IN (1,2,3));\n")
+        buffer.write("\tUPDATE ScriptTables SET fk_diff = True, tableStat = 3\n")
+        buffer.write("\tWHERE (ScriptTables.tableStat NOT IN (1,2) OR ScriptTables.tableStat IS NULL)\n")
+        buffer.write("\t\tAND EXISTS (SELECT 1 FROM scriptfks FK WHERE LOWER(FK.fkey_table_schema) = LOWER(ScriptTables.table_schema) AND LOWER(FK.fkey_table_name) = LOWER(ScriptTables.table_name) AND FK.fkStat IN (1,2,3));\n")
+        buffer.write("\tUPDATE ScriptTables SET tableStat = 3\n")
+        buffer.write("\tWHERE (ScriptTables.tableStat NOT IN (1,2) OR ScriptTables.tableStat IS NULL)\n")
+        buffer.write("\t\tAND EXISTS (SELECT 1 FROM ScriptCheckConstraints CC WHERE LOWER(CC.table_schema) = LOWER(ScriptTables.table_schema) AND LOWER(CC.table_name) = LOWER(ScriptTables.table_name) AND CC.ccStat IN (1,2,3));\n")
+        buffer.write("\n\n")
 
     # Security state tables (if security scripting is enabled)
     if scrpt_ops.script_security:

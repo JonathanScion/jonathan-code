@@ -228,6 +228,9 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
                 cnst.contype  as is_unique_constraint1,
                 ix.indkey,
                 ix.indoption,
+                ix.indnkeyatts, --number of key columns; the rest of indkey are INCLUDE columns
+                ix.indexprs IS NOT NULL as has_expressions, --expression index, e.g. (upper(col))
+                ix.indpred IS NOT NULL as is_partial, --partial index (WHERE ...)
                 am.amname as index_type,
                 NULL as is_padded ,
                 0 as is_disabled, --! can index be disabled in postgres?
@@ -240,7 +243,7 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
                 null as secondary_type_desc,
                 null as fill_factor,
                 null as type_desc, --for MSSQL comparisons
-                substring(indexdef,'\\((.*?)\\)') /* ix.indkey*/ as index_columns,
+                substring(indexdef from ' USING (.*)$') as index_columns, --method, columns/expressions, INCLUDE and WHERE; used for comparison
                 idx.indexdef as index_sql --PG provides full CREATE INDEX actually. could even compare only on this field (and schma)name and table_name)
             from
                 pg_index ix 
@@ -330,7 +333,12 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
 
     # Add ordinal position (1-based)
     index_cols['ordinal'] = index_cols.groupby('index')['indkey'].cumcount() + 1
-    
+
+    # Positions past indnkeyatts are INCLUDE columns
+    index_cols['is_included_column'] = index_cols['ordinal'] > index_cols['indnkeyatts'].astype('int64')
+
+    # indkey 0 means an expression (not a column); these rows drop out in the merge below
+
     # Merge with columns table
     result = pd.merge(
         index_cols,
@@ -357,7 +365,7 @@ def _process_index_cols_pg(tbl_cols, tbl_indexes) -> pd.DataFrame:
         'is_descending_key': result['is_descending_key'],
         'column_id': result['column_id'],
         'key_ordinal': result['ordinal'],
-        'is_included_column': False,
+        'is_included_column': result['is_included_column'],
         'partition_ordinal': 0
     })
     

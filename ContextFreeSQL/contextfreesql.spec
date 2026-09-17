@@ -13,6 +13,7 @@ The executable will be created in the 'dist' folder.
 """
 
 import os
+import sys
 
 block_cipher = None
 
@@ -37,15 +38,16 @@ datas = [
 ]
 
 # Hidden imports that PyInstaller might miss
+# Only list modules PyInstaller's analysis genuinely misses. Anything listed here
+# is force-bundled even when unreachable from main.py, so dead entries cost size:
+# sqlglot/sqlparse are used only by src/parser_unused/, and dacite is not imported
+# anywhere -- dropping them removes ~1MB from the bundle.
 hiddenimports = [
     'psycopg2',
     'psycopg2._psycopg',
     'pandas',
     'numpy',
-    'sqlparse',
-    'sqlglot',
     'pydantic',
-    'dacite',
     'networkx',
 ]
 
@@ -84,8 +86,11 @@ exe = EXE(
     name='contextfreesql',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,  # Compress executable (requires UPX installed)
+    # Strip debug symbols on Linux: the setup-python build ships an unstripped
+    # libpython3.12.so.1.0 (28MB raw) plus unstripped .so files, which is why the
+    # Linux binary was ~2x the macOS one. Not stripped on macOS (breaks codesigning).
+    strip=(sys.platform == 'linux'),
+    upx=True,  # Compress executable (no-op unless UPX is on PATH; CI runners lack it)
     upx_exclude=[],
     runtime_tmpdir=None,
     console=True,  # Show console window (needed for output)

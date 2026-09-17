@@ -558,6 +558,11 @@ def get_index_sql(index_row: Dict[str, Any], index_cols_rows: pd.DataFrame, db_t
             table_ref = (f"{index_row['table_schema']}.{index_row['table_name']}"
                         if db_type == DBType.PostgreSQL else index_row['table_name'])
 
+            # PostgreSQL gives the full CREATE INDEX (pg_indexes.indexdef). Use it as-is: it covers
+            # expression indexes, partial indexes (WHERE), INCLUDE, NULLS FIRST/LAST and non-btree methods
+            if db_type == DBType.PostgreSQL and index_row.get('index_sql'):
+                return index_row['index_sql']
+
             if index_cols_rows.empty:
                 raise Exception(f"Internal Error: Index '{index_row['index_name']}' on table {table_ref} has no columns")
 

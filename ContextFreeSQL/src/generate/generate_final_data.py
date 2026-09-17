@@ -240,9 +240,12 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     (schema_tables.indexes["is_unique"] == 1)
                 ].sort_values("is_primary_key", ascending=False).to_dict('records')
             else:  # PostgreSQL
+                # expression and partial unique indexes can't serve as a row key
                 drow_unq_index = schema_tables.indexes[
-                    (schema_tables.indexes["object_id"] == drow_ent["entkey"]) & 
-                    (schema_tables.indexes["is_unique"] == 1)
+                    (schema_tables.indexes["object_id"] == drow_ent["entkey"]) &
+                    (schema_tables.indexes["is_unique"] == 1) &
+                    (schema_tables.indexes["has_expressions"] == False) &
+                    (schema_tables.indexes["is_partial"] == False)
                 ].sort_values("is_primary_key", ascending=False).to_dict('records')
                 
             if len(drow_unq_index) == 0:
@@ -972,7 +975,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             if db_type == DBType.MSSQL:
                 drow_unq_index = schema_tables.indexes.query(f"object_id=={drow_ent['entkey']} & is_unique==1").sort_values("is_primary_key", ascending=False).to_dict('records')
             else:
-                drow_unq_index = schema_tables.indexes.query(f"object_id=='{drow_ent['entkey']}' & is_unique==1").sort_values("is_primary_key", ascending=False).to_dict('records')
+                drow_unq_index = schema_tables.indexes.query(f"object_id=='{drow_ent['entkey']}' & is_unique==1 & has_expressions==False & is_partial==False").sort_values("is_primary_key", ascending=False).to_dict('records')
             
             if len(drow_unq_index) == 0:
                 if s_ent_full_name not in ar_warned_no_script_data_tables:  # So won't warn twice
