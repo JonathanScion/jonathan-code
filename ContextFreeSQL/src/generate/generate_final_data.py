@@ -11,7 +11,8 @@ import datetime
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, InputOutput, ListTables
 from src.utils import funcs as utils
-from src.utils import code_funcs 
+from src.utils import code_funcs
+from src.version import __version__
 from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
 
 
@@ -31,7 +32,7 @@ DATA_WINDOW_COL_USED = "_dataWindowcolused_"
 FLAG_CREATED = "_JustCreated"
 FLD_COLS_CELLS_EXCLUDE_FOR_ROW = "_nh_row_cells_excluded_"
 
-def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables | None = None, sql_script_params = None):
+def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, script_ops: ScriptingOptions, db_syntax: DBSyntax, out_buffer: StringIO, input_output: InputOutput, tables_data: ListTables | None = None, sql_script_params = None, source_db_label: str = ""):
             
     # Get entities that need data scripting
     drows_ents = tbl_ents[(tbl_ents["enttype"] == "Table") & (tbl_ents["scriptdata"] == True)].sort_values("scriptsortorder").to_dict('records')
@@ -124,8 +125,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         # Skip empty tables
         if len(schema_tables.tables_data[s_ent_full_name_sql]) == 0:
             ar_tables_empty.append(s_ent_full_name_sql)
-            # Create empty CSV with headers if from_file is enabled
-            if tables_data and tables_data.from_file and db_type == DBType.PostgreSQL:
+            # Create empty CSV with headers if from_file is enabled, or for the HTML report: if the database has rows
+            # for this table, it gets a data comparison page (source side empty, see the second round)
+            html_report = bool(sql_script_params and sql_script_params.html_report)
+            if ((tables_data and tables_data.from_file) or html_report) and db_type == DBType.PostgreSQL:
                 csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
                 csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
                 os.makedirs(csv_output_dir, exist_ok=True)
@@ -138,6 +141,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 with open(csv_file_path, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
                     writer.writerow(empty_tbl_cols)
+                if html_report and empty_tbl_cols:
+                    # Register for the CSV export / comparison page generation at the end of the data section
+                    table_columns_map[s_ent_full_name] = empty_tbl_cols
+                    table_key_columns_map[s_ent_full_name] = _pg_row_key_cols(schema_tables, drow_ent)
 
             # Still need to set JustCreated flag for empty tables (needed in second round)
             s_flag_ent_created = s_ent_var_name + FLAG_CREATED
@@ -170,6 +177,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write(f"\t\tperform 1 from scripttables T WHERE T.table_schema='{drow_ent['entschema']}' AND T.table_name='{drow_ent['entname'].replace("'", "''")}' AND tablestat=1;\n")
                 out_buffer.write("\t\tIF FOUND THEN\n")
                 out_buffer.write(f"\t\t\t{db_syntax.var_prefix}{s_flag_ent_created} := true;\n")
+                # The table isn't in the database, so none of its rows are: the data is different (the row by row
+                # comparison is skipped for such tables, so it wouldn't mark it)
+                out_buffer.write(f"\t\t\tUPDATE ScriptTables SET dataStat = 3 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
                 out_buffer.write("\t\tELSE\n")
                 out_buffer.write(f"\t\t\t{db_syntax.var_prefix}{s_flag_ent_created} := false;\n")
                 out_buffer.write("\t\tEND IF;\n")
@@ -900,6 +910,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 # Only check for existing data if table wasn't just created (it would be empty anyway)
                 out_buffer.write(f"\t\tIF ({s_flag_ent_created} = False) THEN\n")
                 out_buffer.write(f"\t\t\tIF exists(select 1 from {s_ent_full_name_sql}) THEN\n")
+                # The database has rows the script doesn't: the data is different (report, comparison page)
+                out_buffer.write(f"\t\t\t\tUPDATE ScriptTables SET dataStat = 3 WHERE LOWER(ScriptTables.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptTables.table_name) = LOWER('{drow_ent['entname']}');\n")
                 out_buffer.write(f"\t\t\t\t{db_syntax.var_prefix}sqlCode := 'DELETE FROM {s_ent_full_name_sql}'; --it should be empty, so just delete everything\n")
                 utils.add_exec_sql(db_type, 4, out_buffer)
                 out_buffer.write("\t\t\tEND IF;\n")
@@ -1782,7 +1794,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         
         elif db_type == DBType.PostgreSQL:
             out_buffer.write("\n")
-            out_buffer.write(f"SELECT COUNT(*) INTO NumNonEqualRecs FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN (2, 3);\n")
+            # Added (only in the script), removed (only in the database) and updated rows all make the data different
+            out_buffer.write(f"SELECT COUNT(*) INTO NumNonEqualRecs FROM {s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN ({RowState.EXTRA1.value}, {RowState.EXTRA2.value}, {RowState.DIFF.value});\n")
             out_buffer.write(f"IF {db_syntax.var_prefix}NumNonEqualRecs>0 THEN\n")
             comment_prefix = "--" if script_ops.data_scripting_generate_dml_statements else ""
             utils.add_print(db_type, 1, out_buffer, f"'There were ' || NumNonEqualRecs || ' records that were different. {comment_prefix}SELECT * FROM {s_temp_table_name}; --to get the full state of the data comparison. for summary do: SELECT CASE _cmprstate_ WHEN 1 THEN ''Added'' WHEN 2 THEN ''Removed'' WHEN 3 THEN ''Updated'' ELSE ''Unknown'' END AS state, count(*) AS count FROM {s_temp_table_name} GROUP BY _cmprstate_;'")
@@ -1820,7 +1833,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             # Query information_schema directly to get columns that actually exist in the target table
             out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') ORDER BY c.ordinal_position LOOP\n")
             out_buffer.write("\t\t\tIF v_csv_cols <> '' THEN v_csv_cols := v_csv_cols || ', '; END IF;\n")
-            out_buffer.write("\t\t\tv_csv_cols := v_csv_cols || v_csv_col_rec.column_name;\n")
+            # quote_ident: column names may be mixed/upper case (e.g. "WORK_ORDER_NBR"), which unquoted would fold to lower case
+            out_buffer.write("\t\t\tv_csv_cols := v_csv_cols || quote_ident(v_csv_col_rec.column_name);\n")
             out_buffer.write("\t\tEND LOOP;\n")
             out_buffer.write("\t\tIF v_csv_cols <> '' THEN\n")
             out_buffer.write(f"\t\t\tEXECUTE 'CREATE TEMP TABLE temp_csv_export AS SELECT ' || v_csv_cols || ' FROM {s_ent_full_name_sql}';\n")
@@ -1828,6 +1842,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tDROP TABLE temp_csv_export;\n")
             out_buffer.write(f"\t\t\tRAISE NOTICE 'CSV file created: %', basePath || '/{csv_filename_indb}';\n")
             out_buffer.write("\t\tEND IF;\n")
+            # Report output only: a failure here must not stop the script
+            out_buffer.write("\tEXCEPTION WHEN OTHERS THEN\n")
+            out_buffer.write(f"\t\tRAISE NOTICE 'Error exporting CSV for {s_ent_full_name}: %', SQLERRM;\n")
             out_buffer.write("\tEND;\n")
             out_buffer.write("END IF;\n\n")
 
@@ -1839,6 +1856,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write("IF (htmlReport = True) THEN\n")
 
         csv_compare_template_filename = "csv_compare_standalone.html"
+        # Side captions: the same source/target titles the schema report and the table pages use.
+        # These go through json_build_object, which does its own encoding, so no JS escaping here
+        left_title_sql, right_title_sql = utils.pg_panel_title_exprs(source_db_label, for_js=False)
 
         for drow_ent in drows_ents:
             s_ent_full_name = f"{drow_ent['entschema']}.{drow_ent['entname']}"
@@ -1866,15 +1886,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\tBEGIN\n")
             out_buffer.write(f"\t\t\t-- Read template and source CSV\n")
             out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{csv_compare_template_filename}') INTO template_content;\n")
-            out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{source_csv_filename}') INTO source_csv;\n")
+            out_buffer.write(f"\t\t\tSELECT COALESCE(pg_read_file(basePath || '/{source_csv_filename}', true), '') INTO source_csv;\n")
             out_buffer.write(f"\t\t\t\n")
-            out_buffer.write(f"\t\t\t-- Read target CSV from the _indb file we already exported\n")
-            out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{indb_csv_filename}') INTO target_csv;\n")
+            out_buffer.write(f"\t\t\t-- Read target CSV from the _indb file we already exported. Missing if the table doesn't exist in the database: empty side\n")
+            out_buffer.write(f"\t\t\tSELECT COALESCE(pg_read_file(basePath || '/{indb_csv_filename}', true), '') INTO target_csv;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Create JavaScript to inject data (including primary key columns for auto-comparison)\n")
             include_equal_rows_sql = "true" if script_ops.data_comparison_include_equal_rows else "false"
             out_buffer.write(f"\t\t\tinjected_script := '<script>window.autoLoadData = ' || \n")
-            out_buffer.write(f"\t\t\t\tjson_build_object('source', source_csv, 'target', target_csv, 'keys', {key_cols_sql_array}, 'includeEqualRows', {include_equal_rows_sql}, 'tableName', '{s_ent_full_name_sql}', 'sourceLabel', 'Script', 'targetLabel', 'Database')::text || \n")
+            out_buffer.write(f"\t\t\t\tjson_build_object('source', source_csv, 'target', target_csv, 'keys', {key_cols_sql_array}, 'includeEqualRows', {include_equal_rows_sql}, 'tableName', '{s_ent_full_name_sql}', 'sourceLabel', {left_title_sql}, 'targetLabel', {right_title_sql}, 'version', '{__version__}')::text || \n")
             out_buffer.write(f"\t\t\t\t';</script>';\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\t-- Inject script before </head>\n")
@@ -1888,6 +1908,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tDROP TABLE temp_compare_html;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: %', basePath || '/{compare_html_filename}';\n")
+            # Report output only: a failure here must not stop the script
+            out_buffer.write("\t\tEXCEPTION WHEN OTHERS THEN\n")
+            out_buffer.write(f"\t\t\tRAISE NOTICE 'Error creating comparison HTML for {s_ent_full_name}: %', SQLERRM;\n")
             out_buffer.write("\t\tEND;\n")
             out_buffer.write("\tEND IF;\n")
 
@@ -1896,6 +1919,23 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
 
     out_buffer.write("END; --end of data section\n")
 
+
+
+def _pg_row_key_cols(schema_tables: DBSchema, drow_ent) -> list:
+    """PostgreSQL: the columns that identify a row, from the first unique index (primary key first) - the same choice
+    script_data makes for tables with data. Expression and partial unique indexes can't serve as a row key."""
+    unq_indexes = schema_tables.indexes[
+        (schema_tables.indexes["object_id"] == drow_ent["entkey"]) &
+        (schema_tables.indexes["is_unique"] == 1) &
+        (schema_tables.indexes["has_expressions"] == False) &
+        (schema_tables.indexes["is_partial"] == False)
+    ].sort_values("is_primary_key", ascending=False).to_dict('records')
+    if not unq_indexes:
+        return []
+    return schema_tables.index_cols[
+        (schema_tables.index_cols["object_id"] == drow_ent["entkey"]) &
+        (schema_tables.index_cols["index_id"] == unq_indexes[0]["index_id"])
+    ]["col_name"].tolist()
 
 
 def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, var_name, type_name, pref_each_line, script: StringIO, save_old_value):

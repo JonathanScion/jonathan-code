@@ -5,6 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Schema Comparison</title>
     <style>
+        /* Light and dark theme, the same palette as the data comparison page */
+        :root {
+            --bg-body: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --bg-container: white;
+            --bg-panel: #f8f9fa;
+            --row-hover: #f8f9fa;
+            --text-main: #2c3e50;
+            --text-muted: #6c757d;
+            --border-color: #e9ecef;
+            --border-strong: #dee2e6;
+            --header-bg: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            --section-header-bg: #343a40;
+            --grid-header-bg: #6c757d;
+            --input-bg: white;
+            --input-border: #ced4da;
+            --badge-bg: #e9ecef;
+            --badge-text: #495057;
+            --accent: #667eea;
+        }
+
+        body.dark-mode {
+            --bg-body: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            --bg-container: #1a1a2e;
+            --bg-panel: #16213e;
+            --row-hover: #232a4d;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border-color: #2d3436;
+            --border-strong: #2d3436;
+            --header-bg: linear-gradient(135deg, #0f0c29 0%, #302b63 100%);
+            --section-header-bg: #0f0c29;
+            --grid-header-bg: #302b63;
+            --input-bg: #1a1a2e;
+            --input-border: #2d3436;
+            --badge-bg: #16213e;
+            --badge-text: #a0a0a0;
+            --accent: #8b9cf7;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,26 +52,46 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-body);
             min-height: 100vh;
             padding: 8px;
+            color: var(--text-main);
         }
 
         /* Full width: the report grows with the window, with a thin purple margin around it */
         .container {
             width: 100%;
             margin: 0;
-            background: white;
+            background: var(--bg-container);
             border-radius: 8px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: var(--header-bg);
             color: white;
             padding: 25px;
             text-align: center;
+            position: relative;
+        }
+
+        .theme-toggle {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255,255,255,0.2);
         }
 
         .header h1 {
@@ -43,8 +102,8 @@
 
         .controls {
             padding: 20px 25px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .status-filters {
@@ -60,7 +119,7 @@
             gap: 8px;
             padding: 8px 16px;
             border-radius: 20px;
-            background: white;
+            background: var(--bg-container);
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
         }
@@ -90,11 +149,11 @@
             min-width: 24px;
             height: 24px;
             padding: 0 8px;
-            background: #e9ecef;
+            background: var(--badge-bg);
             border-radius: 12px;
             font-size: 11px;
             font-weight: 700;
-            color: #495057;
+            color: var(--badge-text);
         }
 
         /* Status filter dropdown (in the filter row) */
@@ -106,9 +165,9 @@
         .status-dropdown-button {
             width: 100%;
             padding: 6px 10px;
-            border: 1px solid #ced4da;
+            border: 1px solid var(--input-border);
             border-radius: 4px;
-            background: white;
+            background: var(--input-bg);
             font-size: 13px;
             text-align: left;
             cursor: pointer;
@@ -123,13 +182,13 @@
         .status-dropdown-button:focus,
         .status-dropdown-button.active {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
         }
 
         .status-dropdown-button .dropdown-arrow {
             font-size: 10px;
-            color: #6c757d;
+            color: var(--text-muted);
             transition: transform 0.2s ease;
         }
 
@@ -141,7 +200,7 @@
             position: absolute;
             top: calc(100% - 2px);
             right: 8px;
-            background: white;
+            background: var(--bg-container);
             border-radius: 8px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.15);
             min-width: 210px;
@@ -157,14 +216,14 @@
             display: flex;
             gap: 12px;
             padding: 8px 14px;
-            background: #f8f9fa;
-            border-bottom: 1px solid #e9ecef;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
             border-radius: 8px 8px 0 0;
             font-size: 12px;
         }
 
         .status-dropdown-actions a {
-            color: #667eea;
+            color: var(--accent);
             cursor: pointer;
             text-decoration: none;
         }
@@ -184,7 +243,7 @@
         }
 
         .status-dropdown-item:hover {
-            background: #f8f9fa;
+            background: var(--row-hover);
         }
 
         .status-dropdown-item input[type="checkbox"] {
@@ -201,6 +260,12 @@
         .left-only { color: #007bff; }
         .right-only { color: #fd7e14; }
         .different { color: #dc3545; }
+
+        /* Lighter on the dark background (the status icons keep the solid colours) */
+        body.dark-mode .equal { color: #5dd879; }
+        body.dark-mode .left-only { color: #5aa9ff; }
+        body.dark-mode .right-only { color: #ffa94d; }
+        body.dark-mode .different { color: #ff7b85; }
 
         .comparison-grid {
             display: flex;
@@ -225,14 +290,14 @@
 
         .resizer {
             width: 6px;
-            background: #dee2e6;
+            background: var(--border-strong);
             cursor: col-resize;
             position: relative;
             transition: background-color 0.2s ease;
         }
 
         .resizer:hover {
-            background: #667eea;
+            background: var(--accent);
         }
 
         .resizer::after {
@@ -243,16 +308,16 @@
             transform: translate(-50%, -50%);
             width: 2px;
             height: 30px;
-            background: #6c757d;
+            background: var(--text-muted);
             border-radius: 1px;
         }
 
         .resizer:hover::after {
-            background: white;
+            background: var(--bg-container);
         }
 
         .database-header {
-            background: #343a40;
+            background: var(--section-header-bg);
             color: white;
             padding: 15px;
             text-align: center;
@@ -263,7 +328,7 @@
         .column-headers {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr 1fr;
-            background: #6c757d;
+            background: var(--grid-header-bg);
             color: white;
             font-weight: 600;
             position: relative;
@@ -307,13 +372,13 @@
         .filter-row {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr 1fr;
-            background: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-strong);
         }
 
         .filter-cell {
             padding: 8px;
-            border-right: 1px solid #e9ecef;
+            border-right: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             overflow: hidden;
@@ -327,21 +392,21 @@
         .filter-input {
             width: 100%;
             padding: 6px 10px;
-            border: 1px solid #ced4da;
+            border: 1px solid var(--input-border);
             border-radius: 4px;
-            background: white;
+            background: var(--input-bg); color: var(--text-main);
             font-size: 13px;
             transition: all 0.3s ease;
         }
 
         .filter-input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent);
             box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
         }
 
         .filter-input::placeholder {
-            color: #6c757d;
+            color: var(--text-muted);
             font-style: italic;
         }
 
@@ -354,17 +419,17 @@
         .data-row {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr 1fr;
-            border-bottom: 1px solid #e9ecef;
+            border-bottom: 1px solid var(--border-color);
             transition: all 0.3s ease;
         }
 
         .data-row:hover {
-            background: #f8f9fa;
+            background: var(--row-hover);
         }
 
         .data-cell {
             padding: 12px;
-            border-right: 1px solid #e9ecef;
+            border-right: 1px solid var(--border-color);
             display: flex;
             align-items: center;
             overflow: hidden;
@@ -380,7 +445,7 @@
 
         .schema-name {
             font-weight: 600;
-            color: #2c3e50;
+            color: var(--text-main);
         }
 
         .status-icon {
@@ -403,8 +468,8 @@
         .footer {
             padding: 20px;
             text-align: center;
-            background: #f8f9fa;
-            color: #6c757d;
+            background: var(--bg-panel);
+            color: var(--text-muted);
             font-size: 14px;
         }
 
@@ -445,6 +510,7 @@
     <div class="container">
         <div class="header">
             <h1 id="reportTitle">Database Schema Comparison Report</h1>
+            <button class="theme-toggle" onclick="toggleTheme()">Dark Mode</button>
         </div>
 
         <div class="controls">
@@ -549,7 +615,7 @@
         </div>
 
         <div class="footer">
-            Database Schema Comparison Tool • Generated on <span id="currentDate">[[generatedAt]]</span>
+            ContextFreeSQL <span id="toolVersion">[[version]]</span> • Generated on <span id="currentDate">[[generatedAt]]</span>
         </div>
     </div>
 
@@ -817,6 +883,12 @@ END; --of cursor
                     if (other.scrollLeft !== pane.scrollLeft) other.scrollLeft = pane.scrollLeft;
                 });
             });
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark-mode');
+            const btn = document.querySelector('.theme-toggle');
+            btn.textContent = document.body.classList.contains('dark-mode') ? 'Light Mode' : 'Dark Mode';
         }
 
         // Initialize (the footer's generation time is filled in when the script writes the report)

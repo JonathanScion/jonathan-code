@@ -12,8 +12,7 @@ from src.utils.resources import get_template_path, get_default_config_path, get_
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
-
-__version__ = '0.2.2'
+from src.version import __version__  # set in src/version.py, bumped per build
 
 
 def show_config_docs():

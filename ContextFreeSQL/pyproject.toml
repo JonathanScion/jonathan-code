@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ContextFreeSQL"
-version = "0.1.0"
+dynamic = ["version"]  # from src/version.py, the single place the version is set
 description = "Brief description of your project"
 authors = [{name = "Jonathan Scion", email = "Jonathan.scion@gmail.com"}]
 readme = "README.md"
@@ -21,3 +21,6 @@ dev = [
 
 [project.scripts]
 ContextFreeSQL = "ContextFreeSQL.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "src.version.__version__"}

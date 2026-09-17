@@ -49,6 +49,15 @@ Password: ********
 
 **Output Location:** Generated SQL scripts are written to the path specified in `config.json` under `input_output.output_sql`
 
+### Version
+The version lives in `src/version.py` and nowhere else - bump it there before building a release.
+It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped into the generated script's
+header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
+
+```bash
+python -m src.main --version      # contextfreesql 0.3.0
+```
+
 ### Testing
 The test suite is minimal and not actively maintained. Test files exist in `tests/` directory but are primarily used for output validation rather than automated testing.
 

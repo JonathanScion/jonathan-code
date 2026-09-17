@@ -1,5 +1,6 @@
 from src.defs.script_defs import DBType, DBSyntax, InputOutput
 from src.utils import funcs as utils
+from src.version import __version__
 
 
 def generate_source_sql_for_tables(sql_buffer):
@@ -195,6 +196,7 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[leftPanelTitle]]', {left_title_sql});\n")
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[rightPanelTitle]]', {right_title_sql});\n")
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[generatedAt]]', {utils.PG_GENERATED_AT_EXPR});\n")
+        sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[version]]', '{__version__}');\n")
         sql_buffer.write("\t\t\t\n")
         sql_buffer.write("\t\t\t-- Write the diff file\n")
         sql_buffer.write("\t\t\tDROP TABLE IF EXISTS temp_diff_file;\n")
@@ -339,6 +341,7 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[leftPanelTitle]]', {left_title_sql});\n")
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[rightPanelTitle]]', {right_title_sql});\n")
         sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[generatedAt]]', {utils.PG_GENERATED_AT_EXPR});\n")
+        sql_buffer.write(f"\t\t\tdiff_content := replace(diff_content, '[[version]]', '{__version__}');\n")
         sql_buffer.write("\t\t\t\n")
         sql_buffer.write("\t\t\t-- Write the diff file\n")
         sql_buffer.write("\t\t\tDROP TABLE IF EXISTS temp_diff_file;\n")

@@ -1,6 +1,7 @@
 import os
 from src.defs.script_defs import DBType, DBSyntax, InputOutput
 from src.utils import funcs as utils
+from src.version import __version__
 
 
 def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput, include_security: bool = True, source_db_label: str = ""):
@@ -182,6 +183,7 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[leftPanelTitle]]', {left_title_sql});\n")
         sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[rightPanelTitle]]', {right_title_sql});\n")
         sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[generatedAt]]', {utils.PG_GENERATED_AT_EXPR});\n")
+        sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[version]]', '{__version__}'); --the build that generated the script\n")
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\t\tRAISE NOTICE 'Replacement done. Writing file...';\n")
         sql_buffer.write("\t\t\n")

@@ -223,15 +223,19 @@ def can_type_be_compared(type_name, db_type: DBType = DBType.MSSQL):
         return True
 
 
-def pg_panel_title_exprs(source_db_label: str) -> tuple[str, str]:
+def pg_panel_title_exprs(source_db_label: str, for_js: bool = True) -> tuple[str, str]:
     """PostgreSQL expressions for the left/right titles of the HTML report pages: left = database the script was
     generated from (known now, e.g. 'localhost.const1 (source)'), right = database the script runs on (known at run time).
-    Both land inside a JS double-quoted string, so \\ and " are escaped."""
+    for_js escapes \\ and " for a title that lands inside a JS double-quoted string; pass False when the value is
+    encoded some other way (e.g. json_build_object)."""
     left_title = f"{source_db_label} (source)" if source_db_label else "Source (script)"
-    left_title = left_title.replace('\\', '\\\\').replace('"', '\\"').replace("'", "''")
-    right_title = ("replace(replace(CASE WHEN inet_server_addr() IS NULL OR host(inet_server_addr()) IN ('127.0.0.1', '::1') "
-                   "THEN 'localhost' ELSE host(inet_server_addr()) END || '.' || current_database() || ' (target)', "
-                   "'\\', '\\\\'), '\"', '\\\"')")
+    if for_js:
+        left_title = left_title.replace('\\', '\\\\').replace('"', '\\"')
+    left_title = left_title.replace("'", "''")
+    right_title = ("CASE WHEN inet_server_addr() IS NULL OR host(inet_server_addr()) IN ('127.0.0.1', '::1') "
+                   "THEN 'localhost' ELSE host(inet_server_addr()) END || '.' || current_database() || ' (target)'")
+    if for_js:
+        right_title = f"replace(replace({right_title}, '\\', '\\\\'), '\"', '\\\"')"
     return f"'{left_title}'", right_title
 
 
