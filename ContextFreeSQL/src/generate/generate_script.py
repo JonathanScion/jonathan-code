@@ -60,7 +60,16 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     buffer.write("\tEND IF;\n")
     buffer.write("\tCREATE TEMP TABLE scriptoutput\n")
     buffer.write("\t(\n")
-    buffer.write("\t\tSQLText character varying\n")
+    if db_type == DBType.PostgreSQL:
+        # id keeps statement order; ent_schema/ent_name tag table statements for the HTML report's per-table SQL;
+        # report_only rows were recorded only for the report (printExec off) and are not part of the output
+        buffer.write("\t\tid bigserial,\n")
+        buffer.write("\t\tSQLText character varying,\n")
+        buffer.write("\t\tent_schema character varying (128),\n")
+        buffer.write("\t\tent_name character varying (128),\n")
+        buffer.write("\t\treport_only boolean NOT NULL DEFAULT false\n")
+    else:
+        buffer.write("\t\tSQLText character varying\n")
     buffer.write("\t);\n")
    
     
@@ -145,7 +154,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
     generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables)
     generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, include_security=scrpt_ops.script_security, source_db_label=source_db_label)
-    generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output)
+    generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, drops_extra_tables=scrpt_ops.remove_all_extra_ents, source_db_label=source_db_label)
 
 
     # Bad data check StringBuilders
@@ -401,7 +410,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if db_type == DBType.PostgreSQL:
         buffer.write("END; --main DO block\n")
         buffer.write("$$\n")
-        buffer.write(";select * from scriptoutput\n")
+        buffer.write(";select SQLText from scriptoutput WHERE NOT report_only ORDER BY id\n")
 
     elif db_type == DBType.MSSQL:
         buffer.write("SET NOCOUNT OFF\n")

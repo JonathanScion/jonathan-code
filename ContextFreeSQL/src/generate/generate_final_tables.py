@@ -39,7 +39,7 @@ def generate_drop_tables(db_type: DBType, sql_buffer: StringIO):
         sql_buffer.write("\t\t\tWHERE tableStat = 2\n")
         sql_buffer.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, sql_buffer, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ' is different. Drop and then add:'")
-        utils.add_exec_sql(db_type, 3, sql_buffer, "'DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name")
+        utils.add_exec_sql(db_type, 3, sql_buffer, "'DROP TABLE ' || temprow.table_schema || '.' || temprow.table_name", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
         sql_buffer.write("\t\tEND LOOP;\n")
         sql_buffer.write("\tEND; --of cursor\n")
 
@@ -80,6 +80,6 @@ def generate_add_tables(db_type: DBType, sql_buffer: StringIO):
         sql_buffer.write("\t\t\tWHERE tableStat = 1\n")
         sql_buffer.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, sql_buffer, "'Adding table ' || temprow.table_schema || '.' || temprow.table_name")
-        utils.add_exec_sql(db_type, 3, sql_buffer, "temprow.SQL_CREATE")
+        utils.add_exec_sql(db_type, 3, sql_buffer, "temprow.SQL_CREATE", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
         sql_buffer.write("\t\tEND LOOP;\n")
         sql_buffer.write("\tEND; --of cursor\n")

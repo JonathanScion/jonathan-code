@@ -135,7 +135,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull()))
                 ].sort_values("column_id")["col_name"].tolist()
                 # Write CSV with just headers
-                with open(csv_file_path, 'w', newline='') as f:
+                with open(csv_file_path, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.writer(f)
                     writer.writerow(empty_tbl_cols)
 
@@ -353,7 +353,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     i_count = 1
                     for s_col_name in ar_cols:
                         o_val = row.get(s_col_name)
-                        if pd.isna(o_val):  # Equivalent to IsDBNull
+                        if utils.is_null_value(o_val):  # Equivalent to IsDBNull
                             out_buffer.write("NULL")
                         else:
                             out_buffer.write("''")
@@ -406,7 +406,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         i_count = 1
                         for s_col_name in ar_cols:
                             o_val = row.get(s_col_name)
-                            if pd.isna(o_val):  # Equivalent to IsDBNull
+                            if utils.is_null_value(o_val):  # Equivalent to IsDBNull
                                 s_insert_into.append("NULL")
                             elif isinstance(o_val, (datetime.datetime, datetime.date)):
                                 s_insert_into.append("''")
@@ -528,7 +528,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 i_count = 1
                 for s_col_name in ar_cols:
                     o_val = row.get(s_col_name)
-                    if pd.isna(o_val):
+                    if utils.is_null_value(o_val):
                         out_buffer.write("NULL")
                     elif isinstance(o_val, (datetime.datetime, datetime.date)):
                         out_buffer.write("'")
@@ -958,16 +958,18 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         ar_key_cols = []
         ar_no_key_cols = []
         ar_no_key_cols_no_compare = []
-        
+        col_types = {}  # col_name -> user_type_name, for type-aware comparisons (e.g. PG json)
+
         for d_row_col in drows_cols:
             if limit_cols_by_data_window:
                 if d_row_col['col_name'] not in tbl_data.columns:
                     continue
             
             ar_cols.append(d_row_col['col_name'])
-            
+            col_types[d_row_col['col_name']] = d_row_col['user_type_name']
+
             # Some types cannot be compared, mark them here
-            if not utils.can_type_be_compared(d_row_col['user_type_name']):
+            if not utils.can_type_be_compared(d_row_col['user_type_name'], db_type):
                 ar_no_key_cols_no_compare.append(d_row_col['col_name'])
 
         # Find uniqueness
@@ -1227,7 +1229,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 no_compare_cols_list = [col.lower() for col in ar_no_key_cols_no_compare] if ar_no_key_cols_no_compare else []
                 key_cols_list = [col.lower() for col in ar_key_cols]
 
-                out_buffer.write(f"    FOR update_compare_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(key_cols_list)}')")
+                out_buffer.write(f"    FOR update_compare_rec IN SELECT ScriptCols.col_name, CASE WHEN LOWER(ScriptCols.user_type_name) = 'json' OR LOWER(ScriptCols.user_type_name_db) = 'json' THEN '::jsonb' ELSE '' END AS cmp_cast FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(key_cols_list)}')")
                 if no_compare_cols_list:
                     out_buffer.write(f" AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(no_compare_cols_list)}')")
                 out_buffer.write(" LOOP\n")
@@ -1236,7 +1238,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("        ELSE\n")
                 out_buffer.write("            v_update_where_clause := v_update_where_clause || ' OR ';\n")
                 out_buffer.write("        END IF;\n")
-                out_buffer.write("        v_update_where_clause := v_update_where_clause || '(orig.' || update_compare_rec.col_name || '<> p.' || update_compare_rec.col_name || ') OR (orig.' || update_compare_rec.col_name || ' IS NULL AND p.' || update_compare_rec.col_name || ' IS NOT NULL) OR (orig.' || update_compare_rec.col_name || ' IS NOT NULL AND p.' || update_compare_rec.col_name || ' IS NULL)';\n")
+                out_buffer.write("        v_update_where_clause := v_update_where_clause || '(orig.' || update_compare_rec.col_name || update_compare_rec.cmp_cast || '<> p.' || update_compare_rec.col_name || update_compare_rec.cmp_cast || ') OR (orig.' || update_compare_rec.col_name || ' IS NULL AND p.' || update_compare_rec.col_name || ' IS NOT NULL) OR (orig.' || update_compare_rec.col_name || ' IS NOT NULL AND p.' || update_compare_rec.col_name || ' IS NULL)';\n")
                 out_buffer.write("    END LOOP;\n")
                 out_buffer.write("\n")
                 out_buffer.write("    IF v_update_where_clause <> '' THEN\n")
@@ -1418,7 +1420,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                             out_buffer.write("(")
                         
                         if col_name not in ar_no_key_cols_no_compare:
-                            out_buffer.write(f"(orig.{col_name}<> p.{col_name}) OR ")
+                            out_buffer.write(f"{utils.pg_col_diff_expr('orig', 'p', col_name, col_types.get(col_name))} OR ")
                         else:
                             out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
                         
@@ -1451,7 +1453,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write("(")
 
                 if col_name not in ar_no_key_cols_no_compare:  # MPBF
-                    out_buffer.write(f"(orig.{col_name}<> p.{col_name}) OR ")  # If that field cannot be compared (say, type XML) simply update if one is null and the other isn't
+                    out_buffer.write(f"{utils.pg_col_diff_expr('orig', 'p', col_name, col_types.get(col_name)) if db_type == DBType.PostgreSQL else f'(orig.{col_name}<> p.{col_name})'} OR ")  # If that field cannot be compared (say, type XML) simply update if one is null and the other isn't
                 else:
                     out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
 

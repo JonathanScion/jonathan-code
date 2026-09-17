@@ -57,9 +57,10 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
         j2_index_pre_drop.write("\t\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' DROP CONSTRAINT ' || temprow.index_name || ';';\n")
         j2_index_pre_drop.write("\t\t\tELSE\n")
         utils.add_print(db_type, 4, j2_index_pre_drop, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': dropping index ' || temprow.index_name")
-        j2_index_pre_drop.write("\t\t\t\tsqlCode := 'DROP INDEX ' || temprow.index_name || ';';\n")
+        # schema-qualified: an index lives in its table's schema, and may not be on the search_path
+        j2_index_pre_drop.write("\t\t\t\tsqlCode := 'DROP INDEX ' || temprow.table_schema || '.' || temprow.index_name || ';';\n")
         j2_index_pre_drop.write("\t\t\tEND IF;\n")
-        utils.add_exec_sql(db_type, 3, j2_index_pre_drop)
+        utils.add_exec_sql(db_type, 3, j2_index_pre_drop, ent_schema="temprow.table_schema", ent_name="temprow.table_name")
         j2_index_pre_drop.write("\t\tEND LOOP;\n")
         j2_index_pre_drop.write("\tEND;\n")
 
@@ -152,15 +153,15 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
             utils.add_print(db_type, 5, j2_index_post_add, "'To find those records, run: ' || REPLACE(temprow.SQL_CheckUnqData, 'PERFORM','SELECT')")
             j2_index_post_add.write("\t\t\t\tELSE\n")
             utils.add_print(db_type, 5, j2_index_post_add, "'No problematic data. Unique index\\constraint will be added'")
-            utils.add_exec_sql(db_type, 5, j2_index_post_add, "temprow.SQL_CREATE")
+            utils.add_exec_sql(db_type, 5, j2_index_post_add, "temprow.SQL_CREATE", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
             j2_index_post_add.write("\t\t\t\tEND IF;\n")
             j2_index_post_add.write("\t\t\tELSE\n")
-            utils.add_exec_sql(db_type, 4, j2_index_post_add, "temprow.SQL_CREATE")
+            utils.add_exec_sql(db_type, 4, j2_index_post_add, "temprow.SQL_CREATE", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
             j2_index_post_add.write("\t\t\tEND IF;\n")
         else:
             utils.add_print(db_type, 3, j2_index_post_add, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': adding index ' || temprow.index_name")
             j2_index_post_add.write("\t\t\tsqlCode := temprow.SQL_CREATE;\n")
-            utils.add_exec_sql(db_type, 3, j2_index_post_add)
+            utils.add_exec_sql(db_type, 3, j2_index_post_add, ent_schema="temprow.table_schema", ent_name="temprow.table_name")
 
         j2_index_post_add.write("\t\tEND LOOP;\n")
         j2_index_post_add.write("\tEND;\n")
@@ -204,7 +205,7 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
         j2_fk_pre_drop.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, j2_fk_pre_drop, "'Table ' || temprow.fkey_table_schema ||'.' || temprow.fkey_table_name || ': dropping foreign key ' || temprow.fk_name ")
         j2_fk_pre_drop.write("\t\t\tsqlCode := 'ALTER TABLE ' || temprow.fkey_table_schema || '.' || temprow.fkey_table_name || ' DROP CONSTRAINT ' || temprow.fk_name || ';';\n")
-        utils.add_exec_sql(db_type, 3, j2_fk_pre_drop)
+        utils.add_exec_sql(db_type, 3, j2_fk_pre_drop, ent_schema="temprow.fkey_table_schema", ent_name="temprow.fkey_table_name")
         j2_fk_pre_drop.write("\t\tEND LOOP;\n")
         j2_fk_pre_drop.write("\tEND;\n")
 
@@ -290,10 +291,10 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
             utils.add_print(db_type, 4, j2_fk_post_add, "'To find those records, run: ' || REPLACE(temprow.SQL_CheckFKData, 'PERFORM','SELECT')")
             j2_fk_post_add.write("\t\t\tELSE\n")
             utils.add_print(db_type, 4, j2_fk_post_add, "'No problematic data. Foreign key will be added'")
-            utils.add_exec_sql(db_type, 4, j2_fk_post_add, "temprow.SQL_CREATE")
+            utils.add_exec_sql(db_type, 4, j2_fk_post_add, "temprow.SQL_CREATE", ent_schema="temprow.fkey_table_schema", ent_name="temprow.fkey_table_name")
             j2_fk_post_add.write("\t\t\tEND IF;\n")
         else:
-            utils.add_exec_sql(db_type, 3, j2_fk_post_add, "temprow.SQL_CREATE")
+            utils.add_exec_sql(db_type, 3, j2_fk_post_add, "temprow.SQL_CREATE", ent_schema="temprow.fkey_table_schema", ent_name="temprow.fkey_table_name")
 
         j2_fk_post_add.write("\t\tEND LOOP;\n")
         j2_fk_post_add.write("\tEND;\n")
@@ -339,7 +340,7 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
         j2_cc_pre_drop.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, j2_cc_pre_drop, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': dropping check constraint ' || temprow.constraint_name")
         j2_cc_pre_drop.write("\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' DROP CONSTRAINT ' || temprow.constraint_name || ';';\n")
-        utils.add_exec_sql(db_type, 3, j2_cc_pre_drop)
+        utils.add_exec_sql(db_type, 3, j2_cc_pre_drop, ent_schema="temprow.table_schema", ent_name="temprow.table_name")
         j2_cc_pre_drop.write("\t\tEND LOOP;\n")
         j2_cc_pre_drop.write("\tEND;\n")
 
@@ -386,7 +387,7 @@ def generate_pre_drop_post_add_indexes_fks(db_type: DBType, j2_index_pre_drop, j
         j2_cc_post_add.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, j2_cc_post_add, "'Table ' || temprow.table_schema || '.' || temprow.table_name || ': adding check constraint ' || temprow.constraint_name")
         j2_cc_post_add.write("\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name || ' ADD CONSTRAINT ' || temprow.constraint_name || ' ' || temprow.constraint_definition || ';';\n")
-        utils.add_exec_sql(db_type, 3, j2_cc_post_add)
+        utils.add_exec_sql(db_type, 3, j2_cc_post_add, ent_schema="temprow.table_schema", ent_name="temprow.table_name")
         j2_cc_post_add.write("\t\tEND LOOP;\n")
         j2_cc_post_add.write("\tEND;\n")
 

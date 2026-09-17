@@ -44,7 +44,7 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write("\t\t\t\t\tELSE 'equal'\n")
         sql_buffer.write("\t\t\t\tEND as status,\n")
         sql_buffer.write("\t\t\t\t-- Generate diff file name for tables with differences\n")
-        sql_buffer.write("\t\t\t\tCASE WHEN ST.tablestat = 3 THEN\n")
+        sql_buffer.write("\t\t\t\tCASE WHEN ST.tablestat IN (1, 2, 3) THEN --different or one side only: all get a table page\n")
         sql_buffer.write("\t\t\t\t\t'diff_table_' || replace(ST.table_schema, '.', '_') || '_' || \n")
         sql_buffer.write("\t\t\t\t\treplace(ST.table_name, '.', '_') || '.html'\n")
         sql_buffer.write("\t\t\t\tELSE NULL\n")
@@ -176,15 +176,12 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write("\t\tSELECT pg_read_file(input_file) INTO html_content;\n")
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\t\t-- Replace the placeholder with actual data\n")
-        sql_buffer.write("\t\tnew_content := replace(html_content, '[[reportInfo]]', result_string);\n")
-        # Panel titles: left = database the script was generated from (known now), right = database the script runs on (known at run time).
-        # Both land inside a JS double-quoted string, so escape \ and "
-        left_title = f"{source_db_label} (source)" if source_db_label else "Source (script)"
-        left_title = left_title.replace('\\', '\\\\').replace('"', '\\"').replace("'", "''")
-        sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[leftPanelTitle]]', '{left_title}');\n")
-        sql_buffer.write("\t\tnew_content := replace(new_content, '[[rightPanelTitle]]', replace(replace(\n")
-        sql_buffer.write("\t\t\tCASE WHEN inet_server_addr() IS NULL OR host(inet_server_addr()) IN ('127.0.0.1', '::1') THEN 'localhost' ELSE host(inet_server_addr()) END\n")
-        sql_buffer.write("\t\t\t|| '.' || current_database() || ' (target)', '\\', '\\\\'), '\"', '\\\"'));\n")
+        # The JSON lands inside a <script> block: escape '</' so a name containing '</script>' can't close it
+        sql_buffer.write("\t\tnew_content := replace(html_content, '[[reportInfo]]', replace(result_string, '</', '<\\/'));\n")
+        left_title_sql, right_title_sql = utils.pg_panel_title_exprs(source_db_label)
+        sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[leftPanelTitle]]', {left_title_sql});\n")
+        sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[rightPanelTitle]]', {right_title_sql});\n")
+        sql_buffer.write(f"\t\tnew_content := replace(new_content, '[[generatedAt]]', {utils.PG_GENERATED_AT_EXPR});\n")
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\t\tRAISE NOTICE 'Replacement done. Writing file...';\n")
         sql_buffer.write("\t\t\n")

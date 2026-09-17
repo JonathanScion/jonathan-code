@@ -24,6 +24,14 @@ def numeric_or_null(value: float) -> str:
     return str(value)
 
 
+def is_null_value(value: Any) -> bool:
+    """NULL check for a single data cell. pd.isna() can't be used directly: json/jsonb and array columns
+    come back as lists/dicts, and pd.isna(list) returns an element-wise array instead of a bool."""
+    if isinstance(value, (list, tuple, dict, set)):
+        return False
+    return bool(pd.isna(value))
+
+
 def format_value_for_sql(value: Any) -> str:
     """Format a value for SQL INSERT statement.
 
@@ -102,7 +110,10 @@ def add_print(db_type: DBType, num_tabs: int, script: StringIO, print_line: str)
        script.write(f"{align}END IF;\n")
 
 
-def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name: str = "sqlCode", prefix_go_for_print: bool = False) -> None:
+def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name: str = "sqlCode", prefix_go_for_print: bool = False,
+                 ent_schema: Optional[str] = None, ent_name: Optional[str] = None) -> None:
+   """ent_schema/ent_name (PostgreSQL): SQL expressions naming the table the statement belongs to, e.g. 'temprow.table_schema'.
+   When given, the statement is also recorded for the HTML report (per-table SQL), even if printExec is off."""
    # Build tab alignment
    align = "\t" * num_tabs
    
@@ -113,10 +124,16 @@ def add_exec_sql(db_type: DBType, num_tabs: int, script: StringIO, exec_str_name
        script.write(f"{align}SET @schemaChanged = 1\n")
        
    elif db_type == DBType.PostgreSQL:
-       script.write(f"{align}IF (printExec = True) THEN \n")
-       script.write(f"{align}\tINSERT INTO scriptoutput (SQLText)\n")
-       # No quotes if its variable, say the default value, 'sqlCode'. but maybe if i bring in a string, i'll need quotes? how could i distinguish a variable transferred here, from a string?
-       script.write(f"{align}\tVALUES ({exec_str_name});\n")
+       if ent_schema and ent_name:
+           # report_only: kept for the HTML report's per-table SQL, but not part of the printed output
+           script.write(f"{align}IF (printExec = True OR htmlReport = True) THEN \n")
+           script.write(f"{align}\tINSERT INTO scriptoutput (SQLText, ent_schema, ent_name, report_only)\n")
+           script.write(f"{align}\tVALUES ({exec_str_name}, {ent_schema}, {ent_name}, NOT printExec);\n")
+       else:
+           script.write(f"{align}IF (printExec = True) THEN \n")
+           script.write(f"{align}\tINSERT INTO scriptoutput (SQLText)\n")
+           # No quotes if its variable, say the default value, 'sqlCode'. but maybe if i bring in a string, i'll need quotes? how could i distinguish a variable transferred here, from a string?
+           script.write(f"{align}\tVALUES ({exec_str_name});\n")
        script.write(f"{align}END IF;\n")
        script.write(f"{align}IF (execCode = True) THEN\n")
        script.write(f"{align}\tEXECUTE {exec_str_name};\n")
@@ -192,10 +209,38 @@ def is_pgsql_quote_required(type_name):
 
 
 
-def can_type_be_compared(type_name):
+def can_type_be_compared(type_name, db_type: DBType = DBType.MSSQL):
     type_name_lower = type_name.lower()
-    
+
+    if db_type == DBType.PostgreSQL:
+        # PG text is a regular comparable type (MSSQL text/ntext are legacy LOBs). json has no <> operator,
+        # but is compared via a jsonb cast - see pg_col_diff_expr
+        return type_name_lower != "xml"
+
     if type_name_lower in ["xml", "text", "ntext"]:
         return False
     else:
         return True
+
+
+def pg_panel_title_exprs(source_db_label: str) -> tuple[str, str]:
+    """PostgreSQL expressions for the left/right titles of the HTML report pages: left = database the script was
+    generated from (known now, e.g. 'localhost.const1 (source)'), right = database the script runs on (known at run time).
+    Both land inside a JS double-quoted string, so \\ and " are escaped."""
+    left_title = f"{source_db_label} (source)" if source_db_label else "Source (script)"
+    left_title = left_title.replace('\\', '\\\\').replace('"', '\\"').replace("'", "''")
+    right_title = ("replace(replace(CASE WHEN inet_server_addr() IS NULL OR host(inet_server_addr()) IN ('127.0.0.1', '::1') "
+                   "THEN 'localhost' ELSE host(inet_server_addr()) END || '.' || current_database() || ' (target)', "
+                   "'\\', '\\\\'), '\"', '\\\"')")
+    return f"'{left_title}'", right_title
+
+
+# When the script ran (and so when the report pages were generated), to the second
+PG_GENERATED_AT_EXPR = "to_char(now(), 'YYYY-MM-DD HH24:MI:SS')"
+
+
+def pg_col_diff_expr(left: str, right: str, col_name: str, type_name: str) -> str:
+    """PostgreSQL '<>' comparison of a column between two aliases. json has no equality operator, so compare as jsonb
+    (which also ignores key order and whitespace)."""
+    cast = "::jsonb" if str(type_name).lower() == "json" else ""
+    return f"({left}.{col_name}{cast}<> {right}.{col_name}{cast})"

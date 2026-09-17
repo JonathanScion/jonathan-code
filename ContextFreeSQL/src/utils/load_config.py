@@ -14,7 +14,7 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
         config_path = Path(config_path)
 
     # Load and parse JSON
-    with open(config_path, 'r') as f:
+    with open(config_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     # Create objects from config data

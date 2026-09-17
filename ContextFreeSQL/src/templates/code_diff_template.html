@@ -149,6 +149,179 @@
             font-size: 13px;
         }
 
+        /* Headlines over the two halves of the side-by-side diff (the same titles as the main report) */
+        .side-titles {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            border-radius: 6px 6px 0 0;
+            overflow: hidden;
+        }
+
+        .side-titles[hidden] {
+            display: none;
+        }
+
+        .side-title {
+            padding: 12px 15px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 16px;
+            color: white;
+            background: #343a40;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .side-title + .side-title {
+            border-left: 1px solid #495057;
+        }
+
+        /* diff2html's own file header ("Script Version ... → ... RENAMED") is replaced by .side-titles */
+        .d2h-file-header {
+            display: none;
+        }
+
+        /* SQL statement cards (tables): per side, what makes that side match the other, in execution order */
+        .align-sql {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 0 20px 20px;
+            align-items: start;
+        }
+
+        .align-sql[hidden] {
+            display: none;
+        }
+
+        .align-sql-column {
+            min-width: 0;
+        }
+
+        .align-sql-header {
+            margin-bottom: 12px;
+            padding: 12px 15px;
+            border-radius: 6px;
+            color: white;
+            background: #343a40;
+        }
+
+        .align-sql-header-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .align-sql-header h2 {
+            flex: 1;
+            min-width: 0;
+            font-size: 16px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .align-sql-header .hint {
+            margin-top: 4px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .align-sql-header .copy-btn {
+            flex-shrink: 0;
+        }
+
+        .align-sql-empty {
+            padding: 16px;
+            border: 1px dashed #ced4da;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 13px;
+            color: #6c757d;
+        }
+
+        @media (max-width: 900px) {
+            .align-sql {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .sql-card {
+            margin-bottom: 12px;
+            border: 1px solid #e1e4e8;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .sql-card.kind-add { border-left-color: #34d058; }
+        .sql-card.kind-drop { border-left-color: #d73a49; }
+        .sql-card.kind-alter { border-left-color: #f0ad4e; }
+
+        .sql-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .sql-card-step {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            padding: 0 6px;
+            border-radius: 12px;
+            background: #e9ecef;
+            font-size: 12px;
+            font-weight: 700;
+            color: #495057;
+        }
+
+        .sql-card-title {
+            flex: 1;
+            min-width: 0;
+            font-size: 14px;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .copy-btn {
+            padding: 4px 12px;
+            font-size: 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            color: #495057;
+            cursor: pointer;
+        }
+
+        .copy-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .sql-card pre {
+            margin: 0;
+            padding: 12px 14px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre;
+            background: #fbfbfd;
+        }
+
         .back-link {
             display: inline-block;
             margin-bottom: 10px;
@@ -191,11 +364,11 @@
         <div class="legend">
             <div class="legend-item">
                 <div class="legend-color removed"></div>
-                <span>Script Version (Expected)</span>
+                <span>Only in <span class="left-title"></span></span>
             </div>
             <div class="legend-item">
                 <div class="legend-color added"></div>
-                <span>Database Version (Actual)</span>
+                <span>Only in <span class="right-title"></span></span>
             </div>
             <div class="legend-item">
                 <div class="legend-color unchanged"></div>
@@ -203,10 +376,23 @@
             </div>
         </div>
 
-        <div class="diff-container" id="diffOutput"></div>
+        <div class="diff-container">
+            <!-- Same headlines as the main report; shown over the two halves in side-by-side mode -->
+            <div class="side-titles" id="sideTitles">
+                <div class="side-title left-title"></div>
+                <div class="side-title right-title"></div>
+            </div>
+            <div id="diffOutput"></div>
+        </div>
+
+        <!-- Tables: for each side, the statements that make it match the other side -->
+        <div class="align-sql" id="alignSql" hidden>
+            <div class="align-sql-column" id="sourceSql"></div>
+            <div class="align-sql-column" id="targetSql"></div>
+        </div>
 
         <div class="footer">
-            Code Comparison Tool - Generated on <span id="currentDate"></span>
+            Code Comparison Tool - Generated on <span id="currentDate">[[generatedAt]]</span>
         </div>
     </div>
 
@@ -218,27 +404,24 @@
         const dbCode = [[DB_CODE]];
         const entityName = '[[ENTITY_NAME]]';
 
-        function createUnifiedDiff(oldStr, newStr, oldHeader, newHeader, contextLines) {
-            const diff = Diff.createTwoFilesPatch(
-                oldHeader || 'Script Version',
-                newHeader || 'Database Version',
-                oldStr,
-                newStr,
-                'Expected',
-                'Actual',
-                { context: contextLines }
-            );
-            return diff;
+        // Same headlines as the main report: left = database the script was generated from, right = database it ran on
+        // ([[...]] placeholders are filled in when the script generates the page)
+        const LEFT_TITLE = "[[leftPanelTitle]]";
+        const RIGHT_TITLE = "[[rightPanelTitle]]";
+
+        function createUnifiedDiff(oldStr, newStr, contextLines) {
+            // Same file name on both sides: different names make diff2html label the file as RENAMED
+            return Diff.createTwoFilesPatch(entityName, entityName, oldStr, newStr, LEFT_TITLE, RIGHT_TITLE, { context: contextLines });
         }
 
         function renderDiff() {
             const viewMode = document.getElementById('viewMode').value;
             const contextLines = parseInt(document.getElementById('contextLines').value);
 
-            const diffString = createUnifiedDiff(scriptCode, dbCode,
-                'Script Version (Expected)',
-                'Database Version (Actual)',
-                contextLines);
+            // The side titles line up with the two halves only in side-by-side mode; the legend names the sides in unified mode
+            document.getElementById('sideTitles').hidden = viewMode !== 'side-by-side';
+
+            const diffString = createUnifiedDiff(scriptCode, dbCode, contextLines);
 
             const diffHtml = Diff2Html.html(diffString, {
                 drawFileList: false,
@@ -263,8 +446,129 @@
             }, 50);
         }
 
-        // Initialize
-        document.getElementById('currentDate').textContent = new Date().toLocaleDateString();
+        // Per side, the statements that make it match the other side, in execution order (empty for coded entities).
+        // Target: what the script runs. Source: the reverse, built from the comparison and this database's catalogs
+        const sourceSql = [[SOURCE_SQL]];
+        const targetSql = [[TARGET_SQL]];
+
+        // Card title and color from the statement itself
+        function describeStatement(sql) {
+            // One line, without the trailing semicolon, so names captured at the end of the statement come out clean
+            const s = sql.replace(/\s+/g, ' ').trim().replace(/;$/, '');
+            const rules = [
+                [/^CREATE TABLE (\S+)/i, m => `Create table ${m[1]}`, 'add'],
+                [/^DROP TABLE (\S+)/i, m => `Drop table ${m[1]}`, 'drop'],
+                [/^CREATE (UNIQUE )?INDEX (\S+)/i, m => `Create ${m[1] ? 'unique ' : ''}index ${m[2]}`, 'add'],
+                [/^DROP INDEX (\S+)/i, m => `Drop index ${m[1]}`, 'drop'],
+                [/^ALTER TABLE \S+ ADD CONSTRAINT (\S+) PRIMARY KEY/i, m => `Add primary key ${m[1]}`, 'add'],
+                [/^ALTER TABLE \S+ ADD CONSTRAINT (\S+) FOREIGN KEY/i, m => `Add foreign key ${m[1]}`, 'add'],
+                [/^ALTER TABLE \S+ ADD CONSTRAINT (\S+)/i, m => `Add constraint ${m[1]}`, 'add'],
+                [/^ALTER TABLE \S+ DROP CONSTRAINT (\S+)/i, m => `Drop constraint ${m[1]}`, 'drop'],
+                [/^ALTER TABLE \S+ DROP COLUMN (\S+)/i, m => `Drop column ${m[1]}`, 'drop'],
+                [/^ALTER TABLE \S+ ALTER COLUMN (\S+) (SET|DROP) DEFAULT/i, m => `${m[2] === 'SET' ? 'Set' : 'Drop'} default on ${m[1]}`, 'alter'],
+                [/^ALTER TABLE \S+ ALTER COLUMN (\S+)/i, m => `Alter column ${m[1]}`, 'alter'],
+                [/^ALTER TABLE \S+ ADD (?:COLUMN )?(\S+)/i, m => `Add column ${m[1]}`, 'add'],
+            ];
+            for (const [re, title, kind] of rules) {
+                const m = s.match(re);
+                if (m) return { title: title(m), kind };
+            }
+            return { title: 'SQL statement', kind: '' };
+        }
+
+        function withSemicolon(sql) {
+            const trimmed = sql.replace(/\s+$/, '');
+            return trimmed.endsWith(';') ? trimmed : trimmed + ';';
+        }
+
+        function copyText(text, button) {
+            const done = () => {
+                const label = button.textContent;
+                button.textContent = 'Copied';
+                setTimeout(() => { button.textContent = label; }, 1500);
+            };
+            // Clipboard API may be unavailable when the page is opened from disk; fall back to a hidden textarea
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done, () => { legacyCopy(text); done(); });
+            } else {
+                legacyCopy(text);
+                done();
+            }
+        }
+
+        function legacyCopy(text) {
+            const area = document.createElement('textarea');
+            area.value = text;
+            area.style.position = 'fixed';
+            area.style.opacity = '0';
+            document.body.appendChild(area);
+            area.select();
+            document.execCommand('copy');
+            area.remove();
+        }
+
+        // One column of cards: header naming the database the statements run on, then a card per statement
+        function renderSqlColumn(container, runOn, matchWith, rawStatements) {
+            const statements = rawStatements.map(withSemicolon);
+            const header = document.createElement('div');
+            header.className = 'align-sql-header';
+            header.innerHTML = `
+                <div class="align-sql-header-row">
+                    <h2></h2>
+                    <button type="button" class="copy-btn">Copy all</button>
+                </div>
+                <div class="hint"></div>`;
+            header.querySelector('h2').textContent = `Run on ${runOn}`;
+            header.querySelector('h2').title = `Run on ${runOn}`;
+            header.querySelector('.hint').textContent = statements.length
+                ? `${statements.length} statement${statements.length === 1 ? '' : 's'}, in execution order, to make it match ${matchWith}`
+                : `Nothing to run to make it match ${matchWith}`;
+            const copyAll = header.querySelector('.copy-btn');
+            if (statements.length) {
+                copyAll.addEventListener('click', () => copyText(statements.join('\n\n'), copyAll));
+            } else {
+                copyAll.remove();
+            }
+            container.appendChild(header);
+
+            if (!statements.length) {
+                const empty = document.createElement('div');
+                empty.className = 'align-sql-empty';
+                empty.textContent = 'No statements';
+                container.appendChild(empty);
+                return;
+            }
+            const cards = container;
+            statements.forEach((sql, i) => {
+                const { title, kind } = describeStatement(sql);
+                const card = document.createElement('div');
+                card.className = 'sql-card' + (kind ? ` kind-${kind}` : '');
+                card.innerHTML = `
+                    <div class="sql-card-header">
+                        <span class="sql-card-step">${i + 1}</span>
+                        <span class="sql-card-title"></span>
+                        <button type="button" class="copy-btn">Copy</button>
+                    </div>
+                    <pre></pre>`;
+                card.querySelector('.sql-card-title').textContent = title;
+                card.querySelector('pre').textContent = sql;
+                const button = card.querySelector('.copy-btn');
+                button.addEventListener('click', () => copyText(sql, button));
+                cards.appendChild(card);
+            });
+        }
+
+        function renderAlignSql() {
+            if (!sourceSql.length && !targetSql.length) return;  // coded entities, or nothing generated
+            renderSqlColumn(document.getElementById('sourceSql'), LEFT_TITLE, RIGHT_TITLE, sourceSql);
+            renderSqlColumn(document.getElementById('targetSql'), RIGHT_TITLE, LEFT_TITLE, targetSql);
+            document.getElementById('alignSql').hidden = false;
+        }
+
+        // Initialize (the footer's generation time is filled in when the script writes the page)
+        document.querySelectorAll('.left-title').forEach(el => { el.textContent = LEFT_TITLE; el.title = LEFT_TITLE; });
+        document.querySelectorAll('.right-title').forEach(el => { el.textContent = RIGHT_TITLE; el.title = RIGHT_TITLE; });
+        renderAlignSql();
         renderDiff();
         // Ensure page starts at top on load
         window.scrollTo(0, 0);

@@ -15,14 +15,15 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
+            padding: 8px;
         }
 
+        /* Full width: the report grows with the window, with a thin purple margin around it */
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
+            width: 100%;
+            margin: 0;
             background: white;
-            border-radius: 12px;
+            border-radius: 8px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
         }
@@ -548,7 +549,7 @@
         </div>
 
         <div class="footer">
-            Database Schema Comparison Tool • Generated on <span id="currentDate"></span>
+            Database Schema Comparison Tool • Generated on <span id="currentDate">[[generatedAt]]</span>
         </div>
     </div>
 
@@ -656,9 +657,9 @@ END; --of cursor
 
             // For entries with differences, make name a clickable link to comparison/diff HTML
             let nameCell;
-            if (item.status === 'different' && item.diffFile) {
-                // Coded entities (functions, procedures, views) with diffFile field
-                nameCell = `<a href="${item.diffFile}" style="color: #dc3545; text-decoration: underline; cursor: pointer;" title="View code differences">${item.name}</a>`;
+            if (item.diffFile) {
+                // Entries with their own page: different coded entities, and tables that are different or on one side only
+                nameCell = `<a href="${item.diffFile}" class="${item.status}" style="text-decoration: underline; cursor: pointer;" title="View differences">${item.name}</a>`;
             } else if (item.type === 'Data' && item.status === 'different') {
                 // Data entries - use compare_schema_name.html pattern
                 const compareHtmlUrl = `compare_${item.schema}_${item.name}.html`;
@@ -818,9 +819,8 @@ END; --of cursor
             });
         }
 
-        // Initialize
-        document.getElementById('currentDate').textContent = new Date().toLocaleDateString();
-        
+        // Initialize (the footer's generation time is filled in when the script writes the report)
+
         // Apply configuration
         document.getElementById('reportTitle').textContent = CONFIG.reportTitle;
         const panelTitle = (title, fallback) => title.startsWith('[[') ? fallback : title;

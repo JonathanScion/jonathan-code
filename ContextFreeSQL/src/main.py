@@ -324,7 +324,8 @@ def main():
 
     # newline='\n': on Windows, text mode would turn \n into \r\n inside the script's string literals,
     # making script-side code differ from the DB's (code comparison, diff pages)
-    with open(config_vals.input_output.output_sql, 'w', newline='\n') as f:
+    # encoding='utf-8': Windows defaults to cp1252, which can't write characters found in data (e.g. U+2011)
+    with open(config_vals.input_output.output_sql, 'w', newline='\n', encoding='utf-8') as f:
        f.write(script)
 
     print(f"Script written to: {config_vals.input_output.output_sql}")
