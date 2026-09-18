@@ -155,8 +155,11 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # Split coded entities: DROP before columns, CREATE after columns
     generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
     generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables)
-    generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, include_security=scrpt_ops.script_security, source_db_label=source_db_label)
-    generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, drops_extra_tables=scrpt_ops.remove_all_extra_ents, source_db_label=source_db_label)
+    # The ScriptCode state table is only emitted when coded entities are in scope: without it the report and the
+    # diff pages must not read it (e.g. db_ents_to_load lists only tables)
+    got_coded_state = bool(script_db_state_coded.getvalue())
+    generate_html_report(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, include_security=scrpt_ops.script_security, source_db_label=source_db_label, include_coded=got_coded_state)
+    generate_code_diffs(db_type=db_type, sql_buffer=add_coded_ents, input_output=input_output, drops_extra_tables=scrpt_ops.remove_all_extra_ents, source_db_label=source_db_label, include_coded=got_coded_state)
 
 
     # Bad data check StringBuilders

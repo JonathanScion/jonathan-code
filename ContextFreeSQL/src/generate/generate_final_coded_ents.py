@@ -2,6 +2,31 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions
 from src.utils import funcs as utils
 
 
+# Drop dependents before what they depend on: a trigger uses a function, a view can use both
+DROP_ORDER_SQL = ("ORDER BY CASE UPPER(s.ent_type) WHEN 'TRIGGER' THEN 1 WHEN 'VIEW' THEN 2 ELSE 3 END, "
+                  "s.ent_schema, s.ent_name")
+
+
+def write_pg_drop_coded_ent(sql_buffer, indent: int, db_type: DBType) -> None:
+    """PostgreSQL: build the DROP for the coded entity in temprow and run it.
+
+    A trigger needs the table it is on ('DROP TRIGGER x ON schema.table'), which ScriptCode doesn't hold, so it is
+    looked up in the catalog; if it isn't found there the drop is skipped rather than executing NULL.
+    ent_type is stored capitalised ('Function'), hence UPPER() before comparing."""
+    align = "\t" * indent
+    sql_buffer.write(f"{align}sqlCode := CASE WHEN UPPER(temprow.ent_type) = 'TRIGGER' THEN\n")
+    sql_buffer.write(f"{align}\t\t(SELECT 'DROP TRIGGER ' || temprow.ent_name || ' ON ' || n.nspname || '.' || c.relname || ';'\n")
+    sql_buffer.write(f"{align}\t\t\tFROM pg_trigger tg JOIN pg_class c ON c.oid = tg.tgrelid JOIN pg_namespace n ON n.oid = c.relnamespace\n")
+    sql_buffer.write(f"{align}\t\t\tWHERE tg.tgname = temprow.ent_name AND LOWER(n.nspname) = LOWER(temprow.ent_schema) AND NOT tg.tgisinternal\n")
+    sql_buffer.write(f"{align}\t\t\tLIMIT 1)\n")
+    sql_buffer.write(f"{align}\tELSE 'DROP ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name\n")
+    sql_buffer.write(f"{align}\t\t|| CASE WHEN UPPER(temprow.ent_type) IN ('FUNCTION', 'PROCEDURE') THEN '(' || COALESCE(temprow.param_type_list,'') || ')' ELSE '' END || ';'\n")
+    sql_buffer.write(f"{align}\tEND;\n")
+    sql_buffer.write(f"{align}IF sqlCode IS NOT NULL THEN\n")
+    utils.add_exec_sql(db_type, indent + 1, sql_buffer)
+    sql_buffer.write(f"{align}END IF;\n")
+
+
 def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool, got_specific_tables: bool):
     """
     Generate DROP statements for coded entities (views, functions, procedures, triggers).
@@ -50,9 +75,10 @@ def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents:
             sql_buffer.write("\t\tSelect s.ent_schema , s.ent_name, s.ent_type, s.param_type_list  \n")
             sql_buffer.write("\t\tFROM ScriptCode s\n")
             sql_buffer.write("\t\tWHERE codeStat = 2\n")
+            sql_buffer.write(f"\t\t{DROP_ORDER_SQL}\n")
             sql_buffer.write("LOOP\n")
             utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_schema || '.' || temprow.ent_name || ' is extra. Drop this code:'")
-            utils.add_exec_sql(db_type, 1, sql_buffer, "'DROP  ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || CASE WHEN temprow.ent_type IN ('FUNCTION', 'PROCEDURE') THEN '(' || COALESCE(temprow.param_type_list,'') || ')' ELSE '' END")
+            write_pg_drop_coded_ent(sql_buffer, 1, db_type)
             sql_buffer.write("\tEND LOOP;\n")
             sql_buffer.write("END; --of cursor \n")
 
@@ -90,9 +116,10 @@ def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents:
             sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.ent_type, S.param_type_list \n")
             sql_buffer.write("\t\t\tFROM ScriptCode s\n")
             sql_buffer.write("\t\t\tWHERE codeStat = 3 \n")
+            sql_buffer.write(f"\t\t\t{DROP_ORDER_SQL}\n")
             sql_buffer.write("\t\tLOOP\n")
             utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_schema || '.' || temprow.ent_name || ' is different. Drop and then add:'")
-            utils.add_exec_sql(db_type, 1, sql_buffer, "'DROP ' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || CASE WHEN temprow.ent_type IN ('FUNCTION', 'PROCEDURE') THEN '(' || COALESCE(temprow.param_type_list,'') || ')' ELSE '' END || ';'")
+            write_pg_drop_coded_ent(sql_buffer, 1, db_type)
             sql_buffer.write("\t\tEND LOOP;\n")
             sql_buffer.write("\tEND; --of cursor \n")
 
