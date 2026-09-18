@@ -51,7 +51,9 @@ db_ents_to_load:
 
 tables_data:
   tables      - List of tables to script data for (empty = all)
-  from_file   - Load data from CSV files (default: false)
+  from_file   - Write data to CSV files and COPY them in, instead of INSERT
+                statements: a much smaller script, but it needs those files
+                (server-side COPY) when it runs (default: false)
 
 input_output:
   output_sql  - Path for generated SQL script

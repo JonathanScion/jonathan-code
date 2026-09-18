@@ -180,11 +180,29 @@ Configure data scripting (INSERT statements).
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `tables` | array | `[]` | List of tables to script data for. Format: `"schema.name"` |
-| `from_file` | bool | `false` | Load data from CSV files instead of database |
+| `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
 
 **Behavior:**
 - **Empty array `[]`**: Scripts data for ALL tables (can be slow for large databases)
 - **Specified list**: Only scripts data for listed tables
+
+### `from_file`: data as CSV instead of INSERT statements
+
+The data is always read from the source database (`SELECT * FROM <table>`); `from_file` changes only how it is
+written out. With `from_file: true`, each table's rows go to `<basePath>/<schema>_<table>.csv` and the script loads
+its comparison table with one `COPY` instead of one INSERT per row. For a 1,000 row table that is a 968 KB script
+with 1,001 INSERTs versus a 130 KB script plus a 193 KB CSV - about 7x smaller. The statements that actually change
+the target are unaffected: they are built at run time from the comparison, so they scale with the number of
+differences, not the size of the table.
+
+The trade-off is that the script is no longer self-contained, and two things follow from that:
+
+- **The CSV files must be present at `basePath` when the script runs.** `basePath` is a variable at the top of the
+  generated script; if you move the script or the CSVs, update it.
+- **`COPY` runs on the server.** The files must be on the *database server's* filesystem, and the user needs
+  superuser or the `pg_read_server_files` role. This is fine when the server is your own machine, but it does not
+  work against a remote database - use `from_file: false` there, or load the CSVs yourself with psql's client-side
+  `\copy`.
 
 **Example - Script all table data:**
 ```json
