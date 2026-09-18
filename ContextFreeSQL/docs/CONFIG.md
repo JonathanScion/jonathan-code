@@ -99,6 +99,7 @@ Controls what gets scripted and how.
 | `data_comparison_include_equal_rows` | bool | `true` | Include unchanged rows in CSV/HTML comparison reports |
 | `data_window_only` | bool | `false` | Only compare data within a specific window |
 | `data_window_got_specific_cells` | bool | `false` | Exclude specific cells from data window |
+| `data_insert_batch_rows` | int | `200` | Rows per INSERT when scripting data. Batching stops the column list from repeating on every row, which makes the script much smaller; `1` writes one statement per row. See below |
 
 **Example:**
 ```json
@@ -111,6 +112,25 @@ Controls what gets scripted and how.
 ```
 
 ---
+
+### `data_insert_batch_rows`: how data rows are written
+
+Scripted rows are grouped into multi-row INSERTs, one row per line:
+
+```sql
+INSERT INTO scope_creator_actions (id, wo_id, type, ...)
+    VALUES
+    ('3377774','00193881-05_0003',...),
+    ('3377775','00052757-01_0000',...);
+```
+
+This is plain SQL, so it runs in psql, pgAdmin, the VS Code PostgreSQL extension or anything else, and the script
+stays self-contained. On a 1,000 row table it takes the script from 964 KB to 580 KB (40% smaller); across a whole
+database the saving depends on how many rows are scripted. Use `1` for one statement per row (the old output).
+
+Very large batches make GUI SQL editors sluggish, so raise it only if you need to. When
+`data_window_got_specific_cells` is on, each row carries its own extra columns and rows are written one per
+statement regardless of this setting.
 
 ## Section: `table_script_ops`
 

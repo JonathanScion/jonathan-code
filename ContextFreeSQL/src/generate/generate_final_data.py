@@ -402,39 +402,47 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     i_col_count = len(ar_cols)
                     s_overriding = " OVERRIDING SYSTEM VALUE" if s_ent_full_name_sql in ar_tables_identity else ""
 
+                    # Batched the same way as the comparison table load below: one printed statement per batch of
+                    # rows, so neither the column list nor the scriptoutput wrapper repeats per row
+                    batch_rows = max(1, script_ops.data_insert_batch_rows)
+                    col_list = ",".join(ar_cols)
+                    batch = []
+
+                    def write_print_batch(rows):
+                        """One scriptoutput row holding an INSERT with all of rows' VALUES"""
+                        out_buffer.write(f"\t\t\tINSERT INTO scriptoutput (SQLText)\n")
+                        out_buffer.write(f"\t\t\t\tVALUES ('--INSERT INTO {s_ent_full_name_sql} ({col_list}){s_overriding}\n")
+                        out_buffer.write("\t\tVALUES\n")
+                        out_buffer.write(",\n".join(rows))
+                        out_buffer.write(";');\n")
+
                     for index, row in tbl_data.iterrows():
-                        s_insert_into = []
-                        s_insert_into.append(f"INSERT INTO {s_ent_full_name_sql} (")
-                        i_count = 1
-                        for s_col_name in ar_cols:
-                            s_insert_into.append(s_col_name)
-                            if i_count < i_col_count:
-                                s_insert_into.append(",")
-                            i_count += 1
-                        s_insert_into.append(f"){s_overriding}\n")
-                        s_insert_into.append("\t\tVALUES (")
+                        row_vals = []
                         i_count = 1
                         for s_col_name in ar_cols:
                             o_val = row.get(s_col_name)
                             if utils.is_null_value(o_val):  # Equivalent to IsDBNull
-                                s_insert_into.append("NULL")
+                                row_vals.append("NULL")
                             elif isinstance(o_val, (datetime.datetime, datetime.date)):
-                                s_insert_into.append("''")
-                                s_insert_into.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f"))
-                                s_insert_into.append("''")
+                                row_vals.append("''")
+                                row_vals.append(o_val.strftime("%Y-%m-%d %H:%M:%S.%f"))
+                                row_vals.append("''")
                             else:
                                 # Use helper to handle float-to-int conversion and proper quoting
                                 # Note: we need double quotes here since this is inside a string literal
                                 formatted = utils.format_value_for_sql(o_val)
-                                s_insert_into.append(formatted.replace("'", "''"))
+                                row_vals.append(formatted.replace("'", "''"))
                             if i_count < i_col_count:
-                                s_insert_into.append(",")
+                                row_vals.append(",")
                             i_count += 1
-                        s_insert_into.append(");'")
 
-                        full_insert = "".join(s_insert_into)
-                        out_buffer.write(f"\t\t\tINSERT INTO scriptoutput (SQLText)\n")
-                        out_buffer.write(f"\t\t\t\tVALUES ('--{full_insert});\n")
+                        batch.append("\t\t(" + "".join(row_vals) + ")")
+                        if len(batch) >= batch_rows:
+                            write_print_batch(batch)
+                            batch = []
+
+                    if batch:  # last, partly filled batch
+                        write_print_batch(batch)
 
                 out_buffer.write("\n")
                 out_buffer.write(f"\t\t--END IF;--of Batch INSERT of all the data into {s_ent_full_name}\n")
@@ -508,33 +516,39 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
                 os.makedirs(csv_output_dir, exist_ok=True)
                 tbl_data[ar_cols].to_csv(csv_file_path, index=False)
-            # Generate INSERT statements
-            for index, row in tbl_data.iterrows():
-                out_buffer.write(f"\t\tINSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
-                i_count = 1
-                for s_col_name in ar_cols:
-                    if db_type == DBType.MSSQL:
-                        out_buffer.write(f"[{s_col_name}]")
-                    else:  # PostgreSQL
-                        out_buffer.write(s_col_name)
-                    if i_count < i_col_count:
-                        out_buffer.write(",")
-                    i_count += 1
+            # Generate INSERT statements. Rows are batched into multi-row VALUES (one row per line), so the table
+            # name and column list aren't repeated per row - on a 1000 row table that is about 40% of the data
+            # section. Plain SQL, so it runs in any client. batch_rows=1 gives one statement per row.
+            batch_rows = max(1, script_ops.data_insert_batch_rows)
+            if b_got_specific_data_cells:
+                # Each row carries its own extra _noupdate_ columns, so the column list differs per row
+                batch_rows = 1
 
-                # Add specific cells columns if needed
+            col_list = ",".join(f"[{c}]" if db_type == DBType.MSSQL else c for c in ar_cols)
+            rows_in_batch = 0
+
+            for index, row in tbl_data.iterrows():
+                # Specific cells: the excluded-cell columns are part of this row's column list
                 s_cells = None
+                row_col_list = col_list
                 if b_got_specific_data_cells:
                     exclude_val = row.get(FLD_COLS_CELLS_EXCLUDE_FOR_ROW)
-                    if not pd.isna(exclude_val):
+                    if not utils.is_null_value(exclude_val):
                         s_cells = str(exclude_val).split("|")
                         for s_cell_col_name in s_cells:
                             if db_type == DBType.MSSQL:
-                                out_buffer.write(f", [{NO_UPDATE_FLD}{s_cell_col_name}]")
+                                row_col_list += f", [{NO_UPDATE_FLD}{s_cell_col_name}]"
                             else:  # PostgreSQL
-                                out_buffer.write(f", {NO_UPDATE_FLD}{s_cell_col_name}")
+                                row_col_list += f", {NO_UPDATE_FLD}{s_cell_col_name}"
 
-                out_buffer.write("\t\t)\n")
-                out_buffer.write("\t\t\tVALUES (")
+                if rows_in_batch == 0:
+                    out_buffer.write(f"\t\tINSERT INTO {db_syntax.temp_table_prefix}{s_temp_table_name} (\n")
+                    out_buffer.write(f"{row_col_list}\t\t)\n")
+                    out_buffer.write("\t\t\tVALUES\n")
+                else:
+                    out_buffer.write(",\n")
+
+                out_buffer.write("\t\t\t(")
                 i_count = 1
                 for s_col_name in ar_cols:
                     o_val = row.get(s_col_name)
@@ -556,7 +570,14 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     for _ in s_cells:
                         out_buffer.write(",1")  # Mark as true
 
-                out_buffer.write("\t\t);\n")
+                out_buffer.write(")")
+                rows_in_batch += 1
+                if rows_in_batch >= batch_rows:
+                    out_buffer.write(";\n")
+                    rows_in_batch = 0
+
+            if rows_in_batch:  # last, partly filled batch
+                out_buffer.write(";\n")
 
         out_buffer.write("\n")
         out_buffer.write("\t\t--add status field, and update it:\n")

@@ -96,6 +96,9 @@ class ScriptingOptions:
    data_comparison_include_equal_rows: bool = True  # if false, equal rows excluded from CSV/HTML comparison reports
    data_window_only: bool = False  # 3/31/15
    data_window_got_specific_cells: bool = False  # in case the user wants specific cells not to be included
+   # Rows per INSERT when scripting data: batching keeps the column list from repeating on every row (a much
+   # smaller script, still plain SQL). 1 = one statement per row. Very large batches slow down GUI SQL editors
+   data_insert_batch_rows: int = 200
 
    
 
