@@ -20,7 +20,8 @@
     "data_scripting_generate_dml_statements": true,
     "data_comparison_include_equal_rows": true,
     "data_window_only": false,
-    "data_window_got_specific_cells": false
+    "data_window_got_specific_cells": false,
+    "data_insert_batch_rows": 200
   },
   "table_script_ops": {
     "column_identity": true,

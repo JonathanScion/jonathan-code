@@ -42,9 +42,12 @@ database:
   port        - Database port (default: 5432)
 
 scripting_options:
-  remove_all_extra_ents    - Drop entities not in source (default: false)
+  remove_all_extra_ents    - Drop entities not in source (default: true)
   script_schemas           - Include schema DDL (default: true)
   script_security          - Include roles/permissions (default: true)
+  data_insert_batch_rows   - Rows per INSERT when scripting data; a bigger batch
+                             means a smaller script, 1 is one row per statement
+                             (default: 200)
 
 db_ents_to_load:
   tables      - List of entities to script (empty = all)
