@@ -139,6 +139,9 @@ class ListTables:
     # 0 = all rows. Above that, at most this many rows per table: a sample, ordered by primary key so a rerun
     # takes the same rows. A sampled script deletes the rows it doesn't carry when run on a populated database
     max_rows_per_table: int = 0
+    # Off by default: with it on, a sample also pulls in every row its foreign keys reference, so the script can
+    # add the foreign keys afterwards. Parent tables then hold more than max_rows_per_table rows
+    max_rows_per_table_retain_fk_integrity: bool = False
 
 @dataclass
 class SQLScriptParams:

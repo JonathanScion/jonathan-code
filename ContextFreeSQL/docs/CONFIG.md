@@ -202,6 +202,7 @@ Configure data scripting (INSERT statements).
 | `tables` | array | `[]` | List of tables to script data for. Format: `"schema.name"` |
 | `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
 | `max_rows_per_table` | int | `0` | `0` scripts every row. Above that, at most this many rows per table - a sample for filling a blank database. See below |
+| `max_rows_per_table_retain_fk_integrity` | bool | `false` | With `max_rows_per_table` set, also script every row the sampled rows reference, so the foreign keys can be added. Parent tables then hold more rows than the limit. See below |
 
 **Behavior:**
 - **Empty array `[]`**: Scripts data for ALL tables (can be slow for large databases)
@@ -217,10 +218,9 @@ defined order, and which rows the server returns is then up to it.
 
 Two things to keep in mind:
 
-- **Foreign keys can break.** The rows are taken per table with no regard for what they reference: a sampled child
-  row may point at a parent row that wasn't sampled, and adding the foreign key then fails. This is fine for tables
-  that reference nothing, and for a parent table it is the child that suffers. Sampling in a way that keeps
-  references intact is not implemented.
+- **Foreign keys break unless you ask for them to be kept**, with `max_rows_per_table_retain_fk_integrity` below.
+  Left off, the rows are taken per table with no regard for what they reference: a sampled child row may point at a
+  parent row that wasn't sampled, and adding the foreign key then fails.
 - **The script still deletes.** A script carrying a sample says "this is all the data there should be", so running
   it against a database that holds rows deletes everything the script doesn't carry - the same behaviour as a full
   script, but with a sample that is almost never what you want. A script generated with this option says so in a
@@ -232,6 +232,46 @@ Two things to keep in mind:
   "max_rows_per_table": 100
 }
 ```
+
+### `max_rows_per_table_retain_fk_integrity`: keep a sample loadable
+
+Off by default, and it does nothing unless `max_rows_per_table` is set. Turn it on and the sampled rows are only
+the starting point: every row they reference through a foreign key is scripted too, and so is every row *those*
+rows reference, until nothing is left to add. The script's foreign keys then apply cleanly to a blank database.
+
+```json
+"tables_data": {
+  "tables": [],
+  "max_rows_per_table": 5,
+  "max_rows_per_table_retain_fk_integrity": true
+}
+```
+
+On a small database of `facility <- equip <- work_order` with 5 rows sampled per table, this reports:
+
+```
+FK integrity: round 1 added 10 referenced row(s)
+FK integrity: round 2 added 2 referenced row(s)
+FK integrity: public.equip: 5 sampled, 10 after references
+FK integrity: public.facility: 5 sampled, 12 after references
+```
+
+Round 2 is why it repeats: the `equip` rows pulled in for `work_order` referenced two facilities nothing had
+needed yet. Without the flag, that same script fails on a blank database with
+`insert or update on table "equip" violates foreign key constraint`.
+
+What it does *not* do:
+
+- **Parent tables exceed the limit.** `facility` ended at 12 rows from a limit of 5. That is the price of a
+  loadable sample; the limit is a floor for parents, not a ceiling.
+- **A table that only holds referenced rows is scripted too**, even if it was not in `tables`, and says so.
+- **A parent outside `db_ents_to_load` cannot be helped.** That table won't exist in a blank target, so the
+  foreign key fails either way; the run says which table and which key.
+- **Long chains of self references stop after 100 rounds.** A `parent_id` chain is walked one row per round, and
+  a chain longer than that is reported rather than followed to the end - that script's foreign keys may fail.
+  Raising `max_rows_per_table` (so more of the chain is sampled up front) or scripting that table in full avoids it.
+- **Nothing is edited.** A nullable foreign key is never blanked to avoid pulling a parent; the data is scripted
+  as it is in the source.
 
 ### `from_file`: data as CSV instead of INSERT statements
 

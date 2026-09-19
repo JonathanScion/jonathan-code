@@ -10,6 +10,7 @@ import shutil
 from src.utils.load_config import load_config
 from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
+from src.data_load.fk_sampling import expand_for_fk_integrity
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 from src.version import __version__  # set in src/version.py, bumped per build
@@ -60,6 +61,9 @@ tables_data:
   max_rows_per_table - 0 scripts every row; above that, at most that many rows
                 per table, in primary key order. A sample for filling a blank
                 database; foreign keys to unsampled rows will fail (default: 0)
+  max_rows_per_table_retain_fk_integrity - with the above set, also script every
+                row the sampled rows reference, so the foreign keys hold. Parent
+                tables then exceed the limit (default: false)
 
 input_output:
   output_sql  - Path for generated SQL script
@@ -74,6 +78,28 @@ sql_script_params:
 For complete documentation, visit:
 https://github.com/JonathanScion/jonathan-code
 """.format(docs_path=docs_path))
+
+
+def retain_fk_integrity(config_vals: ConfigVals, schema, tbl_ents) -> None:
+    """With tables_data.max_rows_per_table_retain_fk_integrity on, add the rows the sampled rows reference, so the
+    script's foreign keys hold. Does nothing unless both that flag and max_rows_per_table are set."""
+    if not (config_vals.tables_data.max_rows_per_table > 0 and config_vals.tables_data.max_rows_per_table_retain_fk_integrity):
+        return
+
+    # Only tables the script covers: a parent outside it won't exist in a blank target anyway
+    scriptable = set((tbl_ents[tbl_ents['enttype'] == 'Table']['entschema'] + '.' +
+                      tbl_ents[tbl_ents['enttype'] == 'Table']['entname']).tolist())
+
+    added_tables = expand_for_fk_integrity(config_vals.db_conn, schema.tables_data, schema.fk_cols, scriptable)
+
+    # Tables that only hold referenced rows still have to be scripted, or those rows are left out
+    for table in added_tables:
+        if table not in config_vals.tables_data.tables:
+            config_vals.tables_data.tables.append(table)
+        name = tbl_ents['entschema'] + '.' + tbl_ents['entname']
+        tbl_ents.loc[(name == table) & (tbl_ents['enttype'] == 'Table'), 'scriptdata'] = True
+    if added_tables:
+        print(f"FK integrity: also scripting data for {', '.join(added_tables)} (referenced by sampled rows)")
 
 
 def resolve_output_filename(template_path: str, host: str, database: str) -> str:
@@ -307,7 +333,8 @@ def main():
         tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
         
         # Load data for these specific tables
-        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)    
+        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
+        retain_fk_integrity(config_vals, schema, tbl_ents)
     else: #just load all tables
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
@@ -315,6 +342,7 @@ def main():
         tbl_ents.loc[tbl_ents['enttype'] == 'Table', 'scriptdata'] = True
         #and load
         load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
+        retain_fk_integrity(config_vals, schema, tbl_ents)
 
     # Copy CSV compare template if we have data tables to script (must be after tables_data.tables is populated)
     if len(config_vals.tables_data.tables) >= 1:

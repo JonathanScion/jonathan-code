@@ -124,9 +124,16 @@ the source database:
 ### Scripting only a sample of the rows
 
 `tables_data.max_rows_per_table` (default `0`, meaning all rows) caps how many rows each table contributes, in
-primary key order so reruns match. It is meant for filling a blank database. Two caveats: a sampled child row can
-reference a parent row that wasn't sampled, and adding that foreign key then fails; and a sampled script run
-against a database that holds data deletes every row it doesn't carry, so such a script carries a warning at the top.
+primary key order so reruns match. It is meant for filling a blank database.
+
+On its own a sample breaks foreign keys, because a sampled child row can reference a parent row that wasn't
+sampled. Add `max_rows_per_table_retain_fk_integrity: true` (default false, and it does nothing without the limit)
+and every referenced row is scripted as well, repeatedly, until the sample is self-contained - parent tables then
+hold more rows than the limit, and the run reports what each table ended up with. Foreign keys are created normally
+and fully validated; nothing is loosened to make the data fit.
+
+A sampled script run against a database that holds data still deletes every row it doesn't carry, so it carries a
+warning at the top.
 
 ### How data rows are written
 
