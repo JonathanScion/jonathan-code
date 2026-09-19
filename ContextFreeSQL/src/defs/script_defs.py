@@ -136,6 +136,9 @@ class DBConnSettings:
 class ListTables:
     tables: List[str] = field(default_factory=list)
     from_file: bool = False
+    # 0 = all rows. Above that, at most this many rows per table: a sample, ordered by primary key so a rerun
+    # takes the same rows. A sampled script deletes the rows it doesn't carry when run on a populated database
+    max_rows_per_table: int = 0
 
 @dataclass
 class SQLScriptParams:

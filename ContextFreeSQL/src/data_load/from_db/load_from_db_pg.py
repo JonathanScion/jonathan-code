@@ -738,13 +738,28 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
             conn.close()
 
 
-def load_all_tables_data(conn_settings: DBConnSettings,db_all: DBSchema, table_names: List[str]) -> None:    
+def _primary_key_order_by(cur, schema_name: str, table_only: str) -> str:
+    """ORDER BY the table's primary key, so a limited load takes the same rows every run.
+    Empty string when the table has no primary key - then the rows a LIMIT returns are up to the server."""
+    cur.execute("""
+        SELECT a.attname
+        FROM pg_index i
+        JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+        WHERE i.indrelid = %s::regclass AND i.indisprimary
+        ORDER BY array_position(i.indkey, a.attnum)""", (f'"{schema_name}"."{table_only}"',))
+    cols = [r['attname'] for r in cur.fetchall()]
+    return (' ORDER BY ' + ', '.join(f'"{c}"' for c in cols)) if cols else ''
+
+
+def load_all_tables_data(conn_settings: DBConnSettings, db_all: DBSchema, table_names: List[str], max_rows_per_table: int = 0) -> None:
+    """max_rows_per_table: 0 loads every row; above that, at most that many rows per table (a sample, see
+    tables_data.max_rows_per_table in docs/CONFIG.md)"""
     conn = None
     cur = None
     try:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
+
         for table_name in table_names:
             # Handle table names with or without schema
             if '.' in table_name:
@@ -752,8 +767,17 @@ def load_all_tables_data(conn_settings: DBConnSettings,db_all: DBSchema, table_n
                 query = f'SELECT * FROM {schema_name}.{table_only}'
             else:
                 # Default to public schema if not specified
+                schema_name, table_only = 'public', table_name
                 query = f'SELECT * FROM {table_name}'
-            
+
+            if max_rows_per_table > 0:
+                try:
+                    query += _primary_key_order_by(cur, schema_name, table_only)
+                except Exception as order_error:  # missing table, odd name: fall back to an unordered sample
+                    conn.rollback()
+                    print(f"Note: could not order {table_name} by its primary key ({order_error}); rows are not ordered")
+                query += f' LIMIT {int(max_rows_per_table)}'
+
             try:
                 cur.execute(query)
                 results = cur.fetchall()

@@ -54,6 +54,9 @@ tables_data:
   from_file   - Write data to CSV files and COPY them in, instead of INSERT
                 statements: a much smaller script, but it needs those files
                 (server-side COPY) when it runs (default: false)
+  max_rows_per_table - 0 scripts every row; above that, at most that many rows
+                per table, in primary key order. A sample for filling a blank
+                database; foreign keys to unsampled rows will fail (default: 0)
 
 input_output:
   output_sql  - Path for generated SQL script
@@ -301,14 +304,14 @@ def main():
         tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
         
         # Load data for these specific tables
-        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script)    
+        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)    
     else: #just load all tables
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
         # Set scriptdata to True for all tables
         tbl_ents.loc[tbl_ents['enttype'] == 'Table', 'scriptdata'] = True
         #and load
-        load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables)
+        load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
 
     # Copy CSV compare template if we have data tables to script (must be after tables_data.tables is populated)
     if len(config_vals.tables_data.tables) >= 1:

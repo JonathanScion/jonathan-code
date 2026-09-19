@@ -36,7 +36,8 @@
     },
     "tables_data": {
       "tables": [],
-      "from_file": true
+      "from_file": true,
+      "max_rows_per_table": 0
     },
     "input_output": {
       "html_template_path": "",

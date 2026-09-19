@@ -201,10 +201,37 @@ Configure data scripting (INSERT statements).
 |--------|------|---------|-------------|
 | `tables` | array | `[]` | List of tables to script data for. Format: `"schema.name"` |
 | `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
+| `max_rows_per_table` | int | `0` | `0` scripts every row. Above that, at most this many rows per table - a sample for filling a blank database. See below |
 
 **Behavior:**
 - **Empty array `[]`**: Scripts data for ALL tables (can be slow for large databases)
 - **Specified list**: Only scripts data for listed tables
+
+### `max_rows_per_table`: script only a sample of the rows
+
+`0` (the default) scripts every row of each listed table. A positive number loads at most that many rows per table,
+which is useful for filling a blank database with something to work with instead of copying millions of rows.
+
+Rows are taken in primary key order, so the same run twice gives the same rows. A table with no primary key has no
+defined order, and which rows the server returns is then up to it.
+
+Two things to keep in mind:
+
+- **Foreign keys can break.** The rows are taken per table with no regard for what they reference: a sampled child
+  row may point at a parent row that wasn't sampled, and adding the foreign key then fails. This is fine for tables
+  that reference nothing, and for a parent table it is the child that suffers. Sampling in a way that keeps
+  references intact is not implemented.
+- **The script still deletes.** A script carrying a sample says "this is all the data there should be", so running
+  it against a database that holds rows deletes everything the script doesn't carry - the same behaviour as a full
+  script, but with a sample that is almost never what you want. A script generated with this option says so in a
+  warning comment at the top. Against a blank database there is nothing to delete, so it doesn't arise.
+
+```json
+"tables_data": {
+  "tables": ["scope_creator.actions", "scope_creator.facility"],
+  "max_rows_per_table": 100
+}
+```
 
 ### `from_file`: data as CSV instead of INSERT statements
 
