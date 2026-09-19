@@ -87,8 +87,8 @@ each section is for:
 | `database` | Which database to read: `host`, `db_name`, `user`, `password`, `port` |
 | `scripting_options` | What goes into the script: dropping entities that only exist in the target, schemas, security, and the data comparison options |
 | `table_script_ops` | Which parts of a table are scripted: identity, indexes, foreign keys, defaults, check constraints |
-| `db_ents_to_load` | Which entities to script (`"schema.name"`). Empty means all. Filters every entity type, not just tables |
-| `tables_data` | Which tables to script data for, how many rows at most (`max_rows_per_table`), and whether to write that data to CSV files instead of INSERT statements (`from_file`, see below) |
+| `db_ents_to_load` | Which entities to script: `tables` (`"schema.name"`) and/or `schemas`. Empty means all; giving both keeps the listed entities that are also in those schemas. Filters every entity type, not just tables |
+| `tables_data` | Which tables to script data for (`tables` and/or `schemas`, as above), how many rows at most (`max_rows_per_table`), and whether to write that data to CSV files instead of INSERT statements (`from_file`, see below) |
 | `input_output` | Where the script, HTML report and diff files are written, and which templates to use |
 | `sql_script_params` | The default values of the flags at the top of the generated script (see below) |
 

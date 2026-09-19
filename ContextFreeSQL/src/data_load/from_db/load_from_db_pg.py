@@ -622,7 +622,9 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
             conn.close()
 
     
-def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List[str]] = None) -> pd.DataFrame:
+def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List[str]] = None, schema_filter: Optional[List[str]] = None) -> pd.DataFrame:
+    """entity_filter: 'schema.name' entries; schema_filter: schema names. Both narrow the result, so giving both
+    keeps the entities that are in the list AND in one of the schemas."""
     conn = None
     cur = None
     tbl_ents = pd.DataFrame()  # Initialize to avoid unbound variable
@@ -663,9 +665,12 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
         entities_results = cur.fetchall()
         tbl_ents = pd.DataFrame(entities_results)
         
-        # Apply filter if provided
+        # Apply filters if provided. Both narrow: with a list and schemas, an entity has to satisfy both
         if entity_filter:
             tbl_ents = tbl_ents[tbl_ents['entkey'].isin(entity_filter)]
+        if schema_filter:
+            wanted = {s.lower() for s in schema_filter}
+            tbl_ents = tbl_ents[tbl_ents['entschema'].str.lower().isin(wanted)]
         
         # Rest of the function remains the same...
         # Now, fetch the foreign key dependencies

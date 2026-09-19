@@ -52,9 +52,12 @@ scripting_options:
 
 db_ents_to_load:
   tables      - List of entities to script (empty = all)
+  schemas     - List of schemas to script (empty = all). With both, only the
+                listed entities that are also in one of the schemas
 
 tables_data:
   tables      - List of tables to script data for (empty = all)
+  schemas     - Only data from tables in these schemas (empty = all)
   from_file   - Write data to CSV files and COPY them in, instead of INSERT
                 statements: a much smaller script, but it needs those files
                 (server-side COPY) when it runs (default: false)
@@ -78,6 +81,29 @@ sql_script_params:
 For complete documentation, visit:
 https://github.com/JonathanScion/jonathan-code
 """.format(docs_path=docs_path))
+
+
+def resolve_data_tables(tables_data, tbl_ents) -> list:
+    """The tables whose data to script, from tables_data's 'tables' and 'schemas'.
+
+    Both narrow the result: with a list and schemas, a table has to be in the list AND in one of the schemas.
+    With neither, the empty list is returned and the caller scripts every table, as before.
+    """
+    if not tables_data.schemas:
+        return tables_data.tables  # unchanged: either a list, or empty meaning all tables
+
+    wanted_schemas = {s.lower() for s in tables_data.schemas}
+    table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
+    in_schemas = [f"{r['entschema']}.{r['entname']}" for _, r in table_rows.iterrows()
+                  if str(r['entschema']).lower() in wanted_schemas]
+
+    if tables_data.tables:  # AND: keep only the listed ones that are also in those schemas
+        listed = set(tables_data.tables)
+        in_schemas = [t for t in in_schemas if t in listed]
+
+    if not in_schemas:
+        print("WARNING: tables_data matched no tables - check its 'tables' and 'schemas'")
+    return in_schemas
 
 
 def retain_fk_integrity(config_vals: ConfigVals, schema, tbl_ents) -> None:
@@ -314,20 +340,26 @@ def main():
 
     schema = load_all_schema(config_vals.db_conn, load_security=config_vals.script_ops.script_security)
 
-     # Determine which entities to load
-    if len(config_vals.db_ents_to_load.tables) >= 1:
-        # Load specific entities from config
-        entities_to_load = config_vals.db_ents_to_load.tables
-        tbl_ents = load_all_db_ents(config_vals.db_conn, entity_filter=entities_to_load)  # Assuming load_all_db_ents supports filtering
+     # Determine which entities to load. tables and schemas both narrow: with both, an entity has to be in the
+     # list AND in one of the schemas. Empty lists mean no restriction
+    if len(config_vals.db_ents_to_load.tables) >= 1 or len(config_vals.db_ents_to_load.schemas) >= 1:
+        tbl_ents = load_all_db_ents(config_vals.db_conn,
+                                    entity_filter=config_vals.db_ents_to_load.tables or None,
+                                    schema_filter=config_vals.db_ents_to_load.schemas or None)
+        if tbl_ents.empty:
+            print("WARNING: db_ents_to_load matched no entities - check its 'tables' and 'schemas'")
     else:
         # Default: load all entities
         tbl_ents = load_all_db_ents(config_vals.db_conn)
+
+    # Which tables' data to script: the same two filters, applied to the entities loaded above
+    config_vals.tables_data.tables = resolve_data_tables(config_vals.tables_data, tbl_ents)
 
     # Mark tables for scripting
     if len(config_vals.tables_data.tables) >= 1:  # Changed from >1 to >=1 to handle single table
         # Get the specific tables from config
         tables_to_script = config_vals.tables_data.tables
-        
+
         # Mark scriptdata=True for the specified tables
         table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
         tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
@@ -355,7 +387,7 @@ def main():
             print(f"WARNING: CSV compare template not found at: {csv_compare_template}")
             print("         Data comparison HTML may fail.")
 
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params, source_db_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}")
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1 or len(config_vals.db_ents_to_load.schemas) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params, source_db_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}")
 
     # newline='\n': on Windows, text mode would turn \n into \r\n inside the script's string literals,
     # making script-side code differ from the DB's (code comparison, diff pages)

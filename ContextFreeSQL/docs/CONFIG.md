@@ -166,17 +166,36 @@ Filter which database entities to include in the script.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `tables` | array | `[]` | List of entities to script. Format: `"schema.name"` |
+| `schemas` | array | `[]` | List of schema names. Only entities in these schemas are scripted |
 
 **Behavior:**
-- **Empty array `[]`**: Scripts ALL entities (tables, views, functions, procedures, triggers)
-- **Specified list**: Only scripts the listed entities
+- **Both empty**: Scripts ALL entities (tables, views, functions, procedures, triggers)
+- **Only `tables`**: Only scripts the listed entities
+- **Only `schemas`**: Scripts every entity in those schemas
+- **Both**: The two are ANDed - only the listed entities that are also in one of the schemas
+
+Schema names are matched without regard to case.
 
 **Example - Script everything:**
 ```json
 "db_ents_to_load": {
-  "tables": []
+  "tables": [],
+  "schemas": []
 }
 ```
+
+**Example - Script one whole schema:**
+```json
+"db_ents_to_load": {
+  "tables": [],
+  "schemas": ["wpc"]
+}
+```
+
+**Careful:** filtering and `remove_all_extra_ents` together are a sharp edge. Everything the script does not
+cover counts as extra, so with `remove_all_extra_ents: true` the script drops every object outside the filter -
+all other schemas included. Set it to `false` when scripting part of a database. Note also that a foreign key
+pointing at a table outside the filter cannot be created on a blank target, since that table is not in the script.
 
 **Example - Script specific tables:**
 ```json
@@ -200,13 +219,19 @@ Configure data scripting (INSERT statements).
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `tables` | array | `[]` | List of tables to script data for. Format: `"schema.name"` |
+| `schemas` | array | `[]` | List of schema names. Only data from tables in these schemas is scripted |
 | `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
 | `max_rows_per_table` | int | `0` | `0` scripts every row. Above that, at most this many rows per table - a sample for filling a blank database. See below |
 | `max_rows_per_table_retain_fk_integrity` | bool | `false` | With `max_rows_per_table` set, also script every row the sampled rows reference, so the foreign keys can be added. Parent tables then hold more rows than the limit. See below |
 
 **Behavior:**
-- **Empty array `[]`**: Scripts data for ALL tables (can be slow for large databases)
-- **Specified list**: Only scripts data for listed tables
+- **Both empty**: Scripts data for ALL tables (can be slow for large databases)
+- **Only `tables`**: Only scripts data for the listed tables
+- **Only `schemas`**: Scripts data for every table in those schemas
+- **Both**: The two are ANDed - only the listed tables that are also in one of the schemas
+
+`schemas` works the same way as in `db_ents_to_load` and is matched without regard to case. It applies to the
+entities that section selected, so a table it excludes has no data scripted either.
 
 ### `max_rows_per_table`: script only a sample of the rows
 

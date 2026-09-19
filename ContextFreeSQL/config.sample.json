@@ -32,10 +32,12 @@
       "extended_props": true
     },
     "db_ents_to_load":  {
-      "tables": []
+      "tables": [],
+      "schemas": []
     },
     "tables_data": {
       "tables": [],
+      "schemas": [],
       "from_file": true,
       "max_rows_per_table": 0,
       "max_rows_per_table_retain_fk_integrity": false

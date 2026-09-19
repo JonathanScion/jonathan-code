@@ -135,6 +135,9 @@ class DBConnSettings:
 @dataclass
 class ListTables:
     tables: List[str] = field(default_factory=list)
+    # Schema names. Empty means no restriction; with entries, only these schemas, ANDed with tables: listing both
+    # gives the entities that are in the list AND in one of the schemas. Matched without regard to case
+    schemas: List[str] = field(default_factory=list)
     from_file: bool = False
     # 0 = all rows. Above that, at most this many rows per table: a sample, ordered by primary key so a rerun
     # takes the same rows. A sampled script deletes the rows it doesn't carry when run on a populated database
