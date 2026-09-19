@@ -105,7 +105,7 @@ def _load_schemas(conn_settings: DBConnSettings) -> pd.DataFrame:
          
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -134,7 +134,7 @@ def _load_tables(conn_settings: DBConnSettings) -> pd.DataFrame:
          
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
     
         
     except Exception as e:
@@ -165,7 +165,7 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur.execute(sql)
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -192,7 +192,7 @@ def _load_tables_columns_defaults(conn_settings: DBConnSettings) -> pd.DataFrame
         cur.execute(sql)
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -203,6 +203,24 @@ def _load_tables_columns_defaults(conn_settings: DBConnSettings) -> pd.DataFrame
             cur.close()
         if conn:
             conn.close()
+
+def _results_to_df(cur, results) -> pd.DataFrame:
+    """Rows as a DataFrame, keeping the query's columns even when there are no rows.
+
+    pd.DataFrame([]) has no columns at all, so every later filter on a column raises KeyError - which is what
+    happened when scripting a database whose tables have no indexes.
+    """
+    if results:
+        return pd.DataFrame(results)
+    # Keep the first of any repeated name: a query can select the same alias twice (indexes does, with
+    # type_desc), and the dict rows psycopg2 returns collapse those, so an empty frame has to match
+    names, seen = [], set()
+    for d in (cur.description or []):
+        if d.name not in seen:
+            seen.add(d.name)
+            names.append(d.name)
+    return pd.DataFrame(columns=names)
+
 
 def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
@@ -258,7 +276,7 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur.execute(sql)
         results = cur.fetchall()
 
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -399,7 +417,7 @@ def _load_tables_foreign_keys(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur.execute(sql)
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
         
     except Exception as e:
         print(f"Error: {e}")
@@ -538,7 +556,7 @@ def _load_check_constraints(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur.execute(sql)
         results = cur.fetchall()
 
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading check constraints: {e}")
@@ -609,7 +627,7 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur.execute(sql)
         results = cur.fetchall()
         
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
     
     except Exception as e:
         print(f"Error: {e}")
@@ -865,7 +883,7 @@ def _load_roles(conn_settings: DBConnSettings) -> pd.DataFrame:
             cur.execute(sql)
 
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading roles: {e}")
@@ -900,7 +918,7 @@ def _load_role_memberships(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY r.rolname, m.rolname"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading role memberships: {e}")
@@ -937,7 +955,7 @@ def _load_schema_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY object_schema, grantee, privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading schema permissions: {e}")
@@ -975,7 +993,7 @@ def _load_table_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY table_schema, table_name, grantee, privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading table permissions: {e}")
@@ -1021,7 +1039,7 @@ def _load_column_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY cp.table_schema, cp.table_name, cp.column_name, cp.grantee, cp.privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading column permissions: {e}")
@@ -1058,7 +1076,7 @@ def _load_function_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY routine_schema, routine_name, grantee, privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading function permissions: {e}")
@@ -1093,7 +1111,7 @@ def _load_default_privileges(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY role_name, schema_name, object_type"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading default privileges: {e}")
@@ -1130,7 +1148,7 @@ def _load_rls_policies(conn_settings: DBConnSettings) -> pd.DataFrame:
                 ORDER BY schemaname, tablename, policyname"""
         cur.execute(sql)
         results = cur.fetchall()
-        return pd.DataFrame(results)
+        return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading RLS policies: {e}")

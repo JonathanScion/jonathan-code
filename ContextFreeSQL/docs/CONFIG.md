@@ -192,10 +192,12 @@ Schema names are matched without regard to case.
 }
 ```
 
-**Careful:** filtering and `remove_all_extra_ents` together are a sharp edge. Everything the script does not
-cover counts as extra, so with `remove_all_extra_ents: true` the script drops every object outside the filter -
-all other schemas included. Set it to `false` when scripting part of a database. Note also that a foreign key
-pointing at a table outside the filter cannot be created on a blank target, since that table is not in the script.
+**With a filter, `remove_all_extra_ents` only applies inside it.** Objects outside the filter - other schemas,
+tables you did not list - are left alone, whether they are tables, views, functions or triggers. Within the
+scripted entities it still does its job: a column or index the source doesn't have is dropped.
+
+Note that a foreign key pointing at a table outside the filter cannot be created on a blank target, since that
+table is not in the script.
 
 **Example - Script specific tables:**
 ```json

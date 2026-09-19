@@ -33,11 +33,11 @@
   },
   "db_ents_to_load": {
     "tables": [],
-    "schemas": []
+    "schemas": ["wpc"]
   },
   "tables_data": {
     "tables": [],
-    "schemas": [],
+    "schemas": ["wpc"],
     "from_file": false,
     "max_rows_per_table": 0,
     "max_rows_per_table_retain_fk_integrity": false

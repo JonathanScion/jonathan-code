@@ -42,8 +42,9 @@ def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents:
     if db_type == DBType.PostgreSQL:
         sql_buffer.write("BEGIN --drop coded entities\n")
 
-    # Drop extra entities if configured
-    if remove_all_extra_ents:
+    # Drop extra entities if configured. Not when only some entities are being scripted: everything outside the
+    # filter would count as extra, and tables are already left alone in that case (see the state table for tables)
+    if remove_all_extra_ents and not got_specific_tables:
         if db_type == DBType.MSSQL:
             sql_buffer.write("--Dropping Entities that need to be dropped:\n")
             sql_buffer.write("DECLARE codedDrop CURSOR FAST_FORWARD \n")
