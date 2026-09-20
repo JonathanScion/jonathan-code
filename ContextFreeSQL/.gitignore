@@ -30,3 +30,7 @@ ENV/
 theSome.sql
 NUL
 output/
+
+# Templates the tests copy next to their output
+tests/*_template.html
+tests/csv_compare_standalone.html

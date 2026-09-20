@@ -46,7 +46,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     )
     # Get base path for CSV files (directory where HTML output goes)
     base_path = os.path.dirname(input_output.html_output_path).replace("\\", "/") if (needs_base_path and input_output.html_output_path) else ""
-    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename=script_filename, base_path=base_path, include_base_path=needs_base_path, source_db_label=source_db_label, max_rows_per_table=(tables_data.max_rows_per_table if tables_data else 0))
+    header = build_script_header(db_syntax=db_syntax, scrpt_ops=scrpt_ops, sql_script_params=sql_script_params, filename=script_filename, base_path=base_path, include_base_path=needs_base_path, source_db_label=source_db_label, max_rows_per_table=(tables_data.max_rows_per_table if tables_data else 0), db_type=db_type)
     buffer.write(header)
 
     buffer.write(f"\tDECLARE {db_syntax.var_prefix}sqlCode {db_syntax.nvarchar_type} {db_syntax.max_length_str} {db_syntax.declare_separator} {db_syntax.var_prefix}schemaChanged {db_syntax.boolean_type} {db_syntax.set_operator} False;\n")
@@ -427,7 +427,7 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     return result
 
 
-def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_script_params: SQLScriptParams, filename: str, base_path: str = "", include_base_path: bool = False, source_db_label: str = "", max_rows_per_table: int = 0) -> str:
+def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_script_params: SQLScriptParams, filename: str, base_path: str = "", include_base_path: bool = False, source_db_label: str = "", max_rows_per_table: int = 0, db_type: DBType = DBType.PostgreSQL) -> str:
     header = StringIO()
 
     # Helper to convert Python bool to SQL boolean value
@@ -466,26 +466,30 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_sc
     header.write("\t-------------------------------------------------------------------------------------\n")
     header.write("\n")
 
-    # Add additional variable declarations
-    header.write(f"\tDECLARE {db_syntax.var_prefix}table_schema {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}table_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}index_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}fk_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}col_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}user_type_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}max_length smallint;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}precision smallint;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}scale smallint;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}is_nullable bit;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}is_identity bit;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}is_computed bit;\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}collation_name {db_syntax.nvarchar_type} (128);\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}computed_definition {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_ALTER {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}diff_descr {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
-    header.write(f"\tDECLARE {db_syntax.var_prefix}ent_type {db_syntax.nvarchar_type} (25);\n")
+    # Add additional variable declarations.
+    # MSSQL only: these are cursor variables, @-prefixed there so they can't collide with a column name.
+    # PostgreSQL has no prefix, so declaring 'table_name' here shadows any column called table_name and makes
+    # every reference to it ambiguous inside the DO block (SQLSTATE 42702). Nothing assigns them on PostgreSQL
+    if db_type != DBType.PostgreSQL:
+        header.write(f"\tDECLARE {db_syntax.var_prefix}table_schema {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}table_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}index_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}fk_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}col_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}user_type_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}max_length smallint;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}precision smallint;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}scale smallint;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}is_nullable bit;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}is_identity bit;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}is_computed bit;\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}collation_name {db_syntax.nvarchar_type} (128);\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}computed_definition {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_ALTER {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}SQL_DROP {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}diff_descr {db_syntax.nvarchar_type} {db_syntax.max_length_str};\n")
+        header.write(f"\tDECLARE {db_syntax.var_prefix}ent_type {db_syntax.nvarchar_type} (25);\n")
     # Variables for dynamic column list building in EXTRA2 detection (rows to delete)
     header.write(f"\tDECLARE {db_syntax.var_prefix}v_extra2_cols TEXT;\n")
     header.write(f"\tDECLARE {db_syntax.var_prefix}v_extra2_select_cols TEXT;\n")
