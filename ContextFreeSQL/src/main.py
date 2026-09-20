@@ -56,6 +56,7 @@ db_ents_to_load:
                 listed entities that are also in one of the schemas
 
 tables_data:
+  script_data - false scripts no data at all: schema only (default: true)
   tables      - List of tables to script data for (empty = all)
   schemas     - Only data from tables in these schemas (empty = all)
   from_file   - Write data to CSV files and COPY them in, instead of INSERT
@@ -83,14 +84,21 @@ https://github.com/JonathanScion/jonathan-code
 """.format(docs_path=docs_path))
 
 
-def resolve_data_tables(tables_data, tbl_ents) -> list:
-    """The tables whose data to script, from tables_data's 'tables' and 'schemas'.
+def resolve_data_tables(tables_data, tbl_ents) -> tuple:
+    """The tables whose data to script, from tables_data's 'script_data', 'tables' and 'schemas'.
 
-    Both narrow the result: with a list and schemas, a table has to be in the list AND in one of the schemas.
-    With neither, the empty list is returned and the caller scripts every table, as before.
+    'tables' and 'schemas' both narrow the result: with a list and schemas, a table has to be in the list AND in
+    one of the schemas. Returns (tables, script_all): script_all is True only when no filter was configured at
+    all, and then the caller scripts every table's data. A filter that matches nothing scripts no data - it does
+    not fall back to everything.
     """
+    if not tables_data.script_data:
+        print("Data scripting is off (tables_data.script_data) - schema only")
+        return [], False
+
     if not tables_data.schemas:
-        return tables_data.tables  # unchanged: either a list, or empty meaning all tables
+        # unchanged: a list, or empty meaning all tables
+        return tables_data.tables, not tables_data.tables
 
     wanted_schemas = {s.lower() for s in tables_data.schemas}
     table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
@@ -102,8 +110,8 @@ def resolve_data_tables(tables_data, tbl_ents) -> list:
         in_schemas = [t for t in in_schemas if t in listed]
 
     if not in_schemas:
-        print("WARNING: tables_data matched no tables - check its 'tables' and 'schemas'")
-    return in_schemas
+        print("WARNING: tables_data matched no tables - check its 'tables' and 'schemas'. No data will be scripted")
+    return in_schemas, False
 
 
 def retain_fk_integrity(config_vals: ConfigVals, schema, tbl_ents) -> None:
@@ -356,28 +364,21 @@ def main():
               "and check db_ents_to_load's 'tables' and 'schemas'")
         return
 
-    # Which tables' data to script: the same two filters, applied to the entities loaded above
-    config_vals.tables_data.tables = resolve_data_tables(config_vals.tables_data, tbl_ents)
+    # Which tables' data to script: the filters above, applied to the entities loaded above
+    config_vals.tables_data.tables, script_all_data = resolve_data_tables(config_vals.tables_data, tbl_ents)
 
-    # Mark tables for scripting
-    if len(config_vals.tables_data.tables) >= 1:  # Changed from >1 to >=1 to handle single table
-        # Get the specific tables from config
-        tables_to_script = config_vals.tables_data.tables
-
-        # Mark scriptdata=True for the specified tables
-        table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
-        tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
-        
-        # Load data for these specific tables
-        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
-        retain_fk_integrity(config_vals, schema, tbl_ents)
-    else: #just load all tables
+    if script_all_data:  # no filter configured: every table's data, as before
         table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
         config_vals.tables_data.tables = (table_rows['entschema'] + '.' + table_rows['entname']).tolist()
-        # Set scriptdata to True for all tables
-        tbl_ents.loc[tbl_ents['enttype'] == 'Table', 'scriptdata'] = True
-        #and load
-        load_all_tables_data(config_vals.db_conn, db_all = schema, table_names = config_vals.tables_data.tables, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
+
+    if len(config_vals.tables_data.tables) >= 1:
+        tables_to_script = config_vals.tables_data.tables
+
+        # Mark scriptdata=True for the tables whose data is scripted
+        table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
+        tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
+
+        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
         retain_fk_integrity(config_vals, schema, tbl_ents)
 
     # Copy CSV compare template if we have data tables to script (must be after tables_data.tables is populated)

@@ -22,6 +22,22 @@ SELECT * FROM needed;
 
 That removes the round-per-row behaviour for the common tree/chain case. Keep the cap for everything else.
 
+## A schema-only script still takes 34 seconds to run
+
+Measured on const1 (165 tables, 5196 columns): the full script takes 1m22s to run, schema-only 34s, so the data
+section is roughly half. The HTML report costs nothing measurable. Generating the script is not the problem
+either - 8.7s full, 1.8s schema-only.
+
+Nobody has looked at where those 34s go. Likely suspects: the state tables are filled one INSERT per column
+(5196 of them, the same repetition that multi-row INSERTs fixed for data), and the comparison queries read
+information_schema views, which are expensive. Worth a look before claiming the tool is fast on a big database.
+
+## No "data only" mode
+
+`scripting_options.script_schemas` is documented as "Include schema (namespace) DDL" but is never read: only
+`tables_data.script_data` (schema only) exists. Data-only would have to keep the state tables the data section
+depends on while emitting no DDL.
+
 ## Foreign keys are compared without the referenced table's schema
 
 Dropping `scope_creator.equip_group` made the comparison flag foreign keys on `smart_scheduler.work_order` and

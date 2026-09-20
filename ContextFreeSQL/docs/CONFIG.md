@@ -220,6 +220,7 @@ Configure data scripting (INSERT statements).
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `script_data` | bool | `true` | `false` scripts no data at all - schema only. Much of the time a generated script takes to run is its data section |
 | `tables` | array | `[]` | List of tables to script data for. Format: `"schema.name"` |
 | `schemas` | array | `[]` | List of schema names. Only data from tables in these schemas is scripted |
 | `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
@@ -227,10 +228,18 @@ Configure data scripting (INSERT statements).
 | `max_rows_per_table_retain_fk_integrity` | bool | `false` | With `max_rows_per_table` set, also script every row the sampled rows reference, so the foreign keys can be added. Parent tables then hold more rows than the limit. See below |
 
 **Behavior:**
+- **`script_data: false`**: No data at all, whatever `tables` and `schemas` say
 - **Both empty**: Scripts data for ALL tables (can be slow for large databases)
 - **Only `tables`**: Only scripts data for the listed tables
 - **Only `schemas`**: Scripts data for every table in those schemas
 - **Both**: The two are ANDed - only the listed tables that are also in one of the schemas
+- **A filter that matches nothing**: no data is scripted, and the run says so (it does not fall back to all)
+
+Scripting data is most of what a generated script does. On one 165-table database: the full script took 1m22s to
+run and its schema-only counterpart 34s, with the HTML report costing nothing measurable. Generating the script
+took 8.7s against 1.8s. Turning data off is the quickest way to see whether a slow run is the data section.
+
+There is no "data only" switch: `scripting_options.script_schemas` is documented but not implemented.
 
 `schemas` works the same way as in `db_ents_to_load` and is matched without regard to case. It applies to the
 entities that section selected, so a table it excludes has no data scripted either.

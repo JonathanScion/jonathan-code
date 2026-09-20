@@ -145,6 +145,9 @@ class ListTables:
     # Off by default: with it on, a sample also pulls in every row its foreign keys reference, so the script can
     # add the foreign keys afterwards. Parent tables then hold more than max_rows_per_table rows
     max_rows_per_table_retain_fk_integrity: bool = False
+    # False scripts no data at all - schema only. 'tables' and 'schemas' choose which tables' data to script;
+    # this switches the whole data section off, which is much of the time a generated script takes to run
+    script_data: bool = True
 
 @dataclass
 class SQLScriptParams:
