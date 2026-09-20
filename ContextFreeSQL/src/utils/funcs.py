@@ -4,6 +4,7 @@ from io import StringIO
 from typing import Any
 from typing import Optional , Union, Any
 import math
+import re
 import json
 
 def quote_str_or_null(value: Any) -> str:
@@ -223,6 +224,32 @@ def can_type_be_compared(type_name, db_type: DBType = DBType.MSSQL):
         return True
 
 
+def pg_quote_ident(name) -> str:
+    """Quote a PostgreSQL identifier, but only when it needs it.
+
+    Unquoted identifiers are folded to lower case and must start with a letter or underscore, so a column such as
+    50_69_cat_ind_editable is a syntax error and WORK_ORDER_NBR_ISDIFF silently becomes work_order_nbr_isdiff.
+    Names that are already plain lower case are left alone, to keep the generated script readable.
+    """
+    text = str(name)
+    if re.fullmatch(r'[a-z_][a-z0-9_$]*', text) and text not in PG_RESERVED_WORDS:
+        return text
+    return '"' + text.replace('"', '""') + '"'
+
+
+# Enough of the reserved words to matter for column and table names (PostgreSQL's reserved_keywords list)
+PG_RESERVED_WORDS = {
+    'all', 'analyse', 'analyze', 'and', 'any', 'array', 'as', 'asc', 'asymmetric', 'both', 'case', 'cast',
+    'check', 'collate', 'column', 'constraint', 'create', 'current_catalog', 'current_date', 'current_role',
+    'current_time', 'current_timestamp', 'current_user', 'default', 'deferrable', 'desc', 'distinct', 'do',
+    'else', 'end', 'except', 'false', 'fetch', 'for', 'foreign', 'from', 'grant', 'group', 'having', 'in',
+    'initially', 'intersect', 'into', 'lateral', 'leading', 'limit', 'localtime', 'localtimestamp', 'not',
+    'null', 'offset', 'on', 'only', 'or', 'order', 'placing', 'primary', 'references', 'returning', 'select',
+    'session_user', 'some', 'symmetric', 'table', 'then', 'to', 'trailing', 'true', 'union', 'unique', 'user',
+    'using', 'variadic', 'when', 'where', 'window', 'with',
+}
+
+
 def pg_panel_title_exprs(source_db_label: str, for_js: bool = True) -> tuple[str, str]:
     """PostgreSQL expressions for the left/right titles of the HTML report pages: left = database the script was
     generated from (known now, e.g. 'localhost.const1 (source)'), right = database the script runs on (known at run time).
@@ -247,4 +274,5 @@ def pg_col_diff_expr(left: str, right: str, col_name: str, type_name: str) -> st
     """PostgreSQL '<>' comparison of a column between two aliases. json has no equality operator, so compare as jsonb
     (which also ignores key order and whitespace)."""
     cast = "::jsonb" if str(type_name).lower() == "json" else ""
-    return f"({left}.{col_name}{cast}<> {right}.{col_name}{cast})"
+    col = pg_quote_ident(col_name)
+    return f"({left}.{col}{cast}<> {right}.{col}{cast})"

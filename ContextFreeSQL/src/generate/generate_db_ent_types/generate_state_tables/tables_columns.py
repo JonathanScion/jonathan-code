@@ -6,7 +6,7 @@ from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.generate.generate_final_create_table import get_create_table_from_sys_tables, get_col_sql
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.utils.funcs import quote_str_or_null, quote_str_or_null_bool, numeric_or_null
+from src.utils.funcs import quote_str_or_null, quote_str_or_null_bool, numeric_or_null, pg_quote_ident
 
 
 def create_db_state_columns(
@@ -99,7 +99,7 @@ def create_db_state_columns(
         if db_type == DBType.MSSQL:
             alter_col = f"'ALTER TABLE [{row['table_schema']}].[{row['table_name']}] DROP COLUMN [{row['col_name']}]'"
         elif db_type == DBType.PostgreSQL:
-            alter_col = f"'ALTER TABLE {row['table_schema']}.{row['table_name']} DROP COLUMN {row['col_name']}'"
+            alter_col = f"'ALTER TABLE {row['table_schema']}.{row['table_name']} DROP COLUMN {pg_quote_ident(row['col_name'])}'"
             
         
         script_db_state_tables.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP{',SQL_ALTER_PostData_NotNULL' if scripting_data else ''})\n")
@@ -173,7 +173,7 @@ def create_db_state_columns(
             script_db_state_tables.write(f"{align}AND J.col_name = DB.col_name \n")
             script_db_state_tables.write(f"{align}WHERE ( J.col_name IS NULL );  \n")
         elif db_type == DBType.PostgreSQL:
-            script_db_state_tables.write(f"{align}SELECT  DB.table_schema, DB.table_name, DB.column_name, 2, 'ALTER TABLE ' || DB.table_schema || '.' || DB.table_name || ' DROP COLUMN ' || DB.column_name || ';' \n")
+            script_db_state_tables.write(f"{align}SELECT  DB.table_schema, DB.table_name, DB.column_name, 2, 'ALTER TABLE ' || DB.table_schema || '.' || DB.table_name || ' DROP COLUMN ' || quote_ident(DB.column_name) || ';' \n")
             script_db_state_tables.write(f"{align}FROM    ScriptCols J \n")
             script_db_state_tables.write(f"{align}RIGHT JOIN ( select t.table_schema, t.table_name, c.column_name FROM information_schema.tables t INNER JOIN information_schema.columns c on t.table_schema=c.table_schema and t.table_name=c.table_name WHERE t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  and t.table_type LIKE '%TABLE%' \n")
             script_db_state_tables.write(f"AND C.table_schema || C.table_name IN ({overall_table_schema_name_in_scripting}) \n")

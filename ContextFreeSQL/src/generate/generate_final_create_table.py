@@ -301,7 +301,7 @@ def get_col_sql(
     if db_type == DBType.MSSQL:
         sql.append(f"[{str(sys_cols_row['col_name'])}] ")
     elif db_type == DBType.PostgreSQL:
-        sql.append(f"{str(sys_cols_row['col_name'])} ")
+        sql.append(f"{utils.pg_quote_ident(sys_cols_row['col_name'])} ")
         if script_state == DBEntScriptState.Alter:
             sql.append(" TYPE ")
     elif db_type == DBType.MySQL:
@@ -344,9 +344,9 @@ def get_col_sql(
             if script_state == DBEntScriptState.Alter:
                 # PostgreSQL uses SET NOT NULL or DROP NOT NULL (not SET NULL)
                 if sys_cols_row.get(is_null_field, False):
-                    sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} DROP NOT NULL")
+                    sql.append(f",\n\tALTER COLUMN {utils.pg_quote_ident(sys_cols_row['col_name'])} DROP NOT NULL")
                 else:
-                    sql.append(f",\n\tALTER COLUMN {sys_cols_row['col_name']} SET NOT NULL")
+                    sql.append(f",\n\tALTER COLUMN {utils.pg_quote_ident(sys_cols_row['col_name'])} SET NOT NULL")
             else:
                 sql.append(" NULL" if sys_cols_row.get(is_null_field, False) else " NOT NULL")
 
@@ -714,7 +714,7 @@ def get_default_sql(db_type: DBType, default_row: Dict[str, Any]) -> str:
         
     elif db_type == DBType.PostgreSQL:
         buffer.write(f"ALTER TABLE {default_row['table_schema']}.{default_row['table_name']} ")
-        buffer.write(f"ALTER COLUMN {default_row['col_name']} ")
+        buffer.write(f"ALTER COLUMN {utils.pg_quote_ident(default_row['col_name'])} ")
         buffer.write(f"SET DEFAULT {default_row['default_definition']};")
     
     result = buffer.getvalue()

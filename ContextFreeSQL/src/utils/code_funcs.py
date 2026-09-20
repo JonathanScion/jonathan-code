@@ -147,6 +147,9 @@ def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent
             field_values_builder.append(f"{indent}\tSET @sqlCode+= ''''+@{col_var_name}+''''\n")
         
     elif db_type == DBType.PostgreSQL:
+        # The comparison table's column, quoted if the name needs it: a name starting with a digit is a syntax
+        # error unquoted, and one with upper case letters is silently folded to lower case
+        col_name = utils.pg_quote_ident(col_name)
         field_values_builder.append(f"{indent}IF (temprow.{col_name} IS NULL) THEN\n")
         field_values_builder.append(f"{indent}\tsqlCode = sqlCode || 'NULL';\n")
         field_values_builder.append(f"{indent}ELSE\n")

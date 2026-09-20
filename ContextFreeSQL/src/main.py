@@ -346,11 +346,15 @@ def main():
         tbl_ents = load_all_db_ents(config_vals.db_conn,
                                     entity_filter=config_vals.db_ents_to_load.tables or None,
                                     schema_filter=config_vals.db_ents_to_load.schemas or None)
-        if tbl_ents.empty:
-            print("WARNING: db_ents_to_load matched no entities - check its 'tables' and 'schemas'")
     else:
         # Default: load all entities
         tbl_ents = load_all_db_ents(config_vals.db_conn)
+
+    if tbl_ents.empty:
+        # Empty either because nothing matched, or because loading failed (a connection error is reported above)
+        print("ERROR: no entities to script. Check the messages above for a connection or query error, "
+              "and check db_ents_to_load's 'tables' and 'schemas'")
+        return
 
     # Which tables' data to script: the same two filters, applied to the entities loaded above
     config_vals.tables_data.tables = resolve_data_tables(config_vals.tables_data, tbl_ents)

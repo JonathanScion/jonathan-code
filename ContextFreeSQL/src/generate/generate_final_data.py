@@ -405,7 +405,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     # Batched the same way as the comparison table load below: one printed statement per batch of
                     # rows, so neither the column list nor the scriptoutput wrapper repeats per row
                     batch_rows = max(1, script_ops.data_insert_batch_rows)
-                    col_list = ",".join(ar_cols)
+                    col_list = ",".join(utils.pg_quote_ident(c) for c in ar_cols)
                     batch = []
 
                     def write_print_batch(rows):
@@ -524,7 +524,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 # Each row carries its own extra _noupdate_ columns, so the column list differs per row
                 batch_rows = 1
 
-            col_list = ",".join(f"[{c}]" if db_type == DBType.MSSQL else c for c in ar_cols)
+            col_list = ",".join(f"[{c}]" if db_type == DBType.MSSQL else utils.pg_quote_ident(c) for c in ar_cols)
             rows_in_batch = 0
 
             for index, row in tbl_data.iterrows():
@@ -605,7 +605,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
-                out_buffer.write(f"t.{s_col_name}=p.{s_col_name}")
+                out_buffer.write(f"t.{utils.pg_quote_ident(s_col_name)}=p.{utils.pg_quote_ident(s_col_name)}")
                 if i_count < i_col_count:
                     out_buffer.write(" AND ")
                 i_count += 1
@@ -614,7 +614,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
-                out_buffer.write(f"p.{s_col_name} IS NULL")
+                out_buffer.write(f"p.{utils.pg_quote_ident(s_col_name)} IS NULL")
                 if i_count < i_col_count:
                     out_buffer.write(" OR ")
                 i_count += 1
@@ -673,7 +673,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
-                out_buffer.write(f"t.{s_col_name}=p.{s_col_name}")
+                out_buffer.write(f"t.{utils.pg_quote_ident(s_col_name)}=p.{utils.pg_quote_ident(s_col_name)}")
                 if i_count < i_col_count:
                     out_buffer.write(" AND ")
                 i_count += 1
@@ -682,7 +682,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
-                out_buffer.write(f"orig.{s_col_name} = t.{s_col_name} ")
+                out_buffer.write(f"orig.{utils.pg_quote_ident(s_col_name)} = t.{utils.pg_quote_ident(s_col_name)} ")
                 if i_count < i_col_count:
                     out_buffer.write(" AND ")
                 i_count += 1
@@ -691,7 +691,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
-                out_buffer.write(f"p.{s_col_name} IS NULL")
+                out_buffer.write(f"p.{utils.pg_quote_ident(s_col_name)} IS NULL")
                 if i_count < i_col_count:
                     out_buffer.write(" OR ")
                 i_count += 1
@@ -706,7 +706,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_cols)
             for s_col_name in ar_cols:
-                out_buffer.write(s_col_name)
+                out_buffer.write(utils.pg_quote_ident(s_col_name))
                 if i_count < i_col_count:
                     out_buffer.write(", ")
                 i_count += 1
@@ -716,7 +716,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             i_count = 1
             i_col_count = len(ar_cols)
             for s_col_name in ar_cols:
-                out_buffer.write(s_col_name)
+                out_buffer.write(utils.pg_quote_ident(s_col_name))
                 if i_count < i_col_count:
                     out_buffer.write(", ")
                 i_count += 1
@@ -858,7 +858,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 
                 count = 1
                 for row_col in drows_cols:
-                    out_buffer.write(row_col["col_name"])
+                    out_buffer.write(utils.pg_quote_ident(row_col["col_name"]))
                     if count < col_count:
                         out_buffer.write(",")
                     count += 1
@@ -866,7 +866,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE}={RowState.EXTRA1.value}\n")
                 out_buffer.write("\t\t\t\t\tLOOP\n")
                 s_overriding = " OVERRIDING SYSTEM VALUE" if s_ent_full_name_sql in ar_tables_identity else ""
-                out_buffer.write(f"\t\t\t\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(field_list)}){s_overriding} VALUES (';\n")
+                out_buffer.write(f"\t\t\t\t\t\tsqlCode='INSERT INTO {s_ent_full_name_sql} ({', '.join(utils.pg_quote_ident(c) for c in field_list)}){s_overriding} VALUES (';\n")
 
                 out_buffer.writelines(fields_var_names_value_list)
 
@@ -1057,7 +1057,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 if db_type == DBType.MSSQL:
                     out_buffer.write(f"p.[{col_name}], ")
                 elif db_type == DBType.PostgreSQL:
-                    out_buffer.write(f"p.{col_name}, ")
+                    out_buffer.write(f"p.{utils.pg_quote_ident(col_name)}, ")
             
             out_buffer.write(f"''{RowState.EXTRA2.value}''")
             
@@ -1078,7 +1078,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             col_count = len(ar_key_cols)
             
             for col_name in ar_key_cols:
-                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                out_buffer.write(f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}")
                 if count < col_count:
                     out_buffer.write(" AND ")
                 count += 1
@@ -1100,8 +1100,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("    extra2_col_rec RECORD;\n")
             out_buffer.write("BEGIN\n")
             out_buffer.write(f"    FOR extra2_col_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) LOOP\n")
-            out_buffer.write("        v_extra2_cols := v_extra2_cols || extra2_col_rec.col_name || ', ';\n")
-            out_buffer.write("        v_extra2_select_cols := v_extra2_select_cols || 'p.' || extra2_col_rec.col_name || ', ';\n")
+            out_buffer.write("        v_extra2_cols := v_extra2_cols || quote_ident(extra2_col_rec.col_name) || ', ';\n")
+            out_buffer.write("        v_extra2_select_cols := v_extra2_select_cols || 'p.' || quote_ident(extra2_col_rec.col_name) || ', ';\n")
             out_buffer.write("    END LOOP;\n")
             out_buffer.write("END;\n")
             out_buffer.write("\n")
@@ -1148,7 +1148,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             col_count = len(ar_key_cols)
             
             for col_name in ar_key_cols:
-                out_buffer.write(f"p.{col_name}=t.{col_name}")
+                out_buffer.write(f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}")
                 if count < col_count:
                     out_buffer.write(" AND ")
                 count += 1
@@ -1181,8 +1181,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             col_count = len(ar_key_cols)
             
             for col_name in ar_key_cols:
-                out_buffer.write(f"p.{col_name}=t.{col_name}")
-                s_where_key_clause.append(f"orig.{col_name}=t.{col_name}")
+                out_buffer.write(f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}")
+                s_where_key_clause.append(f"orig.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}")
                 
                 if count < col_count:
                     out_buffer.write(" AND ")
@@ -1271,7 +1271,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("        ELSE\n")
                 out_buffer.write("            v_update_where_clause := v_update_where_clause || ' OR ';\n")
                 out_buffer.write("        END IF;\n")
-                out_buffer.write("        v_update_where_clause := v_update_where_clause || '(orig.' || update_compare_rec.col_name || update_compare_rec.cmp_cast || '<> p.' || update_compare_rec.col_name || update_compare_rec.cmp_cast || ') OR (orig.' || update_compare_rec.col_name || ' IS NULL AND p.' || update_compare_rec.col_name || ' IS NOT NULL) OR (orig.' || update_compare_rec.col_name || ' IS NOT NULL AND p.' || update_compare_rec.col_name || ' IS NULL)';\n")
+                out_buffer.write("        v_update_where_clause := v_update_where_clause || '(orig.' || quote_ident(update_compare_rec.col_name) || update_compare_rec.cmp_cast || '<> p.' || quote_ident(update_compare_rec.col_name) || update_compare_rec.cmp_cast || ') OR (orig.' || quote_ident(update_compare_rec.col_name) || ' IS NULL AND p.' || quote_ident(update_compare_rec.col_name) || ' IS NOT NULL) OR (orig.' || quote_ident(update_compare_rec.col_name) || ' IS NOT NULL AND p.' || quote_ident(update_compare_rec.col_name) || ' IS NULL)';\n")
                 out_buffer.write("    END LOOP;\n")
                 out_buffer.write("\n")
                 out_buffer.write("    IF v_update_where_clause <> '' THEN\n")
@@ -1378,7 +1378,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 # First, report it (this must be done BEFORE we actually update)
                 if script_ops.data_scripting_leave_report_fields_updated:
                     out_buffer.write(f"--Updating differences in '{col_name}' for reporting purposes\n")
-                    out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD {DIFF_BIT_FLD}{col_name} Boolean NULL;\n")
+                    out_buffer.write(f"ALTER TABLE {s_temp_table_name} ADD {utils.pg_quote_ident(DIFF_BIT_FLD + col_name)} Boolean NULL;\n")
                     
                     if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
                         if db_type == DBType.MSSQL:
@@ -1391,14 +1391,14 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         
                         out_buffer.write("--and retaining old value for full report\n")
                         precision_scale= code_funcs.add_size_precision_scale(drows_col.iloc[0])
-                        add_col_sql = f"ALTER TABLE {s_temp_table_name} ADD {EXISTING_FLD_VAL_PREFIX}{drows_col.iloc[0]['col_name']} {drows_col.iloc[0]['user_type_name']} {precision_scale} NULL;\n"
+                        add_col_sql = f"ALTER TABLE {s_temp_table_name} ADD {utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + drows_col.iloc[0]['col_name'])} {drows_col.iloc[0]['user_type_name']} {precision_scale} NULL;\n"
                         out_buffer.write(add_col_sql )
                     
                     if db_type == DBType.MSSQL:
                         out_buffer.write(f"SET @sqlCode='UPDATE {s_temp_table_name} SET {DIFF_BIT_FLD}{col_name} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
                         
                         if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
-                            out_buffer.write(f",{EXISTING_FLD_VAL_PREFIX}{col_name} = p.{col_name}\n")
+                            out_buffer.write(f",{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} = p.{utils.pg_quote_ident(col_name)}\n")
                         
                         out_buffer.write(f" FROM {s_temp_table_name} t INNER JOIN {s_source_table_name} p ON ")
                         
@@ -1430,10 +1430,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         out_buffer.write("EXECUTE sqlCode;")
                     
                     elif db_type == DBType.PostgreSQL:
-                        out_buffer.write(f"sqlCode='UPDATE {s_temp_table_name} orig SET {DIFF_BIT_FLD}{col_name} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
+                        out_buffer.write(f"sqlCode='UPDATE {s_temp_table_name} orig SET {utils.pg_quote_ident(DIFF_BIT_FLD + col_name)} = True, {FLD_COMPARE_STATE}={RowState.DIFF.value}\n")
                         
                         if script_ops.data_scripting_leave_report_fields_updated_save_old_value:
-                            out_buffer.write(f",{EXISTING_FLD_VAL_PREFIX}{col_name} = p.{col_name}\n")
+                            out_buffer.write(f",{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} = p.{utils.pg_quote_ident(col_name)}\n")
                         
                         out_buffer.write(f" FROM {s_source_table_name} p ")
                         out_buffer.write(" WHERE (")
@@ -1442,7 +1442,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         col_count = len(ar_key_cols)
                         
                         for key_col_name in ar_key_cols:
-                            out_buffer.write(f"orig.{key_col_name} = p.{key_col_name}")
+                            out_buffer.write(f"orig.{utils.pg_quote_ident(key_col_name)} = p.{utils.pg_quote_ident(key_col_name)}")
                             if count < col_count:
                                 out_buffer.write(" AND ")
                             count += 1
@@ -1457,7 +1457,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         else:
                             out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
                         
-                        out_buffer.write(f"(orig.{col_name} IS NULL AND p.{col_name} IS NOT NULL) OR (orig.{col_name} IS NOT NULL AND p.{col_name} IS NULL)")
+                        out_buffer.write(f"(orig.{utils.pg_quote_ident(col_name)} IS NULL AND p.{utils.pg_quote_ident(col_name)} IS NOT NULL) OR (orig.{utils.pg_quote_ident(col_name)} IS NOT NULL AND p.{utils.pg_quote_ident(col_name)} IS NULL)")
                         
                         if script_ops.data_window_got_specific_cells:
                             out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
@@ -1467,7 +1467,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                         #out_buffer.write("END IF;\n")
 
                 out_buffer.write("If (execCode=True) THEN\n")
-                out_buffer.write(f"\tsqlCode ='UPDATE {s_ent_full_name_sql} orig SET {col_name} = p.{col_name}\n")
+                out_buffer.write(f"\tsqlCode ='UPDATE {s_ent_full_name_sql} orig SET {utils.pg_quote_ident(col_name)} = p.{utils.pg_quote_ident(col_name)}\n")
                 out_buffer.write(f" FROM {s_temp_table_name} p \n")
                 out_buffer.write(" WHERE (")
 
@@ -1475,7 +1475,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 count = 1
                 col_count = len(ar_key_cols)
                 for key_col_name in ar_key_cols:
-                    out_buffer.write(f"orig.{key_col_name} = p.{key_col_name}")
+                    out_buffer.write(f"orig.{utils.pg_quote_ident(key_col_name)} = p.{utils.pg_quote_ident(key_col_name)}")
                     if count < col_count:
                         out_buffer.write(" AND ")
                     count += 1
@@ -1490,7 +1490,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 else:
                     out_buffer.write(f"/*{col_name} is of a type that cannot be compared, so just updating if there is a NULL difference. Nothing else we can do*/")
 
-                out_buffer.write(f"(orig.{col_name} IS NULL AND p.{col_name} IS NOT NULL) OR (orig.{col_name} IS NOT NULL AND p.{col_name} IS NULL))")
+                out_buffer.write(f"(orig.{utils.pg_quote_ident(col_name)} IS NULL AND p.{utils.pg_quote_ident(col_name)} IS NOT NULL) OR (orig.{utils.pg_quote_ident(col_name)} IS NOT NULL AND p.{utils.pg_quote_ident(col_name)} IS NULL))")
 
                 if script_ops.data_window_got_specific_cells:
                     out_buffer.write(f") AND {NO_UPDATE_FLD}{col_name} IS NULL")
@@ -1734,11 +1734,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 count = 1
                 col_count = len(drows_cols)
                 for d_row_col in drows_cols:
-                    out_buffer.write(f"{d_row_col['col_name']} ")
+                    out_buffer.write(f"{utils.pg_quote_ident(d_row_col['col_name'])} ")
                     if d_row_col['col_name'] not in ar_key_cols:
-                        out_buffer.write(f", {DIFF_BIT_FLD}{d_row_col['col_name']} ")
+                        out_buffer.write(f", {utils.pg_quote_ident(DIFF_BIT_FLD + d_row_col['col_name'])} ")
                         if script_ops.data_scripting_leave_report_fields_updated_save_old_value:                            
-                            out_buffer.write(f", {EXISTING_FLD_VAL_PREFIX}{d_row_col['col_name']} ")
+                            out_buffer.write(f", {utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + d_row_col['col_name'])} ")
                     
                     if count < col_count:
                         out_buffer.write(",")
@@ -1997,37 +1997,37 @@ def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, v
         script.write("END\n")
         
     elif db_type == DBType.PostgreSQL:
-        script.write(f"{pref_each_line}IF (temprow.{DIFF_BIT_FLD}{col_name}=True) THEN\n")
-        script.write(f"{pref_each_line}\tIF temprow.{col_name} IS NULL THEN\n")
-        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=NULL';\n")
+        script.write(f"{pref_each_line}IF (temprow.{utils.pg_quote_ident(DIFF_BIT_FLD + col_name)}=True) THEN\n")
+        script.write(f"{pref_each_line}\tIF temprow.{utils.pg_quote_ident(col_name)} IS NULL THEN\n")
+        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=NULL';\n")
         script.write(f"{pref_each_line}\tELSE\n")
         
         is_datetime = False
         is_string, is_datetime = utils.is_type_string(type_name)
         if not is_string:
             if is_datetime:
-                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=''' || CAST(Format(CAST(temprow.{col_name} AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS {db_syntax.nvarchar_type})  || '''';\n")
+                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=''' || CAST(Format(CAST(temprow.{utils.pg_quote_ident(col_name)} AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS {db_syntax.nvarchar_type})  || '''';\n")
             else:
-                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}=' || CAST(temprow.{col_name} AS {db_syntax.nvarchar_type});\n")
+                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=' || CAST(temprow.{utils.pg_quote_ident(col_name)} AS {db_syntax.nvarchar_type});\n")
             
             if save_old_value:
-                script.write(f"{pref_each_line}\t\tIF temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} IS NULL THEN\n")
+                script.write(f"{pref_each_line}\t\tIF temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} IS NULL THEN\n")
                 script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
                 script.write(f"{pref_each_line}\t\tELSE\n")
                 
                 datetime_format = "FORMAT(CAST(" if is_datetime else ""
                 datetime_suffix = " AS character varying), 'yyyy-MM-dd HH:mm:ss.fff')" if is_datetime else ""
                 
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || CAST({datetime_format}temprow.{EXISTING_FLD_VAL_PREFIX}{col_name}{datetime_suffix} As {db_syntax.nvarchar_type}) || '*/';\n")
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || CAST({datetime_format}temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)}{datetime_suffix} As {db_syntax.nvarchar_type}) || '*/';\n")
                 script.write(f"{pref_each_line}\t\tEND IF;\n")
         else:
-            script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{col_name}= ''' || temprow.{col_name} || ''''; --DML Update: set the value\n")
+            script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}= ''' || temprow.{utils.pg_quote_ident(col_name)} || ''''; --DML Update: set the value\n")
             
             if save_old_value:
-                script.write(f"{pref_each_line}\t\tIF temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} IS NULL THEN\n")
+                script.write(f"{pref_each_line}\t\tIF temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} IS NULL THEN\n")
                 script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
                 script.write(f"{pref_each_line}\t\tELSE\n")
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || temprow.{EXISTING_FLD_VAL_PREFIX}{col_name} || '*/';\n")
+                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} || '*/';\n")
                 script.write(f"{pref_each_line}\t\tEND IF;\n")
         
         script.write(f"{pref_each_line}\tEND IF; --of: if field IS NULL\n")
