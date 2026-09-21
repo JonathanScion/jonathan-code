@@ -156,8 +156,12 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
         sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, udt_name AS user_type_name, 
                             CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
                              null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS col_unsigned, 
-                            NULL AS extra, 
-                            0 AS is_computed, null AS computed_definition ,
+                            NULL AS extra,
+                            -- A generated column (GENERATED ALWAYS AS (...) STORED) is PostgreSQL's computed
+                            -- column: it can't be written, so it is scripted as part of the table and left out
+                            -- of INSERTs and UPDATEs, which is what is_computed already means everywhere else
+                            case WHEN C.is_generated = 'ALWAYS' then 1 else 0 END AS is_computed,
+                            C.generation_expression AS computed_definition,
                             case WHEN is_identity  = 'YES' then 1 WHEN is_identity  = 'NO' then 0 END AS is_identity, 
                             identity_generation, identity_start as indent_seed, identity_increment as indent_incr, identity_maximum, identity_minimum, identity_cycle
                             FROM information_schema.COLUMNS C

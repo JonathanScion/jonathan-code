@@ -687,7 +687,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     out_buffer.write(" AND ")
                 i_count += 1
             
-            out_buffer.write(" AND ")
+            # The ORs need brackets of their own: AND binds tighter, so a key of more than one column read as
+            # (orig matches t AND p.<first> IS NULL) OR p.<second> IS NULL OR ... - and those trailing tests
+            # aren't tied to the row being updated, so one unmatched row marked every row in the table as
+            # missing. The table's whole contents were then re-inserted, onto the rows already there
+            out_buffer.write(" AND (")
             i_count = 1
             i_col_count = len(ar_key_cols)
             for s_col_name in ar_key_cols:
@@ -695,7 +699,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 if i_count < i_col_count:
                     out_buffer.write(" OR ")
                 i_count += 1
-            
+            out_buffer.write(")")
+
             out_buffer.write(";\n")
             out_buffer.write("\t\t--add all missing records:\n")
             out_buffer.write(f"\t\tIF ({db_syntax.var_prefix}execCode=True) THEN\n")
@@ -1099,7 +1104,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("DECLARE\n")
             out_buffer.write("    extra2_col_rec RECORD;\n")
             out_buffer.write("BEGIN\n")
-            out_buffer.write(f"    FOR extra2_col_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) LOOP\n")
+            skip_generated_sql = _skip_generated_cols_sql(schema_tables, drow_ent)
+            out_buffer.write(f"    FOR extra2_col_rec IN SELECT ScriptCols.col_name FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3){skip_generated_sql} LOOP\n")
             out_buffer.write("        v_extra2_cols := v_extra2_cols || quote_ident(extra2_col_rec.col_name) || ', ';\n")
             out_buffer.write("        v_extra2_select_cols := v_extra2_select_cols || 'p.' || quote_ident(extra2_col_rec.col_name) || ', ';\n")
             out_buffer.write("    END LOOP;\n")
@@ -1262,7 +1268,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 no_compare_cols_list = [col.lower() for col in ar_no_key_cols_no_compare] if ar_no_key_cols_no_compare else []
                 key_cols_list = [col.lower() for col in ar_key_cols]
 
-                out_buffer.write(f"    FOR update_compare_rec IN SELECT ScriptCols.col_name, CASE WHEN LOWER(ScriptCols.user_type_name) = 'json' OR LOWER(ScriptCols.user_type_name_db) = 'json' THEN '::jsonb' ELSE '' END AS cmp_cast FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3) AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(key_cols_list)}')")
+                skip_generated_sql = _skip_generated_cols_sql(schema_tables, drow_ent)
+                out_buffer.write(f"    FOR update_compare_rec IN SELECT ScriptCols.col_name, CASE WHEN LOWER(ScriptCols.user_type_name) = 'json' OR LOWER(ScriptCols.user_type_name_db) = 'json' THEN '::jsonb' ELSE '' END AS cmp_cast FROM ScriptCols WHERE LOWER(ScriptCols.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(ScriptCols.table_name) = LOWER('{drow_ent['entname']}') AND ScriptCols.colStat IN (0, 3){skip_generated_sql} AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(key_cols_list)}')")
                 if no_compare_cols_list:
                     out_buffer.write(f" AND LOWER(ScriptCols.col_name) NOT IN ('{"', '".join(no_compare_cols_list)}')")
                 out_buffer.write(" LOOP\n")
@@ -1809,7 +1816,8 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\tv_csv_col_rec RECORD;\n")
             out_buffer.write("\tBEGIN\n")
             # Query information_schema directly to get columns that actually exist in the target table
-            out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') ORDER BY c.ordinal_position LOOP\n")
+            # is_generated: the script's own CSV leaves generated columns out, so this side has to match
+            out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') AND c.is_generated <> 'ALWAYS' ORDER BY c.ordinal_position LOOP\n")
             out_buffer.write("\t\t\tIF v_csv_cols <> '' THEN v_csv_cols := v_csv_cols || ', '; END IF;\n")
             # quote_ident: column names may be mixed/upper case (e.g. "WORK_ORDER_NBR"), which unquoted would fold to lower case
             out_buffer.write("\t\t\tv_csv_cols := v_csv_cols || quote_ident(v_csv_col_rec.column_name);\n")
@@ -1914,6 +1922,27 @@ def _pg_row_key_cols(schema_tables: DBSchema, drow_ent) -> list:
         (schema_tables.index_cols["object_id"] == drow_ent["entkey"]) &
         (schema_tables.index_cols["index_id"] == unq_indexes[0]["index_id"])
     ]["col_name"].tolist()
+
+
+
+def _skip_generated_cols_sql(schema_tables: DBSchema, drow_ent) -> str:
+    """The clause that keeps generated columns out of a column list read from ScriptCols at run time.
+
+    They are in ScriptCols because the schema compares them, but not in the temp comparison table, which
+    holds only what can be written - a generated column can't be, and its value follows from the rest.
+    """
+    if "is_computed" not in schema_tables.columns.columns:
+        return ""
+    generated_cols = [
+        str(col).lower() for col in schema_tables.columns[
+            (schema_tables.columns["object_id"] == drow_ent["entkey"]) &
+            (schema_tables.columns["is_computed"] == 1)
+        ]["col_name"].tolist()
+    ]
+    if not generated_cols:
+        return ""
+    quoted = "', '".join(generated_cols)
+    return f" AND LOWER(ScriptCols.col_name) NOT IN ('{quoted}')"
 
 
 def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, var_name, type_name, pref_each_line, script: StringIO, save_old_value):

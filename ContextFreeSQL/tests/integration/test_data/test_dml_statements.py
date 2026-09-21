@@ -209,6 +209,37 @@ class TestGeneratedDMLStatements:
             test_connection, 'public', table_name, order_by='part_a, "Part B"'
         ) == expected
 
+    def test_composite_key_restores_one_missing_row_only(self, test_connection, script_generator, unique_prefix):
+        """
+        With a key of more than one column, a row missing from the target must not drag the rest in with it.
+
+        The clause marking rows as missing ended with an unbracketed OR, which AND binds tighter than, so the
+        trailing tests came loose from the row being updated: one missing row marked every row in the table as
+        missing and the script re-inserted all of them, onto the rows already there.
+        """
+        table_name = f"{unique_prefix}compins"
+        table_ref = f'public.{table_name}'
+        db_helpers.execute_sql(
+            test_connection,
+            f'''CREATE TABLE public."{table_name}" (
+                    part_a int, part_b text, payload text, PRIMARY KEY (part_a, part_b)
+                )'''
+        )
+        db_helpers.execute_sql(
+            test_connection,
+            f'''INSERT INTO public."{table_name}" VALUES (1, 'x', 'one'), (1, 'y', 'two'), (2, 'x', 'three')'''
+        )
+        expected = db_helpers.get_table_data(test_connection, 'public', table_name, order_by='part_a, part_b')
+
+        script = script_generator.generate([table_ref], script_data=True, exec_code=True)
+        db_helpers.execute_sql(test_connection, f'''DELETE FROM public."{table_name}" WHERE part_b = 'y' ''')
+
+        db_helpers.execute_script(test_connection, script)   # used to raise: duplicate key value
+
+        assert db_helpers.get_table_data(
+            test_connection, 'public', table_name, order_by='part_a, part_b'
+        ) == expected
+
     def test_delete_statement_targets_only_the_extra_row(self, test_connection, script_generator, unique_prefix):
         """A row only the target has is printed as a DELETE that matches it by key."""
         table_name = f"{unique_prefix}del"
@@ -233,3 +264,66 @@ class TestGeneratedDMLStatements:
 
         db_helpers.execute_sql(test_connection, deletes[0])
         assert _rows(test_connection, table_name) == expected
+
+
+@pytest.mark.data
+class TestGeneratedColumns:
+    """
+    A generated column (GENERATED ALWAYS AS (...) STORED) can never be written.
+
+    It has to be scripted as part of the table and left out of every INSERT and UPDATE, or the script fails
+    with 'cannot insert a non-DEFAULT value into column'.
+    """
+
+    def _create(self, conn, table_name):
+        db_helpers.execute_sql(
+            conn,
+            f'''CREATE TABLE public."{table_name}" (
+                    id int PRIMARY KEY,
+                    first_name text NOT NULL,
+                    last_name text NOT NULL,
+                    full_name text GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED
+                )'''
+        )
+
+    def test_data_scripting_skips_the_generated_column(self, test_connection, script_generator, unique_prefix):
+        """Rows can be added to a table that already exists, and the generated column follows from them."""
+        table_name = f"{unique_prefix}gen"
+        self._create(test_connection, table_name)
+        db_helpers.execute_sql(
+            test_connection,
+            f'''INSERT INTO public."{table_name}" (id, first_name, last_name)
+                VALUES (1, 'Ada', 'Lovelace'), (2, 'Alan', 'Turing')'''
+        )
+
+        script = script_generator.generate([f'public.{table_name}'], script_data=True, exec_code=True)
+
+        db_helpers.execute_sql(test_connection, f'DELETE FROM public."{table_name}" WHERE id = 2')
+        db_helpers.execute_script(test_connection, script)   # used to raise: non-DEFAULT value into full_name
+
+        rows = db_helpers.get_table_data(test_connection, 'public', table_name, order_by='id')
+        assert [r['full_name'] for r in rows] == ['Ada Lovelace', 'Alan Turing']
+
+    def test_table_is_created_with_the_generated_column(self, test_connection, script_generator, unique_prefix):
+        """Scripted into a database that doesn't have the table, the column comes back generated, not plain."""
+        table_name = f"{unique_prefix}gen2"
+        self._create(test_connection, table_name)
+        db_helpers.execute_sql(
+            test_connection,
+            f'''INSERT INTO public."{table_name}" (id, first_name, last_name) VALUES (1, 'Grace', 'Hopper')'''
+        )
+
+        script = script_generator.generate([f'public.{table_name}'], script_data=True, exec_code=True)
+
+        db_helpers.execute_sql(test_connection, f'DROP TABLE public."{table_name}"')
+        db_helpers.execute_script(test_connection, script)
+
+        generated = db_helpers.execute_sql(
+            test_connection,
+            """SELECT attgenerated FROM pg_attribute
+               WHERE attrelid = %s::regclass AND attname = 'full_name'""",
+            (f'public."{table_name}"',)
+        )
+        assert generated[0][0] == 's', 'column should be STORED generated, not a plain column'
+        rows = db_helpers.get_table_data(test_connection, 'public', table_name, order_by='id')
+        assert [r['full_name'] for r in rows] == ['Grace Hopper']

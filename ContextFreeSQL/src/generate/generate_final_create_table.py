@@ -123,6 +123,11 @@ def get_create_table_from_sys_tables(
             for _, default_row in default_rows.iterrows():
                 col_defaults[default_row['col_name']] = default_row['default_definition']
 
+        # The temp table holds the script's rows for comparison, so it has to be writable: a generated column
+        # can't be written, and its value follows from the columns that are here anyway
+        if as_temp_table and 'is_computed' in col_rows.columns:
+            col_rows = col_rows[~col_rows['is_computed'].fillna(0).astype(bool)]
+
         col_num = 0
         for idx, col_row in col_rows.iterrows():
             col_num += 1
@@ -308,8 +313,19 @@ def get_col_sql(
         sql.append(f"{str(sys_cols_row['col_name'])} ")
 
     # Check if computed
-    if sys_cols_row.get('is_computed', False):
-        sql.append(f"AS {sys_cols_row['computed_definition']}")
+    if utils.c_to_bool(sys_cols_row.get('is_computed', False), False):
+        if db_type == DBType.PostgreSQL:
+            # PostgreSQL spells it out in full and needs the type: col tsvector GENERATED ALWAYS AS (expr) STORED.
+            # Nothing else applies - a generated column takes no default, and its value is never written
+            sql.append(f"{actual_type}")
+            type_size_prec_scale = code_funcs.add_size_precision_scale(sys_cols_row)
+            if type_size_prec_scale:
+                sql.append(type_size_prec_scale)
+            sql.append(f" GENERATED ALWAYS AS ({sys_cols_row['computed_definition']}) STORED")
+            if not force_allow_null and not sys_cols_row.get('is_nullable', False):
+                sql.append(" NOT NULL")
+        else:
+            sql.append(f"AS {sys_cols_row['computed_definition']}")
         return "".join(sql)
 
     # Type

@@ -22,15 +22,15 @@ SELECT * FROM needed;
 
 That removes the round-per-row behaviour for the common tree/chain case. Keep the cap for everything else.
 
-## Generated columns are scripted into INSERTs
+## A generated column can't have its type changed
 
-Running a const1 script against const1 with `execCode` on fails with `cannot insert a non-DEFAULT value into
-column "search_vector"`, a generated column of `wpc.work_orders`: it is in the column list of the INSERT that
-adds missing rows to an existing table. A generated column can't be written at all, so it has to be left out of
-INSERTs and UPDATEs (and there is nothing to compare either - it is derived from the other columns).
-
-It doesn't show when the target starts empty, because a just-created table takes a different path, so the
-symptom is "the script runs on a blank database but not on a populated one".
+`get_col_sql` builds one `SQL_ALTER` per column ahead of time, so a generated column gets
+`ALTER TABLE t ALTER COLUMN c TYPE x GENERATED ALWAYS AS (...) STORED`, which isn't valid SQL. It only runs if
+a type difference is detected on that column, and PostgreSQL can't change a generated column's type in place
+anyway - it would have to drop the expression, change the type and add it back. Nothing detects the case today:
+whether a column is generated, and its expression, are not compared against the target at all (the comparison
+queries for `is_computed` and `computed_definition` are MSSQL-only), so a plain column in the target where the
+source has a generated one is neither reported nor fixed.
 
 ## A schema-only script still takes 34 seconds to run
 
