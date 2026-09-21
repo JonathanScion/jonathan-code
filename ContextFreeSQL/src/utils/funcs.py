@@ -237,6 +237,24 @@ def pg_quote_ident(name) -> str:
     return '"' + text.replace('"', '""') + '"'
 
 
+def pg_dml_key_where(alias: str, key_cols, record_var: str = "temprow") -> str:
+    """The key match for one row, as a fragment of a generated DML statement (the printed INSERT/UPDATE/DELETE).
+
+    Returns PL/pgSQL that continues a string literal the caller has left open after 'WHERE ', and ends with a
+    function call - so the caller must not close that literal. The alias has to be the one the statement gives
+    the table: an UPDATE aliased 'orig' with a WHERE on 's' is 'missing FROM-clause entry for table s'.
+
+    quote_nullable does the quoting: it escapes quotes in the value, never truncates it, and yields NULL rather
+    than a NULL sqlCode (which would swallow the whole statement) if a key column somehow holds NULL.
+    """
+    parts = []
+    for i, col_name in enumerate(key_cols):
+        col = pg_quote_ident(col_name)
+        lead = "" if i == 0 else "' AND "
+        parts.append(f"{lead}{alias}.{col}=' || quote_nullable({record_var}.{col})")
+    return " || ".join(parts)
+
+
 # Enough of the reserved words to matter for column and table names (PostgreSQL's reserved_keywords list)
 PG_RESERVED_WORDS = {
     'all', 'analyse', 'analyze', 'and', 'any', 'array', 'as', 'asc', 'asymmetric', 'both', 'case', 'cast',

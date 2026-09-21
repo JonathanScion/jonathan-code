@@ -1118,9 +1118,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             s_source_table_name = s_ent_full_name_sql
 
             # Build the JOIN condition for key columns
-            key_join_condition = " AND ".join([f"p.{col_name}=t.{col_name}" for col_name in ar_key_cols])
+            key_join_condition = " AND ".join([f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}" for col_name in ar_key_cols])
 
-            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{ar_key_cols[0]} IS NULL)';\n")
+            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL)';\n")
 
             if not script_ops.data_window_only:
                 out_buffer.write("EXECUTE sqlCode;\n")
@@ -1189,7 +1189,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 count += 1
             
             s_where_key_str = " AND ".join(s_where_key_clause)
-            out_buffer.write(f" WHERE ({s_where_key_str}) AND (t.{ar_key_cols[0]} IS NULL OR (t.{FLD_COMPARE_STATE}={RowState.EXTRA2.value}))';")
+            out_buffer.write(f" WHERE ({s_where_key_str}) AND (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL OR (t.{FLD_COMPARE_STATE}={RowState.EXTRA2.value}))';")
             out_buffer.write(f" --Need to check {FLD_COMPARE_STATE} in case we've asked a 'data report', then those extra records to be deleted will actually be in the temp table\n")
             
             if not script_ops.data_window_only:
@@ -1277,7 +1277,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write("    IF v_update_where_clause <> '' THEN\n")
 
                 # Build key join condition
-                key_join_condition = " AND ".join([f"orig.{col_name} = p.{col_name}" for col_name in ar_key_cols])
+                key_join_condition = " AND ".join([f"orig.{utils.pg_quote_ident(col_name)} = p.{utils.pg_quote_ident(col_name)}" for col_name in ar_key_cols])
 
                 out_buffer.write(f"        sqlCode := 'UPDATE {s_temp_table_name} orig SET {FLD_COMPARE_STATE}={RowState.DIFF.value} FROM {s_source_table_name} p WHERE ({key_join_condition}) AND (' || v_update_where_clause || ')';\n")
                 out_buffer.write("        EXECUTE sqlCode; --flagging the temp table with records that need to be updated\n")
@@ -1701,30 +1701,12 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     
                     count += 1
                 
-                # Build WHERE clause for PostgreSQL
-                str_where_pk = []
-                count = 1
-                col_count = len(drows_unq_cols)
-                
-                for d_row_col in drows_unq_cols:
-                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
-                    where_part = f"orig.{d_row_col['col_name']}=''' || "
-                    is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
-                    if is_string:
-                        where_part += f"temprow.{col_var_name}"
-                    else:
-                        where_part += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
-                    
-                    where_part += " || ''''"
-                    
-                    if count < col_count:
-                        where_part += " || ' AND  \n"
-                    
-                    str_where_pk.append(where_part)
-                    count += 1
-                
-                str_where_pk_joined = ''.join(str_where_pk)
-                
+                # The key match for the two statements below. They alias the table differently, so each needs its
+                # own clause: the UPDATE is 'UPDATE t orig SET ...', the DELETE is 'DELETE FROM t s WHERE ...'
+                unq_col_names = [d_row_col['col_name'] for d_row_col in drows_unq_cols]
+                where_pk_orig = utils.pg_dml_key_where('orig', unq_col_names)
+                where_pk_s = utils.pg_dml_key_where('s', unq_col_names)
+
                 # PostgreSQL record loop
                 out_buffer.write("\t\tdeclare temprow record;\n")
                 out_buffer.write("\t\tBEGIN\n")
@@ -1747,35 +1729,10 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 
                 out_buffer.write(f",s.{FLD_COMPARE_STATE}") #3700
 
-                str_where_pk = []
-                count = 1
-                col_count = len(drows_unq_cols)
-
-                for d_row_col in drows_unq_cols:
-                    col_var_name = re.sub(r'[ \\/\$#:,\.]', '_', d_row_col['col_name'])
-                    where_clause = f"s.{d_row_col['col_name']}=''' || "
-                    is_string, is_datetime = utils.is_type_string(d_row_col['user_type_name'])
-                    if is_string:
-                        where_clause += f"temprow.{col_var_name}"
-                    else:
-                        where_clause += f"CAST({db_syntax.var_prefix} temprow.{d_row_col['col_name']} AS VARCHAR(20))"
-                    
-                    where_clause += " || ''''"
-                    
-                    if count < col_count:
-                        where_clause += " || ' AND  \n"
-                    
-                    str_where_pk.append(where_clause)
-                    count += 1  # Comment from original: 3/21/14. how come we didn't have it before?? i guess it was all 1-field PK?
-
-                # Join the parts into a single string when needed
-                str_where_pk_joined = ''.join(str_where_pk)
-                
-
                 out_buffer.write(f" FROM {db_syntax.temp_table_prefix}{s_temp_table_name} s WHERE s.{FLD_COMPARE_STATE} IN ({RowState.EXTRA2.value},{RowState.DIFF.value})\n") #3719
                 out_buffer.write("\t\tLOOP\n")
                 out_buffer.write(f"If (temprow._CmprState_={RowState.EXTRA2.value}) THEN --to be dropped\n")
-                out_buffer.write(f"\tsqlCode='DELETE FROM {s_ent_full_name_sql} s WHERE {str_where_pk_joined}; \n")
+                out_buffer.write(f"\tsqlCode='DELETE FROM {s_ent_full_name_sql} s WHERE {where_pk_s}; \n")
                 out_buffer.write("\tIf (printExec = True) THEN\n")
                 out_buffer.write("\t\tINSERT INTO scriptoutput (SQLText)\n")
                 out_buffer.write("\t\tVALUES (sqlCode);\n")
@@ -1784,7 +1741,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 out_buffer.write(f"If (temprow._CmprState_={RowState.DIFF.value}) THEN--to be updated\n")
                 out_buffer.write(f"\t\t\tsqlCode='UPDATE {s_ent_full_name_sql} orig SET ';\n")                
                 out_buffer.write(fields_update_set_list.getvalue())                
-                out_buffer.write(f"\t\t\tsqlCode = LEFT(sqlCode,LENGTH(sqlCode)-1) || ' WHERE {str_where_pk_joined} ;\n")
+                out_buffer.write(f"\t\t\tsqlCode = LEFT(sqlCode,LENGTH(sqlCode)-1) || ' WHERE {where_pk_orig};\n")
                 out_buffer.write("\t\t\tIF (printExec=True) THEN\n")
                 out_buffer.write("\t\t\t\tINSERT INTO scriptoutput (SQLText)\n")
                 out_buffer.write("\t\t\t\tVALUES (sqlCode);\n")
@@ -1997,39 +1954,31 @@ def add_var_update_to_sql_str(db_type: DBType,  db_syntax: DBSyntax, col_name, v
         script.write("END\n")
         
     elif db_type == DBType.PostgreSQL:
+        q_col = utils.pg_quote_ident(col_name)
+        q_old_col = utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)
+
+        def write_old_value_comment(indent):
+            """The value the target holds now, as a comment after the new one: version_num=5/*11*/"""
+            if not save_old_value:
+                return
+            script.write(f"{indent}IF temprow.{q_old_col} IS NULL THEN\n")
+            script.write(f"{indent}\tsqlCode = sqlCode || '/*NULL*/';\n")
+            script.write(f"{indent}ELSE\n")
+            # A value holding */ would end the comment early; one holding /* opens a nested comment, which
+            # PostgreSQL requires closing as well. Either way the rest of the statement becomes broken SQL
+            script.write(f"{indent}\tsqlCode = sqlCode || '/*' || replace(replace(temprow.{q_old_col}::text, '/*', '/ *'), '*/', '* /') || '*/';\n")
+            script.write(f"{indent}END IF;\n")
+
         script.write(f"{pref_each_line}IF (temprow.{utils.pg_quote_ident(DIFF_BIT_FLD + col_name)}=True) THEN\n")
-        script.write(f"{pref_each_line}\tIF temprow.{utils.pg_quote_ident(col_name)} IS NULL THEN\n")
-        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=NULL';\n")
+        script.write(f"{pref_each_line}\tIF temprow.{q_col} IS NULL THEN\n")
+        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{q_col}=NULL';\n")
+        write_old_value_comment(f"{pref_each_line}\t\t")
         script.write(f"{pref_each_line}\tELSE\n")
-        
-        is_datetime = False
-        is_string, is_datetime = utils.is_type_string(type_name)
-        if not is_string:
-            if is_datetime:
-                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=''' || CAST(Format(CAST(temprow.{utils.pg_quote_ident(col_name)} AS character varying), 'yyyy-MM-dd HH:mm:ss.fff') AS {db_syntax.nvarchar_type})  || '''';\n")
-            else:
-                script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}=' || CAST(temprow.{utils.pg_quote_ident(col_name)} AS {db_syntax.nvarchar_type});\n")
-            
-            if save_old_value:
-                script.write(f"{pref_each_line}\t\tIF temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} IS NULL THEN\n")
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
-                script.write(f"{pref_each_line}\t\tELSE\n")
-                
-                datetime_format = "FORMAT(CAST(" if is_datetime else ""
-                datetime_suffix = " AS character varying), 'yyyy-MM-dd HH:mm:ss.fff')" if is_datetime else ""
-                
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || CAST({datetime_format}temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)}{datetime_suffix} As {db_syntax.nvarchar_type}) || '*/';\n")
-                script.write(f"{pref_each_line}\t\tEND IF;\n")
-        else:
-            script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{utils.pg_quote_ident(col_name)}= ''' || temprow.{utils.pg_quote_ident(col_name)} || ''''; --DML Update: set the value\n")
-            
-            if save_old_value:
-                script.write(f"{pref_each_line}\t\tIF temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} IS NULL THEN\n")
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*NULL*/';\n")
-                script.write(f"{pref_each_line}\t\tELSE\n")
-                script.write(f"{pref_each_line}\t\t\tsqlCode = sqlCode || '/*' || temprow.{utils.pg_quote_ident(EXISTING_FLD_VAL_PREFIX + col_name)} || '*/';\n")
-                script.write(f"{pref_each_line}\t\tEND IF;\n")
-        
+        # quote_literal, whatever the type - see add_value_to_sql_str: it quotes, escapes and never truncates,
+        # where the type tests this used to do left uuid, text and json values bare and unusable
+        script.write(f"{pref_each_line}\t\tsqlCode = sqlCode || '{q_col}=' || quote_literal(temprow.{q_col}); --DML Update: set the value\n")
+        write_old_value_comment(f"{pref_each_line}\t\t")
+
         script.write(f"{pref_each_line}\tEND IF; --of: if field IS NULL\n")
         script.write(f"{pref_each_line}\tsqlCode = sqlCode || ',';\n")
         script.write(f"{pref_each_line}END IF; --of: if diffbit flag is true\n")

@@ -165,7 +165,9 @@ class ScriptGenerator:
         indexes: bool = True,
         foreign_keys: bool = True,
         defaults: bool = True,
-        exec_code: bool = True
+        exec_code: bool = True,
+        print_exec: bool = False,
+        save_old_value: bool = False
     ) -> str:
         """
         Generate a ContextFreeSQL script for the specified tables.
@@ -180,6 +182,9 @@ class ScriptGenerator:
             foreign_keys: Whether to script foreign keys
             defaults: Whether to script column defaults
             exec_code: Whether generated script should execute DDL
+            print_exec: Whether the script should print the statements it generates. The per-row
+                INSERT/UPDATE/DELETE statements are only emitted when this is on
+            save_old_value: Whether an UPDATE records the value the target held, as /*old*/
 
         Returns:
             The generated SQL script as a string
@@ -189,7 +194,8 @@ class ScriptGenerator:
             remove_all_extra_ents=remove_extras,
             script_schemas=script_schemas,
             script_security=script_security,
-            data_scripting_generate_dml_statements=script_data
+            data_scripting_generate_dml_statements=script_data,
+            data_scripting_leave_report_fields_updated_save_old_value=save_old_value
         )
 
         # Create table script options
@@ -212,7 +218,7 @@ class ScriptGenerator:
         # SQL script params - for testing we typically want exec_code=True
         sql_script_params = SQLScriptParams(
             print=False,
-            print_exec=False,
+            print_exec=print_exec,
             exec_code=exec_code,
             html_report=False,
             export_csv=False

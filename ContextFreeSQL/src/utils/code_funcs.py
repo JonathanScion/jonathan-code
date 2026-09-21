@@ -153,17 +153,11 @@ def add_value_to_sql_str(db_type, col_name, col_var_name, user_type_name, indent
         field_values_builder.append(f"{indent}IF (temprow.{col_name} IS NULL) THEN\n")
         field_values_builder.append(f"{indent}\tsqlCode = sqlCode || 'NULL';\n")
         field_values_builder.append(f"{indent}ELSE\n")
-        
-        # Check if it's a datetime or string type
-        is_string, is_datetime =  utils.is_type_string(user_type_name)
-        if not is_string:
-            if is_datetime:
-                field_values_builder.append(f"{indent}\tsqlCode = sqlCode || '''' || CAST(temprow.{col_name} AS varchar(30)) || '''';\n")
-            else:
-                field_values_builder.append(f"{indent}\tsqlCode = sqlCode || CAST(temprow.{col_name} AS varchar(30));\n")
-        else:
-            field_values_builder.append(f"{indent}\tsqlCode = sqlCode || '''' || temprow.{col_name} ||'''';\n")
-        
+        # quote_literal, whatever the type: it quotes and escapes the value and never truncates it. Casting to
+        # varchar(30) the way the MSSQL branch does silently cut uuids (36 chars) and json in half, and the
+        # types it left unquoted - uuid, text, json, enums, anything is_type_string doesn't list - came out as
+        # bare words. Numbers end up quoted, which is what the batched INSERTs do too and PostgreSQL accepts
+        field_values_builder.append(f"{indent}\tsqlCode = sqlCode || quote_literal(temprow.{col_name});\n")
         field_values_builder.append(f"{indent}END IF;\n")
         field_values_builder.append("\n")
 

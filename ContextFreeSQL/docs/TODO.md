@@ -22,6 +22,16 @@ SELECT * FROM needed;
 
 That removes the round-per-row behaviour for the common tree/chain case. Keep the cap for everything else.
 
+## Generated columns are scripted into INSERTs
+
+Running a const1 script against const1 with `execCode` on fails with `cannot insert a non-DEFAULT value into
+column "search_vector"`, a generated column of `wpc.work_orders`: it is in the column list of the INSERT that
+adds missing rows to an existing table. A generated column can't be written at all, so it has to be left out of
+INSERTs and UPDATEs (and there is nothing to compare either - it is derived from the other columns).
+
+It doesn't show when the target starts empty, because a just-created table takes a different path, so the
+symptom is "the script runs on a blank database but not on a populated one".
+
 ## A schema-only script still takes 34 seconds to run
 
 Measured on const1 (165 tables, 5196 columns): the full script takes 1m22s to run, schema-only 34s, so the data
