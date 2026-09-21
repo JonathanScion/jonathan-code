@@ -218,6 +218,12 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull()))
                 ].sort_values("column_id").to_dict('records')
         
+        # Boolean columns, so the CSV can be written the way the target's side is exported
+        bool_cols = {
+            d_row_col["col_name"] for d_row_col in drows_cols
+            if str(d_row_col.get("user_type_name", "")).lower() in ("bool", "boolean")
+        }
+
         # Load columns for faster iteration #2411
         ar_cols = []
         ar_key_cols = []
@@ -504,7 +510,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             os.makedirs(csv_output_dir, exist_ok=True)
 
             # Write CSV file with only the columns we need
-            tbl_data[ar_cols].to_csv(csv_file_path, index=False)
+            _write_data_csv(tbl_data, ar_cols, bool_cols, csv_file_path)
 
             col_names = ", ".join(ar_cols)
             out_buffer.write(f"\t\t-- Loading data from CSV file: {csv_filename}\n")
@@ -515,7 +521,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
                 csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
                 os.makedirs(csv_output_dir, exist_ok=True)
-                tbl_data[ar_cols].to_csv(csv_file_path, index=False)
+                _write_data_csv(tbl_data, ar_cols, bool_cols, csv_file_path)
             # Generate INSERT statements. Rows are batched into multi-row VALUES (one row per line), so the table
             # name and column list aren't repeated per row - on a 1000 row table that is about 40% of the data
             # section. Plain SQL, so it runs in any client. batch_rows=1 gives one statement per row.
@@ -1817,10 +1823,16 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\tBEGIN\n")
             # Query information_schema directly to get columns that actually exist in the target table
             # is_generated: the script's own CSV leaves generated columns out, so this side has to match
-            out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') AND c.is_generated <> 'ALWAYS' ORDER BY c.ordinal_position LOOP\n")
+            out_buffer.write(f"\t\tFOR v_csv_col_rec IN SELECT c.column_name, c.data_type FROM information_schema.columns c WHERE LOWER(c.table_schema) = LOWER('{drow_ent['entschema']}') AND LOWER(c.table_name) = LOWER('{drow_ent['entname']}') AND c.is_generated <> 'ALWAYS' ORDER BY c.ordinal_position LOOP\n")
             out_buffer.write("\t\t\tIF v_csv_cols <> '' THEN v_csv_cols := v_csv_cols || ', '; END IF;\n")
             # quote_ident: column names may be mixed/upper case (e.g. "WORK_ORDER_NBR"), which unquoted would fold to lower case
-            out_buffer.write("\t\t\tv_csv_cols := v_csv_cols || quote_ident(v_csv_col_rec.column_name);\n")
+            # A boolean is written as t/f by COPY but as true/false by a text cast, which is what the script's
+            # own CSV holds. Cast it, or the comparison page reads every row as different on that column
+            out_buffer.write("\t\t\tIF v_csv_col_rec.data_type = 'boolean' THEN\n")
+            out_buffer.write("\t\t\t\tv_csv_cols := v_csv_cols || quote_ident(v_csv_col_rec.column_name) || '::text AS ' || quote_ident(v_csv_col_rec.column_name);\n")
+            out_buffer.write("\t\t\tELSE\n")
+            out_buffer.write("\t\t\t\tv_csv_cols := v_csv_cols || quote_ident(v_csv_col_rec.column_name);\n")
+            out_buffer.write("\t\t\tEND IF;\n")
             out_buffer.write("\t\tEND LOOP;\n")
             out_buffer.write("\t\tIF v_csv_cols <> '' THEN\n")
             out_buffer.write(f"\t\t\tEXECUTE 'CREATE TEMP TABLE temp_csv_export AS SELECT ' || v_csv_cols || ' FROM {s_ent_full_name_sql}';\n")
@@ -1923,6 +1935,23 @@ def _pg_row_key_cols(schema_tables: DBSchema, drow_ent) -> list:
         (schema_tables.index_cols["index_id"] == unq_indexes[0]["index_id"])
     ]["col_name"].tolist()
 
+
+
+
+def _write_data_csv(tbl_data, cols, bool_cols, csv_file_path):
+    """Write the script's rows for a table, in the same shape the target's own rows are exported in.
+
+    pandas writes a Python bool as True/False; PostgreSQL's COPY writes t/f. The comparison page reads both
+    files as text, so every boolean column differed on every row and whole tables came out as "different".
+    Both sides now write true/false - which COPY also accepts on the way back in.
+    """
+    out = tbl_data[cols]
+    if bool_cols:
+        out = out.copy()
+        for col in bool_cols:
+            if col in out.columns:
+                out[col] = out[col].map(lambda v: v if utils.is_null_value(v) else ('true' if v else 'false'))
+    out.to_csv(csv_file_path, index=False)
 
 
 def _skip_generated_cols_sql(schema_tables: DBSchema, drow_ent) -> str:

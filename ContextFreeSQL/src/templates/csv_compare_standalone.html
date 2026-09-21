@@ -748,6 +748,19 @@
             font-weight: 600;
         }
 
+        /* A column only one side has: it can't be compared, so say so rather than flag every row */
+        .comparison-table th.one-sided-header {
+            font-style: italic;
+            opacity: 0.85;
+        }
+
+        .one-sided-mark {
+            font-weight: normal;
+            font-style: italic;
+            opacity: 0.7;
+            font-size: 0.85em;
+        }
+
         .search-highlight {
             background: #ffc107;
             color: #000;
@@ -1773,6 +1786,15 @@ License: MIT
             // Get all columns from both datasets
             const allColumns = [...new Set([...sourceData.meta.fields, ...targetData.meta.fields])];
 
+            // Only a column both sides have can tell rows apart. A column that exists on one side only is a
+            // schema difference, reported as such in the main report, and the script's own comparison ignores
+            // it too - counting it here made every row "different" because the other side has nothing to
+            // compare against. Those columns are still shown, marked in the header, just never flagged
+            const sourceFields = new Set(sourceData.meta.fields);
+            const targetFields = new Set(targetData.meta.fields);
+            const comparableColumns = allColumns.filter(col => sourceFields.has(col) && targetFields.has(col));
+            const oneSidedColumns = allColumns.filter(col => !sourceFields.has(col) || !targetFields.has(col));
+
             // Compare rows
             const rows = [];
             const processedKeys = new Set();
@@ -1793,7 +1815,7 @@ License: MIT
                 } else {
                     // In both - compare values
                     const changedColumns = [];
-                    allColumns.forEach(col => {
+                    comparableColumns.forEach(col => {
                         const leftVal = sourceRow[col];
                         const rightVal = targetRow[col];
                         if (!valuesAreEqual(leftVal, rightVal)) {
@@ -1831,6 +1853,7 @@ License: MIT
             // Create comparison result
             comparisonResult = {
                 columns: allColumns,
+                oneSidedColumns: oneSidedColumns,
                 rows: filteredRows
             };
 
@@ -2270,16 +2293,26 @@ License: MIT
                 headerRow.appendChild(checkboxTh);
             }
 
+            const oneSided = new Set(comparisonResult.oneSidedColumns || []);
+
             comparisonResult.columns.forEach(col => {
                 if (!visibleColumns[col]) return;
 
                 if (showSource) {
                     const th = document.createElement('th');
                     th.className = 'source-header sortable';
+                    if (oneSided.has(col)) th.classList.add('one-sided-header');
 
                     // Column name
                     const colName = document.createTextNode(col);
                     th.appendChild(colName);
+                    // Only one side has this column, so its rows are never compared on it
+                    if (oneSided.has(col)) {
+                        const mark = document.createElement('span');
+                        mark.className = 'one-sided-mark';
+                        mark.textContent = ' (one side only)';
+                        th.appendChild(mark);
+                    }
 
                     // Sort indicator
                     const sortIndicator = document.createElement('span');
@@ -2300,10 +2333,18 @@ License: MIT
                 if (showTarget) {
                     const th = document.createElement('th');
                     th.className = 'target-header sortable';
+                    if (oneSided.has(col)) th.classList.add('one-sided-header');
 
                     // Column name
                     const colName = document.createTextNode(col);
                     th.appendChild(colName);
+                    // Only one side has this column, so its rows are never compared on it
+                    if (oneSided.has(col)) {
+                        const mark = document.createElement('span');
+                        mark.className = 'one-sided-mark';
+                        mark.textContent = ' (one side only)';
+                        th.appendChild(mark);
+                    }
 
                     // Sort indicator
                     const sortIndicator = document.createElement('span');

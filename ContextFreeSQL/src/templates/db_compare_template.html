@@ -759,6 +759,16 @@ END; --of cursor
         ];
         const statusFilter = { 'equal': true, 'left-only': true, 'right-only': true, 'different': true };
 
+        // Coming back from a table's page, the browser restores what was typed and ticked but not the state
+        // this script keeps, so the filters looked off while every row was still listed. The controls are the
+        // record: read them back, then filter by what they say
+        function readStatusFilterFromControls() {
+            STATUSES.forEach(s => {
+                const cb = document.querySelector(`input[data-status="${s.key}"]`);
+                if (cb) statusFilter[s.key] = cb.checked;
+            });
+        }
+
         function setStatusFilter(status, checked) {
             statusFilter[status] = checked;
             syncStatusControls();
@@ -791,7 +801,7 @@ END; --of cursor
             const container = document.getElementById(containerId);
             const items = STATUSES.map(s => `
                 <label class="status-dropdown-item">
-                    <input type="checkbox" data-status="${s.key}" checked onchange="setStatusFilter('${s.key}', this.checked)">
+                    <input type="checkbox" data-status="${s.key}" ${statusFilter[s.key] ? 'checked' : ''} onchange="setStatusFilter('${s.key}', this.checked)">
                     <span class="item-label ${s.key}">● ${s.label}</span>
                     <span class="status-count" data-count-status="${s.key}">0</span>
                 </label>`).join('');
@@ -899,9 +909,18 @@ END; --of cursor
         document.getElementById('leftPanelTitle').textContent = panelTitle(CONFIG.leftPanelTitle, 'Database 1');
         document.getElementById('rightPanelTitle').textContent = panelTitle(CONFIG.rightPanelTitle, 'Database 2');
         
+        readStatusFilterFromControls();
         buildStatusDropdown('status1');
         buildStatusDropdown('status2');
         applyTextFilters();
+
+        // Back button: a restored page fires pageshow, whether it was re-parsed or came out of the cache.
+        // Re-read the controls and filter again, so what is listed always matches what they show
+        window.addEventListener('pageshow', () => {
+            readStatusFilterFromControls();
+            syncStatusControls();
+            applyTextFilters();
+        });
         initializeScrollSync();
         initializeResizer();
         initializeColumnResizers();
