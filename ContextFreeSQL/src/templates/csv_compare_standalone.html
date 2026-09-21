@@ -2745,6 +2745,82 @@ License: MIT
             applyTextFilters();
         }
 
+
+        // ============================================
+        // FILTER MATCHING
+        // ============================================
+        // --- filter-matching: extracted and run by tests/test_filter_matching.py, keep the markers ---
+
+        // A partial date typed into a filter: a four digit year, then as much of the rest as has been typed
+        const DATE_FILTER_RE = /^(\d{4})(?:[-\/](\d{1,2})(?:[-\/](\d{1,2})(?:[ T](\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?)?)?$/;
+        // The same written the other way round, with the year last: 5/1/2026
+        const DATE_FILTER_YEAR_LAST_RE = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})(?:[ T](\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?$/;
+
+        function padNumber(value, length) {
+            return String(value).padStart(length, '0');
+        }
+
+        // The text a value has to start with to be in the period the filter names. Each piece is only added
+        // once the one before it is there, so the filter narrows as it is typed: a year, then the month
+        // within it, then the day, the hour, the minute, the second. Out of range pieces give nothing back
+        function buildDatePrefix(year, month, day, hour, minute, second) {
+            if (month === undefined) return year;
+            if (+month < 1 || +month > 12) return null;
+            let prefix = year + '-' + padNumber(month, 2);
+            if (day === undefined) return prefix;
+            if (+day < 1 || +day > 31) return null;
+            prefix += '-' + padNumber(day, 2);
+            if (hour === undefined) return prefix;
+            if (+hour > 23) return null;
+            prefix += ' ' + padNumber(hour, 2);
+            if (minute === undefined) return prefix;
+            if (+minute > 59) return null;
+            prefix += ':' + padNumber(minute, 2);
+            if (second === undefined) return prefix;
+            if (+second > 59) return null;
+            return prefix + ':' + padNumber(second, 2);
+        }
+
+        // What a filter box means, worked out once per keystroke rather than once per cell
+        function makeFilterMatcher(text) {
+            // Trailing separators are half-typed input: 2026- is still just 2026
+            const typed = text.trim().replace(/[-\/: ]+$/, '');
+            const prefixes = [];
+
+            const yearFirst = DATE_FILTER_RE.exec(typed);
+            if (yearFirst) {
+                const prefix = buildDatePrefix(yearFirst[1], yearFirst[2], yearFirst[3],
+                                               yearFirst[4], yearFirst[5], yearFirst[6]);
+                if (prefix) prefixes.push(prefix);
+            } else {
+                const yearLast = DATE_FILTER_YEAR_LAST_RE.exec(typed);
+                if (yearLast) {
+                    // 5/1/2026 is either the 1st of May or the 5th of January, and which one depends on
+                    // where you are. Both are offered rather than guessing and hiding the row that was meant
+                    [[yearLast[1], yearLast[2]], [yearLast[2], yearLast[1]]].forEach(pair => {
+                        const prefix = buildDatePrefix(yearLast[3], pair[0], pair[1],
+                                                       yearLast[4], yearLast[5], yearLast[6]);
+                        if (prefix && prefixes.indexOf(prefix) === -1) prefixes.push(prefix);
+                    });
+                }
+            }
+
+            return { text: text.trim().toLowerCase(), prefixes: prefixes };
+        }
+
+        // Anything the filter used to find, it still finds: a partial date only ever adds rows, so a filter
+        // can't quietly start hiding what it matched before
+        function valueMatchesFilter(value, matcher) {
+            if (value === null || value === undefined) return false;
+            const text = String(value).toLowerCase();
+            if (matcher.text && text.indexOf(matcher.text) !== -1) return true;
+            return matcher.prefixes.some(function (prefix) {
+                return text.startsWith(prefix) || text.startsWith(prefix.replace(' ', 't'));
+            });
+        }
+
+        // --- end filter-matching ---
+
         function filterData() {
             applyTextFilters();
         }
@@ -2773,17 +2849,18 @@ License: MIT
 
             const globalSearchInput = document.getElementById('globalSearch');
             const globalSearch = globalSearchInput ? globalSearchInput.value.toLowerCase() : '';
+            const globalMatcher = globalSearch ? makeFilterMatcher(globalSearch) : null;
             const searchInSource = document.getElementById('searchSource').checked;
             const searchInTarget = document.getElementById('searchTarget').checked;
 
             const sourceFilters = comparisonResult.columns.map((col, index) => {
                 const input = document.getElementById(`filter-source-${index}`);
-                return input ? input.value.toLowerCase() : '';
+                return input && input.value.trim() ? makeFilterMatcher(input.value) : null;
             });
 
             const targetFilters = comparisonResult.columns.map((col, index) => {
                 const input = document.getElementById(`filter-target-${index}`);
-                return input ? input.value.toLowerCase() : '';
+                return input && input.value.trim() ? makeFilterMatcher(input.value) : null;
             });
 
             filteredRows = statusFiltered.filter(item => {
@@ -2794,9 +2871,7 @@ License: MIT
                         for (const col of comparisonResult.columns) {
                             if (!visibleColumns[col]) continue;
 
-                            const value = item.leftValues[col];
-                            if (value !== null && value !== undefined &&
-                                String(value).toLowerCase().includes(globalSearch)) {
+                            if (valueMatchesFilter(item.leftValues[col], globalMatcher)) {
                                 globalMatch = true;
                                 break;
                             }
@@ -2807,9 +2882,7 @@ License: MIT
                         for (const col of comparisonResult.columns) {
                             if (!visibleColumns[col]) continue;
 
-                            const value = item.rightValues[col];
-                            if (value !== null && value !== undefined &&
-                                String(value).toLowerCase().includes(globalSearch)) {
+                            if (valueMatchesFilter(item.rightValues[col], globalMatcher)) {
                                 globalMatch = true;
                                 break;
                             }
@@ -2819,22 +2892,16 @@ License: MIT
                     if (!globalMatch) return false;
                 }
 
-                const sourceMatch = !showSource || sourceFilters.every((filter, index) => {
-                    if (!filter) return true;
+                const sourceMatch = !showSource || sourceFilters.every((matcher, index) => {
+                    if (!matcher) return true;
                     if (item.leftValues === null) return false;
-                    const col = comparisonResult.columns[index];
-                    const value = item.leftValues[col];
-                    return value !== null && value !== undefined &&
-                           String(value).toLowerCase().includes(filter);
+                    return valueMatchesFilter(item.leftValues[comparisonResult.columns[index]], matcher);
                 });
 
-                const targetMatch = !showTarget || targetFilters.every((filter, index) => {
-                    if (!filter) return true;
+                const targetMatch = !showTarget || targetFilters.every((matcher, index) => {
+                    if (!matcher) return true;
                     if (item.rightValues === null) return false;
-                    const col = comparisonResult.columns[index];
-                    const value = item.rightValues[col];
-                    return value !== null && value !== undefined &&
-                           String(value).toLowerCase().includes(filter);
+                    return valueMatchesFilter(item.rightValues[comparisonResult.columns[index]], matcher);
                 });
 
                 return sourceMatch && targetMatch;
