@@ -641,6 +641,37 @@
             font-weight: 600;
             border-right: 1px solid #495057;
             white-space: nowrap;
+            /* Column widths are set in px and the table laid out fixed, so a narrowed header has to clip */
+            position: relative;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Drag the right edge of a header to set that column's width */
+        .col-resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 7px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 11;
+        }
+
+        .col-resizer:hover,
+        .col-resizer.active {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .filter-row .col-resizer:hover,
+        .filter-row .col-resizer.active {
+            background: var(--border-color);
+        }
+
+        body.col-resizing {
+            cursor: col-resize;
+            user-select: none;
         }
 
         .comparison-table th.sortable {
@@ -2279,6 +2310,87 @@ License: MIT
             }
         });
 
+
+        // ============================================
+        // COLUMN RESIZING
+        // ============================================
+
+        // Widths the reader has dragged, kept per column so sorting, filtering or hiding a column doesn't
+        // lose them. The header is rebuilt often, and each rebuild re-applies whatever is in here
+        const columnWidths = {};
+        let columnResize = null;
+
+        function applyColumnWidths() {
+            const table = document.getElementById('comparisonTable');
+            const headerRow = table.tHead && table.tHead.rows[0];
+            if (!headerRow) return;
+            const ths = Array.from(headerRow.cells);
+
+            // Measure what the browser sizes each column to, then pin all of them: only a fixed layout
+            // honours a dragged width exactly, and it needs every column to carry one
+            table.style.tableLayout = 'auto';
+            table.style.width = '100%';
+            ths.forEach(th => { th.style.width = ''; });
+            const measured = ths.map(th => th.offsetWidth);
+
+            const widths = ths.map((th, i) => columnWidths[th.dataset.colKey] || measured[i]);
+            table.style.tableLayout = 'fixed';
+            table.style.width = widths.reduce((sum, w) => sum + w, 0) + 'px';
+            ths.forEach((th, i) => {
+                th.style.width = widths[i] + 'px';
+                addColumnResizer(th);
+            });
+        }
+
+        function addColumnResizer(th) {
+            if (!th.dataset.colKey || th.querySelector('.col-resizer')) return;
+
+            const handle = document.createElement('div');
+            handle.className = 'col-resizer';
+            handle.title = 'Drag to set the column width, double-click to put it back';
+            // The header itself sorts on click, which is not what grabbing its edge means
+            handle.addEventListener('click', e => e.stopPropagation());
+            handle.addEventListener('mousedown', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                const table = document.getElementById('comparisonTable');
+                columnResize = {
+                    th: th,
+                    handle: handle,
+                    table: table,
+                    startX: e.clientX,
+                    startWidth: th.offsetWidth,
+                    startTableWidth: table.offsetWidth
+                };
+                handle.classList.add('active');
+                document.body.classList.add('col-resizing');
+            });
+            handle.addEventListener('dblclick', e => {
+                e.stopPropagation();
+                delete columnWidths[th.dataset.colKey];   // back to the width the page chose
+                applyColumnWidths();
+            });
+
+            th.appendChild(handle);
+        }
+
+        document.addEventListener('mousemove', e => {
+            if (!columnResize) return;
+            const width = Math.max(40, columnResize.startWidth + (e.clientX - columnResize.startX));
+            columnResize.th.style.width = width + 'px';
+            // The table has to grow with the column, or the others are squeezed to make room
+            columnResize.table.style.width =
+                (columnResize.startTableWidth + (width - columnResize.startWidth)) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!columnResize) return;
+            columnWidths[columnResize.th.dataset.colKey] = columnResize.th.offsetWidth;
+            columnResize.handle.classList.remove('active');
+            document.body.classList.remove('col-resizing');
+            columnResize = null;
+        });
+
         function buildHeaders() {
             const thead = document.getElementById('tableHeaders');
             thead.innerHTML = '';
@@ -2290,6 +2402,7 @@ License: MIT
                 const checkboxTh = document.createElement('th');
                 checkboxTh.className = 'checkbox-column';
                 checkboxTh.textContent = '☑';
+                checkboxTh.dataset.colKey = 'checkbox';
                 headerRow.appendChild(checkboxTh);
             }
 
@@ -2301,6 +2414,7 @@ License: MIT
                 if (showSource) {
                     const th = document.createElement('th');
                     th.className = 'source-header sortable';
+                    th.dataset.colKey = 'source|' + col;
                     if (oneSided.has(col)) th.classList.add('one-sided-header');
 
                     // Column name
@@ -2333,6 +2447,7 @@ License: MIT
                 if (showTarget) {
                     const th = document.createElement('th');
                     th.className = 'target-header sortable';
+                    th.dataset.colKey = 'target|' + col;
                     if (oneSided.has(col)) th.classList.add('one-sided-header');
 
                     // Column name
@@ -2366,6 +2481,7 @@ License: MIT
             const statusTh = document.createElement('th');
             statusTh.className = 'status-header';
             statusTh.textContent = 'Status';
+            statusTh.dataset.colKey = 'status';
             headerRow.appendChild(statusTh);
 
             thead.appendChild(headerRow);
@@ -2411,6 +2527,8 @@ License: MIT
             filterRow.appendChild(emptyTh);
 
             thead.appendChild(filterRow);
+
+            applyColumnWidths();
         }
 
         function sortByColumn(columnName, side) {
