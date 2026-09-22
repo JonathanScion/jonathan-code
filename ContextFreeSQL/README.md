@@ -162,10 +162,24 @@ All of these land in `basePath` (from `input_output`) when `htmlReport` is on:
 | `database_report.html` | Every table, view, function, trigger and data set, marked equal / only on the left / only on the right / different. Names link to their own page. Has filters per column and a dark mode toggle |
 | `diff_table_<schema>_<table>.html` | One table: its CREATE TABLE on both sides side by side, and below that, the statements that make each side match the other, as copyable cards |
 | `diff_<schema>_<name>.html` | One view, function, procedure or trigger: its code on both sides. Overloaded functions get a hash of their parameter list appended |
-| `compare_<schema>_<table>.html` | One table's data: rows only on one side, and differing rows highlighted per cell |
+| `compare_<schema>_<table>.html` | One table's data: rows only on one side, and differing rows highlighted per cell. Columns are resizable, a filter box reads a partial date, and rows or a dragged rectangle of cells can be turned into DML (see below) |
 | `<schema>_<table>.csv`, `..._indb.csv` | The source and target rows behind a data comparison page |
 
 The pages are self-contained HTML; open them straight from disk.
+
+### Turning a data comparison into DML
+
+On a `compare_*.html` page, **Select Rows** ticks whole rows and **Generate SQL** writes the INSERT, UPDATE
+and DELETE statements that would make one side match the other, in whichever direction the dropdown says.
+
+Dragging across the grid instead selects a rectangle of cells, and the statements then cover only those rows
+and those columns: an UPDATE writes the columns inside the rectangle and leaves the rest of the row alone.
+A column's two cells, source and target, are the same column. The key columns are always in the WHERE, since
+without them a row can't be addressed. Rows that exist on one side only are inserted or deleted whole - a
+partial INSERT would leave out columns the table requires - and the script says how many of those there were.
+
+The grid scrolls while dragging past its edge. Escape clears the selection, as does sorting or filtering,
+because the rows underneath move.
 
 ## Version and building
 

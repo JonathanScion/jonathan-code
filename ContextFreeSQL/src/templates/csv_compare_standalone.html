@@ -779,6 +779,18 @@
             font-weight: 600;
         }
 
+        /* Cells inside a dragged rectangle */
+        .comparison-table td.cell-selected {
+            outline: 2px solid #6f42c1;
+            outline-offset: -2px;
+            background: rgba(111, 66, 193, 0.18) !important;
+        }
+
+        body.cell-dragging {
+            user-select: none;
+            cursor: crosshair;
+        }
+
         /* A column only one side has: it can't be compared, so say so rather than flag every row */
         .comparison-table th.one-sided-header {
             font-style: italic;
@@ -1257,6 +1269,9 @@
                         </select>
                         <button class="generate-sql-button" id="generateSqlButton" onclick="generateSQL()" disabled>
                             📝 Generate SQL
+                        </button>
+                        <button class="copy-csv-button" id="clearCellSelectionButton" onclick="clearCellSelection()" style="display: none;">
+                            ✕ Clear selection
                         </button>
                     </div>
                 </div>
@@ -1918,6 +1933,13 @@ License: MIT
             // Initialize column visibility
             initializeColumnVisibility();
 
+            // Dragging a rectangle over the rows picks out cells; attached once, not per render
+            const tableBody = document.getElementById('tableBody');
+            if (tableBody && !tableBody.dataset.cellDragBound) {
+                tableBody.addEventListener('mousedown', startCellDrag);
+                tableBody.dataset.cellDragBound = 'yes';
+            }
+
             // Build and render
             buildHeaders();
             filteredRows = [...comparisonResult.rows];
@@ -1961,17 +1983,154 @@ License: MIT
         }
 
         function updateSelectionCount() {
-            const count = selectedRows.size;
-            document.getElementById('selectionCount').textContent = `${count} row${count !== 1 ? 's' : ''} selected`;
+            const cells = cellSelectionContents();
+            const label = document.getElementById('selectionCount');
+            if (cells) {
+                const rows = cells.rowIndexes.length, cols = cells.cols.length;
+                label.textContent = `${rows} row${rows !== 1 ? 's' : ''} × ${cols} column${cols !== 1 ? 's' : ''} selected`;
+            } else {
+                const count = selectedRows.size;
+                label.textContent = `${count} row${count !== 1 ? 's' : ''} selected`;
+            }
             updateCopyButtons();
         }
 
         function updateCopyButtons() {
-            const hasSelection = selectedRows.size > 0;
-            document.getElementById('copyLeftButton').disabled = !hasSelection;
-            document.getElementById('copyRightButton').disabled = !hasSelection;
-            document.getElementById('generateSqlButton').disabled = !hasSelection;
+            const cells = cellSelectionContents();
+            const hasRows = selectedRows.size > 0;
+            // Copying a side as CSV is a whole-row idea, so it stays tied to the tick boxes
+            document.getElementById('copyLeftButton').disabled = !hasRows;
+            document.getElementById('copyRightButton').disabled = !hasRows;
+            document.getElementById('generateSqlButton').disabled = !hasRows && !cells;
+            const clearButton = document.getElementById('clearCellSelectionButton');
+            if (clearButton) clearButton.style.display = cells ? 'inline-flex' : 'none';
         }
+
+
+        // ============================================
+        // CELL SELECTION (drag a rectangle over the grid)
+        // ============================================
+        // Drag from one cell to another to pick out particular rows and particular columns. A column's two
+        // cells, source and target, are the same column, so covering either one selects it.
+
+        // Anchor and focus are {rowIndex, colPos} on the grid as it is currently sorted and filtered, which
+        // is why sorting or filtering clears the selection - the rows underneath would have moved
+        let cellSelection = null;
+        let cellDrag = null;
+        let autoScrollTimer = null;
+
+        function cellSelectionRange() {
+            if (!cellSelection) return null;
+            const a = cellSelection.anchor, b = cellSelection.focus;
+            return {
+                rowFrom: Math.min(a.rowIndex, b.rowIndex), rowTo: Math.max(a.rowIndex, b.rowIndex),
+                colFrom: Math.min(a.colPos, b.colPos), colTo: Math.max(a.colPos, b.colPos)
+            };
+        }
+
+        // The rows and column names the rectangle covers, for the SQL and for the count shown
+        function cellSelectionContents() {
+            const range = cellSelectionRange();
+            if (!range) return null;
+
+            const visibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
+            const cols = visibleCols.slice(range.colFrom, range.colTo + 1);
+            const rowIndexes = [];
+            for (let i = range.rowFrom; i <= range.rowTo; i++) {
+                if (i >= 0 && i < filteredRows.length) rowIndexes.push(i);
+            }
+            return { rowIndexes: rowIndexes, cols: cols };
+        }
+
+        function cellFromEvent(event) {
+            const td = event.target.closest('td[data-col-pos]');
+            if (!td) return null;
+            const tr = td.closest('tr[data-row-index]');
+            if (!tr) return null;
+            return { rowIndex: Number(tr.dataset.rowIndex), colPos: Number(td.dataset.colPos) };
+        }
+
+        function startCellDrag(event) {
+            if (event.button !== 0) return;                        // left button only
+            if (event.target.closest('input, button, a, .col-resizer')) return;
+            const cell = cellFromEvent(event);
+            if (!cell) return;
+
+            event.preventDefault();                                // or the browser selects text instead
+            cellSelection = { anchor: cell, focus: cell };
+            cellDrag = { pointerY: event.clientY, pointerX: event.clientX };
+            document.body.classList.add('cell-dragging');
+            paintCellSelection();
+            startAutoScroll();
+        }
+
+        function extendCellDrag(event) {
+            if (!cellDrag) return;
+            cellDrag.pointerY = event.clientY;
+            cellDrag.pointerX = event.clientX;
+            const cell = cellFromEvent(event);
+            if (cell) {
+                cellSelection.focus = cell;
+                paintCellSelection();
+            }
+        }
+
+        function endCellDrag() {
+            if (!cellDrag) return;
+            cellDrag = null;
+            document.body.classList.remove('cell-dragging');
+            stopAutoScroll();
+            updateSelectionCount();
+        }
+
+        function clearCellSelection() {
+            cellSelection = null;
+            paintCellSelection();
+            updateSelectionCount();
+        }
+
+        // Dragging past the edge of the grid scrolls it, so a selection can run past what is on screen
+        function startAutoScroll() {
+            if (autoScrollTimer) return;
+            const container = document.querySelector('.comparison-table-container');
+            if (!container) return;
+
+            const EDGE = 40, STEP = 14;
+            autoScrollTimer = setInterval(function () {
+                if (!cellDrag) return;
+                const box = container.getBoundingClientRect();
+                if (cellDrag.pointerY < box.top + EDGE) container.scrollTop -= STEP;
+                else if (cellDrag.pointerY > box.bottom - EDGE) container.scrollTop += STEP;
+                if (cellDrag.pointerX < box.left + EDGE) container.scrollLeft -= STEP;
+                else if (cellDrag.pointerX > box.right - EDGE) container.scrollLeft += STEP;
+            }, 30);
+        }
+
+        function stopAutoScroll() {
+            if (autoScrollTimer) {
+                clearInterval(autoScrollTimer);
+                autoScrollTimer = null;
+            }
+        }
+
+        function paintCellSelection() {
+            const range = cellSelectionRange();
+            document.querySelectorAll('#tableBody td[data-col-pos]').forEach(function (td) {
+                const tr = td.closest('tr[data-row-index]');
+                const rowIndex = tr ? Number(tr.dataset.rowIndex) : -1;
+                const colPos = Number(td.dataset.colPos);
+                const inside = range
+                    && rowIndex >= range.rowFrom && rowIndex <= range.rowTo
+                    && colPos >= range.colFrom && colPos <= range.colTo;
+                td.classList.toggle('cell-selected', !!inside);
+            });
+        }
+
+        document.addEventListener('mousemove', extendCellDrag);
+        document.addEventListener('mouseup', endCellDrag);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && cellSelection) clearCellSelection();
+        });
 
         // ============================================
         // SQL GENERATION
@@ -1992,8 +2151,10 @@ License: MIT
         }
 
         function generateSQL() {
-            if (selectedRows.size === 0) {
-                alert('Please select at least one row to generate SQL.');
+            // A dragged rectangle names both the rows and the columns; the tick boxes name rows only
+            const cells = cellSelectionContents();
+            if (!cells && selectedRows.size === 0) {
+                alert('Select rows with the tick boxes, or drag a rectangle over the cells you want.');
                 return;
             }
 
@@ -2011,7 +2172,9 @@ License: MIT
             const sourceToTarget = direction === 'source-to-target';
 
             // Get visible columns only
-            const visibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
+            const allVisibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
+            // What a statement may write: the dragged columns, or every visible one
+            const visibleCols = cells ? cells.cols : allVisibleCols;
 
             if (visibleCols.length === 0) {
                 alert('Please make at least one column visible to generate SQL.');
@@ -2026,7 +2189,16 @@ License: MIT
             }
 
             const sqlStatements = [];
-            const selectedRowsData = filteredRows.filter((row, index) => selectedRows.has(index));
+            const selectedRowsData = cells
+                ? cells.rowIndexes.map(i => filteredRows[i]).filter(Boolean)
+                : filteredRows.filter((row, index) => selectedRows.has(index));
+
+            if (cells) {
+                sqlStatements.push(`-- ${cells.rowIndexes.length} row(s), columns: ${cells.cols.join(', ')}`);
+            }
+            // A row that only one side has can't be written column by column: the rest of an INSERT would
+            // still have to be there, and a DELETE doesn't name columns at all. Those go out whole, said so
+            let wholeRows = 0;
 
             selectedRowsData.forEach(row => {
                 const status = row.status;
@@ -2040,11 +2212,13 @@ License: MIT
 
                     if (status === 'left-only' && row.leftValues !== null) {
                         // INSERT - row needs to be added to target
-                        const cols = visibleCols.filter(col => row.leftValues[col] !== undefined);
+                        if (cells) wholeRows += 1;
+                        const cols = allVisibleCols.filter(col => row.leftValues[col] !== undefined);
                         const values = cols.map(col => escapeSQL(row.leftValues[col]));
                         sql = `INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});`;
                     } else if (status === 'right-only' && row.rightValues !== null) {
                         // DELETE - row needs to be removed from target
+                        if (cells) wholeRows += 1;
                         const whereClauses = keyColumns.map(col => {
                             const val = row.rightValues[col];
                             return val === null || val === undefined
@@ -2078,6 +2252,7 @@ License: MIT
 
                     if (status === 'left-only' && row.leftValues !== null) {
                         // DELETE - row needs to be removed from source
+                        if (cells) wholeRows += 1;
                         const whereClauses = keyColumns.map(col => {
                             const val = row.leftValues[col];
                             return val === null || val === undefined
@@ -2087,7 +2262,8 @@ License: MIT
                         sql = `DELETE FROM ${tableName} WHERE ${whereClauses.join(' AND ')};`;
                     } else if (status === 'right-only' && row.rightValues !== null) {
                         // INSERT - row needs to be added to source
-                        const cols = visibleCols.filter(col => row.rightValues[col] !== undefined);
+                        if (cells) wholeRows += 1;
+                        const cols = allVisibleCols.filter(col => row.rightValues[col] !== undefined);
                         const values = cols.map(col => escapeSQL(row.rightValues[col]));
                         sql = `INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});`;
                     } else if (status === 'different' && row.leftValues !== null && row.rightValues !== null) {
@@ -2114,6 +2290,11 @@ License: MIT
                     sqlStatements.push(sql);
                 }
             });
+
+            if (wholeRows > 0) {
+                sqlStatements.push(`-- ${wholeRows} of the selected row(s) exist on one side only, so they are` +
+                                   ' inserted or deleted whole - the column selection does not apply to them');
+            }
 
             if (sqlStatements.length === 0) {
                 alert('No SQL statements generated. Selected rows may be equal or have no applicable changes.');
@@ -2532,6 +2713,7 @@ License: MIT
         }
 
         function sortByColumn(columnName, side) {
+            if (cellSelection) clearCellSelection();   // the rows underneath are about to move
             // Clear selection when sorting (indices will change)
             if (selectionMode && selectedRows.size > 0) {
                 selectedRows.clear();
@@ -2635,6 +2817,7 @@ License: MIT
 
         function createRow(item, rowIndex) {
             const row = document.createElement('tr');
+            row.dataset.rowIndex = rowIndex;
 
             // Get current search term for highlighting
             const globalSearchInput = document.getElementById('globalSearch');
@@ -2655,12 +2838,17 @@ License: MIT
                 row.appendChild(checkboxTd);
             }
 
+            // Position among the visible columns, so a dragged range of cells maps back to column names
+            let colPos = -1;
             comparisonResult.columns.forEach(col => {
                 if (!visibleColumns[col]) return;
+                colPos += 1;
 
                 if (showSource) {
                     const td = document.createElement('td');
                     td.className = 'source-cell';
+                    td.dataset.col = col;
+                    td.dataset.colPos = colPos;
 
                     if (item.leftValues === null) {
                         td.classList.add('empty-cell');
@@ -2685,6 +2873,8 @@ License: MIT
                 if (showTarget) {
                     const td = document.createElement('td');
                     td.className = 'target-cell';
+                    td.dataset.col = col;
+                    td.dataset.colPos = colPos;
 
                     if (item.rightValues === null) {
                         td.classList.add('empty-cell');
@@ -2826,6 +3016,7 @@ License: MIT
         }
 
         function applyTextFilters() {
+            if (cellSelection) clearCellSelection();   // the rows underneath are about to move
             // Clear selection when filtering (indices will change)
             if (selectionMode && selectedRows.size > 0) {
                 selectedRows.clear();
