@@ -29,6 +29,19 @@ its name isn't a link - there is no page for it, because `generate_code_diffs` o
 that differ. A table in the same position does get one. Showing the target's version of the object would make
 the row worth clicking.
 
+## A column cannot be put back where it was
+
+PostgreSQL appends a column added to an existing table, so a column that the target is missing comes back at
+the end rather than in its old place. Nothing short of rebuilding the table can fix that, and the data and
+the definition are right either way, so `tests/integration/test_complex/test_drift_matrix.py` compares rows
+by column name rather than by position.
+
+## Views built on other views, when a column underneath changes
+
+A view reading a column whose type is about to change is dropped and recreated around the change. A view
+built on *that* view is not: dropping the first one fails while the second depends on it. Following
+pg_depend through more than one level would fix both this and the creation order noted above.
+
 ## Types other than enums
 
 `_load_user_defined_types` reads enums only. A domain or a composite type a column uses is neither created nor

@@ -219,6 +219,36 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     buffer.write(script_db_state_check_constraints.getvalue())
     buffer.write("\n\n")
 
+    # A view reading a column whose type is about to change has to go and come back: PostgreSQL will not
+    # alter such a column underneath it. Marking the view as different puts it through the machinery that
+    # already drops changed code before the column changes and creates it again afterwards
+    if db_type == DBType.PostgreSQL and script_db_state_coded.getvalue():
+        buffer.write("--Views over columns whose type is about to change---------------------------------\n")
+        buffer.write("UPDATE ScriptCode SET codeStat = 3\n")
+        buffer.write("WHERE COALESCE(codeStat, 0) = 0 AND UPPER(ScriptCode.ent_type) = 'VIEW'\n")
+        buffer.write("  AND EXISTS (\n")
+        buffer.write("    SELECT 1 FROM pg_depend d\n")
+        buffer.write("    JOIN pg_rewrite rw ON rw.oid = d.objid\n")
+        buffer.write("    JOIN pg_class v ON v.oid = rw.ev_class\n")
+        buffer.write("    JOIN pg_namespace vn ON vn.oid = v.relnamespace\n")
+        buffer.write("    JOIN pg_class t ON t.oid = d.refobjid\n")
+        buffer.write("    JOIN pg_namespace tn ON tn.oid = t.relnamespace\n")
+        buffer.write("    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = d.refobjsubid\n")
+        buffer.write("    WHERE d.classid = 'pg_rewrite'::regclass AND d.refclassid = 'pg_class'::regclass\n")
+        buffer.write("      AND LOWER(vn.nspname) = LOWER(ScriptCode.ent_schema)\n")
+        buffer.write("      AND LOWER(v.relname) = LOWER(ScriptCode.ent_name)\n")
+        buffer.write("      AND EXISTS (SELECT 1 FROM ScriptCols c WHERE c.colStat = 3\n")
+        buffer.write("                    AND LOWER(c.table_schema) = LOWER(tn.nspname)\n")
+        buffer.write("                    AND LOWER(c.table_name) = LOWER(t.relname)\n")
+        buffer.write("                    AND LOWER(c.col_name) = LOWER(a.attname)\n")
+        # Anything that makes the ALTER restate the type. A nullability-only change doesn't, and needs no
+        # view dropped for it
+        buffer.write("                    AND (COALESCE(c.user_type_name_diff, false)\n")
+        buffer.write("                      OR COALESCE(c.max_length_diff, false)\n")
+        buffer.write("                      OR COALESCE(c.precision_diff, B'0') = B'1'\n")
+        buffer.write("                      OR COALESCE(c.scale_diff, B'0') = B'1'\n")
+        buffer.write("                      OR COALESCE(c.collation_name_diff, B'0') = B'1')));\n\n")
+
     if db_type == DBType.PostgreSQL:
         # Bubble up index/FK/check constraint differences to the table, so the table shows as different (report, diff files)
         buffer.write("\t--Bubble up index, FK and check constraint differences to tables\n")

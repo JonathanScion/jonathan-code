@@ -90,12 +90,31 @@ def generate_add_alter_drop_cols(db_type: DBType, sql_buffer, j2_alter_cols_not_
         sql_buffer.write("\t\t\t\tC.diff_descr,\n")
         sql_buffer.write("\t\t\t\tC.is_identity,\n")
         sql_buffer.write("\t\t\t\tC.is_identity_diff,\n")
+        sql_buffer.write("\t\t\t\tC.is_nullable,\n")
+        sql_buffer.write("\t\t\t\tC.is_nullable_diff,\n")
+        sql_buffer.write("\t\t\t\tC.user_type_name_diff,\n")
+        sql_buffer.write("\t\t\t\tC.max_length_diff,\n")
+        sql_buffer.write("\t\t\t\tC.collation_name_diff,\n")
         sql_buffer.write("\t\t\t\tC.is_identity_db\n")
         sql_buffer.write("\t\t\tFROM  ScriptCols C\n")
         sql_buffer.write("\t\t\tWHERE colStat = 3\n")
         sql_buffer.write("\t\tLOOP\n")
         utils.add_print(db_type, 3, sql_buffer, "'Table ' || temprow.table_schema ||  '.' || temprow.table_name ||': column ' || temprow.col_name || ' needs to be changed: ' || temprow.diff_descr")
-        utils.add_exec_sql(db_type, 3, sql_buffer, "temprow.SQL_ALTER", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
+        # When only the nullability differs, say only that. The prepared ALTER restates the type as well,
+        # which PostgreSQL refuses outright on a column a view reads - 'cannot alter type of a column used
+        # by a view or rule' - for a change that was never about the type
+        # is_nullable_diff and collation_name_diff are bit columns in the state table, the other two boolean
+        sql_buffer.write("\t\t\tIF COALESCE(temprow.is_nullable_diff, B'0') = B'1'\n")
+        sql_buffer.write("\t\t\t\tAND NOT COALESCE(temprow.user_type_name_diff, false)\n")
+        sql_buffer.write("\t\t\t\tAND NOT COALESCE(temprow.max_length_diff, false)\n")
+        sql_buffer.write("\t\t\t\tAND COALESCE(temprow.collation_name_diff, B'0') = B'0' THEN\n")
+        sql_buffer.write("\t\t\t\tsqlCode := 'ALTER TABLE ' || temprow.table_schema || '.' || temprow.table_name\n")
+        sql_buffer.write("\t\t\t\t\t|| ' ALTER COLUMN ' || quote_ident(temprow.col_name)\n")
+        sql_buffer.write("\t\t\t\t\t|| CASE WHEN temprow.is_nullable THEN ' DROP NOT NULL' ELSE ' SET NOT NULL' END;\n")
+        utils.add_exec_sql(db_type, 4, sql_buffer, ent_schema="temprow.table_schema", ent_name="temprow.table_name")
+        sql_buffer.write("\t\t\tELSE\n")
+        utils.add_exec_sql(db_type, 4, sql_buffer, "temprow.SQL_ALTER", ent_schema="temprow.table_schema", ent_name="temprow.table_name")
+        sql_buffer.write("\t\t\tEND IF;\n")
         # Handle identity changes - requires separate ALTER statement in PostgreSQL
         sql_buffer.write("\t\t\t-- Handle identity changes\n")
         sql_buffer.write("\t\t\tIF temprow.is_identity_diff = B'1' THEN\n")

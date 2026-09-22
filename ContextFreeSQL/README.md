@@ -217,6 +217,10 @@ existing database (`Jonathan1` by default); the tests create and drop their own 
 script restores it exactly. 7 tests skip by design: they filter by a list of entities, which leaves coded
 entities alone. `tests/integration/test_schema/test_types_and_code.py` covers those through a schema filter.
 `tests/test_filter_matching.py` runs the comparison page's own JavaScript and needs `node`, skipping without it.
+`tests/integration/test_complex/test_drift_matrix.py` is the one to run before a release: it builds a small
+database, scripts it, applies one kind of drift - a column added, dropped or retyped, an index, key, check,
+table, view, function, trigger or row changed - and checks the script puts it back, one scenario per case so a
+failure names the kind of change. Each scenario uses a database of its own, so it takes about a minute.
 
 ## Limits worth knowing
 
