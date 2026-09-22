@@ -22,6 +22,13 @@ SELECT * FROM needed;
 
 That removes the round-per-row behaviour for the common tree/chain case. Keep the cap for everything else.
 
+## Entities on one side only have no page to open
+
+A view, function or trigger the target holds but the script doesn't is reported as "only on the right", and
+its name isn't a link - there is no page for it, because `generate_code_diffs` only writes one for entities
+that differ. A table in the same position does get one. Showing the target's version of the object would make
+the row worth clicking.
+
 ## A generated column can't have its type changed
 
 `get_col_sql` builds one `SQL_ALTER` per column ahead of time, so a generated column gets

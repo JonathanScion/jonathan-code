@@ -13,7 +13,16 @@ def create_db_state_temp_tables_for_coded(
     tbl_ents: pd.DataFrame,
     script_ops: ScriptingOptions,
     schema_tables: DBSchema,
+    entity_filter: list | None = None,
+    schema_filter: list | None = None,
 ) -> StringIO:
+    """
+    entity_filter and schema_filter are what the user asked to script, and they scope what counts as extra.
+
+    Without them every view, function and trigger the target holds that the script doesn't is extra. With a
+    schema named, only that schema's are - the rest were never in scope, and reporting them as differences
+    put entities the user filtered out in the report, with no page behind them to open.
+    """
 
     # Initialize script builder
     script_builder = StringIO()
@@ -224,8 +233,16 @@ where DB.ent_name Is null
 {align});
 """)
     
-    # Add entities that need to be dropped (only when remove_all_extra_ents is enabled)
-    if script_ops.remove_all_extra_ents:
+    # Add entities that need to be dropped (only when remove_all_extra_ents is enabled).
+    # A named list of entities leaves nothing to find: anything not on it was never in scope, so it isn't
+    # extra, it just wasn't asked for. A named schema narrows the search to that schema instead
+    skip_extras = bool(entity_filter)
+    extras_schema_sql = ""
+    if not skip_extras and schema_filter:
+        schemas_in = ", ".join("'" + str(name).lower().replace("'", "''") + "'" for name in schema_filter)
+        extras_schema_sql = f" AND LOWER(DB.ent_schema) IN ({schemas_in})"
+
+    if script_ops.remove_all_extra_ents and not skip_extras:
         script_builder.write(f"{align}\n--Entities only on DB (need to drop)\n")
         
         if db_type == DBType.MSSQL:
@@ -267,7 +284,7 @@ where DB.ent_name Is null
     ) DB ON LOWER(J.ent_schema) = LOWER(DB.ent_schema) 
     AND LOWER(J.ent_name) = LOWER(DB.ent_name) 
     AND LOWER(J.param_type_list) = LOWER(DB.param_type_list) 
-    WHERE J.ent_name Is NULL; 
+    WHERE J.ent_name Is NULL{extras_schema_sql}; 
     """)
     
     # Add check for entities which are different

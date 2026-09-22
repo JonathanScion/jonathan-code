@@ -25,7 +25,7 @@ from src.generate.generate_final_security import (
 )
 
 #core proc for this whole app
-def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables | None = None, sql_script_params: SQLScriptParams | None = None, source_db_label: str = "") -> str:
+def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame, scrpt_ops: ScriptingOptions, input_output: InputOutput, got_specific_tables: bool, tables_data: ListTables | None = None, sql_script_params: SQLScriptParams | None = None, source_db_label: str = "", entity_filter: list | None = None, schema_filter: list | None = None) -> str:
     db_syntax = DBSyntax.get_syntax(db_type)
     buffer = StringIO()
 
@@ -94,7 +94,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
             db_type = db_type,
             tbl_ents = tbl_ents,
             script_ops = scrpt_ops,
-            schema_tables = schema_tables
+            schema_tables = schema_tables,
+            entity_filter = entity_filter,
+            schema_filter = schema_filter
         )
 
     # Compute overall_table_schema_name_in_scripting for check constraints state table

@@ -392,7 +392,7 @@ def main():
             print(f"WARNING: CSV compare template not found at: {csv_compare_template}")
             print("         Data comparison HTML may fail.")
 
-    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1 or len(config_vals.db_ents_to_load.schemas) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params, source_db_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}")
+    script = generate_all_script(schema, db_type= DBType.PostgreSQL, tbl_ents=tbl_ents, scrpt_ops= config_vals.script_ops, input_output=config_vals.input_output, got_specific_tables = (len(config_vals.db_ents_to_load.tables) >= 1 or len(config_vals.db_ents_to_load.schemas) >= 1), tables_data=config_vals.tables_data, sql_script_params=config_vals.sql_script_params, source_db_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}", entity_filter=config_vals.db_ents_to_load.tables or None, schema_filter=config_vals.db_ents_to_load.schemas or None)
 
     # newline='\n': on Windows, text mode would turn \n into \r\n inside the script's string literals,
     # making script-side code differ from the DB's (code comparison, diff pages)
