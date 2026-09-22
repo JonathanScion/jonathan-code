@@ -172,14 +172,17 @@ The pages are self-contained HTML; open them straight from disk.
 On a `compare_*.html` page, **Select Rows** ticks whole rows and **Generate SQL** writes the INSERT, UPDATE
 and DELETE statements that would make one side match the other, in whichever direction the dropdown says.
 
-Dragging across the grid instead selects a rectangle of cells, and the statements then cover only those rows
-and those columns: an UPDATE writes the columns inside the rectangle and leaves the rest of the row alone.
+Dragging across the grid instead selects a block of cells, and the statements then cover only those rows and
+those columns: an UPDATE writes the columns inside the block and leaves the rest of the row alone. Hold ctrl
+(or cmd) while starting another drag to keep what is selected and add a second block; a plain drag replaces
+the lot. Blocks apply per row, so two that don't line up each write their own columns to their own rows.
+
 A column's two cells, source and target, are the same column. The key columns are always in the WHERE, since
 without them a row can't be addressed. Rows that exist on one side only are inserted or deleted whole - a
 partial INSERT would leave out columns the table requires - and the script says how many of those there were.
 
-The grid scrolls while dragging past its edge. Escape clears the selection, as does sorting or filtering,
-because the rows underneath move.
+The grid scrolls while dragging past its edge, and the buttons appear as soon as anything is selected.
+Escape clears the selection, as does sorting or filtering, because the rows underneath move.
 
 ## Version and building
 

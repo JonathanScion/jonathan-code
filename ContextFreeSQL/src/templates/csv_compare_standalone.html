@@ -1983,11 +1983,13 @@ License: MIT
         }
 
         function updateSelectionCount() {
-            const cells = cellSelectionContents();
+            const summary = cellSelectionSummary();
             const label = document.getElementById('selectionCount');
-            if (cells) {
-                const rows = cells.rowIndexes.length, cols = cells.cols.length;
-                label.textContent = `${rows} row${rows !== 1 ? 's' : ''} × ${cols} column${cols !== 1 ? 's' : ''} selected`;
+            if (summary) {
+                const rows = `${summary.rows} row${summary.rows !== 1 ? 's' : ''}`;
+                label.textContent = summary.blocks > 1
+                    ? `${summary.cells} cells selected in ${rows}, ${summary.blocks} blocks`
+                    : `${rows} × ${summary.cols} column${summary.cols !== 1 ? 's' : ''} selected`;
             } else {
                 const count = selectedRows.size;
                 label.textContent = `${count} row${count !== 1 ? 's' : ''} selected`;
@@ -1996,14 +1998,23 @@ License: MIT
         }
 
         function updateCopyButtons() {
-            const cells = cellSelectionContents();
+            const summary = cellSelectionSummary();
             const hasRows = selectedRows.size > 0;
             // Copying a side as CSV is a whole-row idea, so it stays tied to the tick boxes
             document.getElementById('copyLeftButton').disabled = !hasRows;
             document.getElementById('copyRightButton').disabled = !hasRows;
-            document.getElementById('generateSqlButton').disabled = !hasRows && !cells;
+            document.getElementById('generateSqlButton').disabled = !hasRows && !summary;
+
+            // The bar these buttons live in belongs to Select Rows mode, so a dragged selection has to ask
+            // for it: without this the button is there but never seen
+            const actionsBar = document.getElementById('selectionActions');
+            if (actionsBar) actionsBar.classList.toggle('visible', selectionMode || !!summary);
             const clearButton = document.getElementById('clearCellSelectionButton');
-            if (clearButton) clearButton.style.display = cells ? 'inline-flex' : 'none';
+            if (clearButton) clearButton.style.display = summary ? 'inline-flex' : 'none';
+            // Copying CSV is about ticked rows; hide it when the selection is a dragged block
+            ['copyLeftButton', 'copyRightButton'].forEach(function (id) {
+                document.getElementById(id).style.display = (!selectionMode && summary) ? 'none' : 'inline-flex';
+            });
         }
 
 
@@ -2011,35 +2022,63 @@ License: MIT
         // CELL SELECTION (drag a rectangle over the grid)
         // ============================================
         // Drag from one cell to another to pick out particular rows and particular columns. A column's two
-        // cells, source and target, are the same column, so covering either one selects it.
+        // cells, source and target, are the same column, so covering either one selects it. Holding ctrl
+        // (or cmd) while starting a drag keeps what is already selected and adds another block.
 
-        // Anchor and focus are {rowIndex, colPos} on the grid as it is currently sorted and filtered, which
-        // is why sorting or filtering clears the selection - the rows underneath would have moved
-        let cellSelection = null;
+        // Each block is {anchor, focus} of {rowIndex, colPos} on the grid as it is currently sorted and
+        // filtered - which is why sorting or filtering clears them, the rows underneath would have moved
+        let cellSelections = [];
         let cellDrag = null;
         let autoScrollTimer = null;
 
-        function cellSelectionRange() {
-            if (!cellSelection) return null;
-            const a = cellSelection.anchor, b = cellSelection.focus;
+        function blockRange(block) {
             return {
-                rowFrom: Math.min(a.rowIndex, b.rowIndex), rowTo: Math.max(a.rowIndex, b.rowIndex),
-                colFrom: Math.min(a.colPos, b.colPos), colTo: Math.max(a.colPos, b.colPos)
+                rowFrom: Math.min(block.anchor.rowIndex, block.focus.rowIndex),
+                rowTo: Math.max(block.anchor.rowIndex, block.focus.rowIndex),
+                colFrom: Math.min(block.anchor.colPos, block.focus.colPos),
+                colTo: Math.max(block.anchor.colPos, block.focus.colPos)
             };
         }
 
-        // The rows and column names the rectangle covers, for the SQL and for the count shown
-        function cellSelectionContents() {
-            const range = cellSelectionRange();
-            if (!range) return null;
+        function isCellSelected(rowIndex, colPos) {
+            return cellSelections.some(function (block) {
+                const r = blockRange(block);
+                return rowIndex >= r.rowFrom && rowIndex <= r.rowTo && colPos >= r.colFrom && colPos <= r.colTo;
+            });
+        }
+
+        // The columns selected for each row, kept per row rather than as one row set and one column set:
+        // two blocks that don't line up would otherwise imply cells in neither of them
+        function selectedCellsByRow() {
+            if (cellSelections.length === 0) return null;
 
             const visibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
-            const cols = visibleCols.slice(range.colFrom, range.colTo + 1);
-            const rowIndexes = [];
-            for (let i = range.rowFrom; i <= range.rowTo; i++) {
-                if (i >= 0 && i < filteredRows.length) rowIndexes.push(i);
-            }
-            return { rowIndexes: rowIndexes, cols: cols };
+            const byRow = new Map();
+            cellSelections.forEach(function (block) {
+                const r = blockRange(block);
+                for (let rowIndex = r.rowFrom; rowIndex <= r.rowTo; rowIndex++) {
+                    if (rowIndex < 0 || rowIndex >= filteredRows.length) continue;
+                    if (!byRow.has(rowIndex)) byRow.set(rowIndex, new Set());
+                    const cols = byRow.get(rowIndex);
+                    for (let colPos = r.colFrom; colPos <= r.colTo; colPos++) {
+                        if (visibleCols[colPos] !== undefined) cols.add(visibleCols[colPos]);
+                    }
+                }
+            });
+            return byRow.size > 0 ? byRow : null;
+        }
+
+        function cellSelectionSummary() {
+            const byRow = selectedCellsByRow();
+            if (!byRow) return null;
+
+            let cells = 0;
+            const cols = new Set();
+            byRow.forEach(function (rowCols) {
+                cells += rowCols.size;
+                rowCols.forEach(c => cols.add(c));
+            });
+            return { rows: byRow.size, cols: cols.size, cells: cells, blocks: cellSelections.length };
         }
 
         function cellFromEvent(event) {
@@ -2057,10 +2096,12 @@ License: MIT
             if (!cell) return;
 
             event.preventDefault();                                // or the browser selects text instead
-            cellSelection = { anchor: cell, focus: cell };
+            if (!(event.ctrlKey || event.metaKey)) cellSelections = [];
+            cellSelections.push({ anchor: cell, focus: cell });
             cellDrag = { pointerY: event.clientY, pointerX: event.clientX };
             document.body.classList.add('cell-dragging');
             paintCellSelection();
+            updateSelectionCount();
             startAutoScroll();
         }
 
@@ -2070,8 +2111,9 @@ License: MIT
             cellDrag.pointerX = event.clientX;
             const cell = cellFromEvent(event);
             if (cell) {
-                cellSelection.focus = cell;
+                cellSelections[cellSelections.length - 1].focus = cell;
                 paintCellSelection();
+                updateSelectionCount();
             }
         }
 
@@ -2084,7 +2126,7 @@ License: MIT
         }
 
         function clearCellSelection() {
-            cellSelection = null;
+            cellSelections = [];
             paintCellSelection();
             updateSelectionCount();
         }
@@ -2114,22 +2156,17 @@ License: MIT
         }
 
         function paintCellSelection() {
-            const range = cellSelectionRange();
             document.querySelectorAll('#tableBody td[data-col-pos]').forEach(function (td) {
                 const tr = td.closest('tr[data-row-index]');
                 const rowIndex = tr ? Number(tr.dataset.rowIndex) : -1;
-                const colPos = Number(td.dataset.colPos);
-                const inside = range
-                    && rowIndex >= range.rowFrom && rowIndex <= range.rowTo
-                    && colPos >= range.colFrom && colPos <= range.colTo;
-                td.classList.toggle('cell-selected', !!inside);
+                td.classList.toggle('cell-selected', isCellSelected(rowIndex, Number(td.dataset.colPos)));
             });
         }
 
         document.addEventListener('mousemove', extendCellDrag);
         document.addEventListener('mouseup', endCellDrag);
         document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && cellSelection) clearCellSelection();
+            if (e.key === 'Escape' && cellSelections.length) clearCellSelection();
         });
 
         // ============================================
@@ -2151,8 +2188,8 @@ License: MIT
         }
 
         function generateSQL() {
-            // A dragged rectangle names both the rows and the columns; the tick boxes name rows only
-            const cells = cellSelectionContents();
+            // A dragged block names both the rows and the columns; the tick boxes name rows only
+            const cells = selectedCellsByRow();
             if (!cells && selectedRows.size === 0) {
                 alert('Select rows with the tick boxes, or drag a rectangle over the cells you want.');
                 return;
@@ -2173,8 +2210,12 @@ License: MIT
 
             // Get visible columns only
             const allVisibleCols = comparisonResult.columns.filter(col => visibleColumns[col]);
-            // What a statement may write: the dragged columns, or every visible one
-            const visibleCols = cells ? cells.cols : allVisibleCols;
+            // What a statement may write. With blocks it is per row: two that don't line up each apply to
+            // their own rows, so a row gets the columns that were actually dragged over it
+            const columnsFor = rowIndex => cells
+                ? allVisibleCols.filter(col => cells.get(rowIndex).has(col))
+                : allVisibleCols;
+            const visibleCols = allVisibleCols;
 
             if (visibleCols.length === 0) {
                 alert('Please make at least one column visible to generate SQL.');
@@ -2189,19 +2230,23 @@ License: MIT
             }
 
             const sqlStatements = [];
-            const selectedRowsData = cells
-                ? cells.rowIndexes.map(i => filteredRows[i]).filter(Boolean)
-                : filteredRows.filter((row, index) => selectedRows.has(index));
+            const selectedIndexes = cells
+                ? Array.from(cells.keys()).sort((a, b) => a - b)
+                : filteredRows.map((row, index) => index).filter(index => selectedRows.has(index));
+            const selectedRowsData = selectedIndexes.map(i => filteredRows[i]).filter(Boolean);
 
             if (cells) {
-                sqlStatements.push(`-- ${cells.rowIndexes.length} row(s), columns: ${cells.cols.join(', ')}`);
+                const summary = cellSelectionSummary();
+                sqlStatements.push(`-- ${summary.cells} cell(s) selected across ${summary.rows} row(s)` +
+                                   (summary.blocks > 1 ? ` in ${summary.blocks} blocks` : ''));
             }
             // A row that only one side has can't be written column by column: the rest of an INSERT would
             // still have to be there, and a DELETE doesn't name columns at all. Those go out whole, said so
             let wholeRows = 0;
 
-            selectedRowsData.forEach(row => {
+            selectedRowsData.forEach((row, position) => {
                 const status = row.status;
+                const rowCols = columnsFor(selectedIndexes[position]);
                 let sql = null;
 
                 if (sourceToTarget) {
@@ -2228,7 +2273,7 @@ License: MIT
                         sql = `DELETE FROM ${tableName} WHERE ${whereClauses.join(' AND ')};`;
                     } else if (status === 'different' && row.leftValues !== null && row.rightValues !== null) {
                         // UPDATE - row needs to be updated in target to match source
-                        const setClauses = visibleCols
+                        const setClauses = rowCols
                             .filter(col => !keyColumns.includes(col)) // Don't update key columns
                             .filter(col => row.changedColumns.includes(col) ||
                                           row.leftValues[col] !== row.rightValues[col])
@@ -2268,7 +2313,7 @@ License: MIT
                         sql = `INSERT INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});`;
                     } else if (status === 'different' && row.leftValues !== null && row.rightValues !== null) {
                         // UPDATE - row needs to be updated in source to match target
-                        const setClauses = visibleCols
+                        const setClauses = rowCols
                             .filter(col => !keyColumns.includes(col)) // Don't update key columns
                             .filter(col => row.changedColumns.includes(col) ||
                                           row.leftValues[col] !== row.rightValues[col])
@@ -2713,7 +2758,7 @@ License: MIT
         }
 
         function sortByColumn(columnName, side) {
-            if (cellSelection) clearCellSelection();   // the rows underneath are about to move
+            if (cellSelections.length) clearCellSelection();   // the rows underneath are about to move
             // Clear selection when sorting (indices will change)
             if (selectionMode && selectedRows.size > 0) {
                 selectedRows.clear();
@@ -3016,7 +3061,7 @@ License: MIT
         }
 
         function applyTextFilters() {
-            if (cellSelection) clearCellSelection();   // the rows underneath are about to move
+            if (cellSelections.length) clearCellSelection();   // the rows underneath are about to move
             // Clear selection when filtering (indices will change)
             if (selectionMode && selectedRows.size > 0) {
                 selectedRows.clear();
