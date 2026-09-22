@@ -29,6 +29,19 @@ its name isn't a link - there is no page for it, because `generate_code_diffs` o
 that differ. A table in the same position does get one. Showing the target's version of the object would make
 the row worth clicking.
 
+## Types other than enums
+
+`_load_user_defined_types` reads enums only. A domain or a composite type a column uses is neither created nor
+compared, so scripting such a database into a blank one fails the same way enums used to. Enum values are not
+altered either - a type whose labels differ is reported and left as it is, since changing one means dropping
+every column that uses it.
+
+## Views that depend on other views
+
+Coded entities are created functions first, then views, then triggers, and within each kind by name. A view
+built on another view later in the alphabet fails with 'relation does not exist'. Dependencies between views
+would have to be read from pg_depend and sorted.
+
 ## A generated column can't have its type changed
 
 `get_col_sql` builds one `SQL_ALTER` per column ahead of time, so a generated column gets

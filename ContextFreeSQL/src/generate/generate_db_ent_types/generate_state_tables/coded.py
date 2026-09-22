@@ -332,16 +332,21 @@ Where v.table_schema Not In ('information_schema', 'pg_catalog')
         if coded_schema_name_in:
             script_builder.write(f"And ( (n.nspname || '.' || p.proname) IN ({','.join(coded_schema_name_in)}) ) \n")
         
+        # pg_get_triggerdef gives the whole CREATE TRIGGER, which is what the script's side holds.
+        # information_schema.triggers carries only the action, so comparing against it made every trigger differ
         script_builder.write(f"""{align}UNION
-{align}\tSelect t.trigger_schema || '.' || t.trigger_name AS "EntKey", t.trigger_schema As ent_schema,
-{align}\tt.trigger_name As ent_name,
-{align}\t'TR' as "enttype", t.action_statement As definition, '' as param_type_list 
-{align}\tFrom information_schema.triggers t
+{align}\tSelect n2.nspname || '.' || tg.tgname AS "EntKey", n2.nspname As ent_schema,
+{align}\ttg.tgname As ent_name,
+{align}\t'TR' as "enttype", pg_get_triggerdef(tg.oid) As definition, '' as param_type_list
+{align}\tFrom pg_trigger tg
+{align}\tJoin pg_class c2 on c2.oid = tg.tgrelid
+{align}\tJoin pg_namespace n2 on n2.oid = c2.relnamespace
+{align}\tWhere NOT tg.tgisinternal And n2.nspname Not In ('pg_catalog', 'information_schema')
 """)
-        
+
         if coded_schema_name_in:
-            script_builder.write(f"WHERE ( (t.trigger_schema || '.' || t.trigger_name) IN ({','.join(coded_schema_name_in)}) ) \n")
-        
+            script_builder.write(f"And ( (n2.nspname || '.' || tg.tgname) IN ({','.join(coded_schema_name_in)}) ) \n")
+
         script_builder.write("Group By 1, 2, 3, 4, 5\n")
         script_builder.write(") DB On LOWER(J.ent_schema) = LOWER(DB.ent_schema) And LOWER(J.ent_name )= LOWER(DB.ent_name ) And LOWER(J.param_type_list) = LOWER(DB.param_type_list )\n")
         

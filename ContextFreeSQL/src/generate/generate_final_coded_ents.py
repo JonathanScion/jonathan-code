@@ -6,6 +6,25 @@ from src.utils import funcs as utils
 DROP_ORDER_SQL = ("ORDER BY CASE UPPER(s.ent_type) WHEN 'TRIGGER' THEN 1 WHEN 'VIEW' THEN 2 ELSE 3 END, "
                   "s.ent_schema, s.ent_name")
 
+# Create them the other way round, or a trigger is created before the function it calls and the run fails
+# with 'function ... does not exist'. A view built on another view still depends on the name order below
+ADD_ORDER_SQL = ("ORDER BY CASE UPPER(s.ent_type) WHEN 'TRIGGER' THEN 3 WHEN 'VIEW' THEN 2 ELSE 1 END, "
+                 "s.ent_schema, s.ent_name")
+
+
+def skip_coded_ents(got_specific_tables: bool, got_specific_ents: bool | None) -> bool:
+    """Whether views, functions and triggers are left alone entirely.
+
+    A named list of entities means exactly those, so code objects that aren't on it are out of scope. A named
+    schema is different: it means that schema, its tables and its code alike, and leaving the code out made a
+    filtered run report a view as different and then do nothing about it.
+
+    got_specific_ents is None for callers that don't tell the two apart, who keep the old behaviour.
+    """
+    if got_specific_ents is None:
+        return got_specific_tables
+    return got_specific_ents
+
 
 def write_pg_drop_coded_ent(sql_buffer, indent: int, db_type: DBType) -> None:
     """PostgreSQL: build the DROP for the coded entity in temprow and run it.
@@ -27,7 +46,8 @@ def write_pg_drop_coded_ent(sql_buffer, indent: int, db_type: DBType) -> None:
     sql_buffer.write(f"{align}END IF;\n")
 
 
-def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool, got_specific_tables: bool):
+def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents: bool, got_specific_tables: bool,
+                             got_specific_ents: bool | None = None):
     """
     Generate DROP statements for coded entities (views, functions, procedures, triggers).
 
@@ -110,13 +130,16 @@ def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents:
         sql_buffer.write("\n")
 
     elif db_type == DBType.PostgreSQL:
-        if not got_specific_tables:
+        if not skip_coded_ents(got_specific_tables, got_specific_ents):
             sql_buffer.write("\tdeclare temprow record;\n")
             sql_buffer.write("\tBEGIN\n")
             sql_buffer.write("\t\tFOR temprow IN\n")
             sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.ent_type, S.param_type_list \n")
             sql_buffer.write("\t\t\tFROM ScriptCode s\n")
             sql_buffer.write("\t\t\tWHERE codeStat = 3 \n")
+            # A function or procedure is written back with CREATE OR REPLACE and never needs dropping - and
+            # dropping one that a trigger sits on fails outright with 'other objects depend on it'
+            sql_buffer.write("\t\t\tAND UPPER(s.ent_type) NOT IN ('FUNCTION', 'PROCEDURE') \n")
             sql_buffer.write(f"\t\t\t{DROP_ORDER_SQL}\n")
             sql_buffer.write("\t\tLOOP\n")
             utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_schema || '.' || temprow.ent_name || ' is different. Drop and then add:'")
@@ -129,7 +152,7 @@ def generate_drop_coded_ents(db_type: DBType, sql_buffer, remove_all_extra_ents:
         sql_buffer.write("END; --drop coded entities\n")
 
 
-def generate_add_coded_ents(db_type: DBType, sql_buffer, got_specific_tables: bool):
+def generate_add_coded_ents(db_type: DBType, sql_buffer, got_specific_tables: bool, got_specific_ents: bool | None = None):
     """
     Generate CREATE statements for coded entities (views, functions, procedures, triggers).
 
@@ -172,13 +195,14 @@ def generate_add_coded_ents(db_type: DBType, sql_buffer, got_specific_tables: bo
         sql_buffer.write("DEALLOCATE codedAdd\n")
 
     elif db_type == DBType.PostgreSQL:
-        if not got_specific_tables: #if there's any sort of list of specific tables, not touching coded ents at all
+        if not skip_coded_ents(got_specific_tables, got_specific_ents):
             sql_buffer.write("\tdeclare temprow record;\n")
             sql_buffer.write("\tBEGIN\n")
             sql_buffer.write("\t\tFOR temprow IN\n")
             sql_buffer.write("\t\t\tSELECT  s.ent_schema , s.ent_name, s.sql_create, s.ent_type \n")
             sql_buffer.write("\t\t\tFROM ScriptCode s\n")
             sql_buffer.write("\t\t\tWHERE codeStat IN (1,3) \n")
+            sql_buffer.write(f"\t\t\t{ADD_ORDER_SQL} \n")
             sql_buffer.write("\t\tLOOP\n")
             utils.add_print(db_type, 1, sql_buffer, "'' || temprow.ent_type || ' ' || temprow.ent_schema || '.' || temprow.ent_name || ' will be added'")
             utils.add_exec_sql(db_type, 1, sql_buffer, "temprow.SQL_CREATE")

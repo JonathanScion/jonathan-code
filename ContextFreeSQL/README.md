@@ -87,7 +87,7 @@ each section is for:
 | `database` | Which database to read: `host`, `db_name`, `user`, `password`, `port` |
 | `scripting_options` | What goes into the script: dropping entities that only exist in the target, schemas, security, and the data comparison options |
 | `table_script_ops` | Which parts of a table are scripted: identity, indexes, foreign keys, defaults, check constraints |
-| `db_ents_to_load` | Which entities to script: `tables` (`"schema.name"`) and/or `schemas`. Empty means all; giving both keeps the listed entities that are also in those schemas. Filters every entity type, not just tables |
+| `db_ents_to_load` | Which entities to script: `tables` (`"schema.name"`) and/or `schemas`. Empty means all; giving both keeps the listed entities that are also in those schemas. Filters every entity type, not just tables. A schema is scripted whole, views, functions and triggers included; a list of tables is taken literally, so code objects not on it are left alone |
 | `tables_data` | Whether to script data at all (`script_data`), which tables' data (`tables` and/or `schemas`, as above), how many rows at most (`max_rows_per_table`), and whether to write that data to CSV files instead of INSERT statements (`from_file`, see below) |
 | `input_output` | Where the script, HTML report and diff files are written, and which templates to use |
 | `sql_script_params` | The default values of the flags at the top of the generated script (see below) |
@@ -192,8 +192,9 @@ pytest tests/ --ignore=tests/test_roundtrip_integration.py   # without the round
 The tests need a live PostgreSQL server. Connection settings come from `tests/test_config.json`, which points at an
 existing database (`Jonathan1` by default); the tests create and drop their own schemas inside it.
 `test_roundtrip_integration.py` is the slow one - it builds a database, changes it, and checks that the generated
-script restores it exactly. 7 tests skip by design (coded entities are only processed when scripting a whole
-database, not a filtered list).
+script restores it exactly. 7 tests skip by design: they filter by a list of entities, which leaves coded
+entities alone. `tests/integration/test_schema/test_types_and_code.py` covers those through a schema filter.
+`tests/test_filter_matching.py` runs the comparison page's own JavaScript and needs `node`, skipping without it.
 
 ## Limits worth knowing
 
@@ -201,6 +202,9 @@ database, not a filtered list).
   only as an enum value.
 - **Data needs a key.** A table with no primary key or unique index can't have its data compared or scripted; the
   script says so in its output. Unique indexes that are partial or on an expression can't serve as the key either.
+- **Enum types are created, not altered.** An enum a scripted column uses is created where it is missing; one
+  that exists with different values is reported and left alone, because changing it would mean dropping every
+  column using it. Domain and composite types aren't read at all.
 - **Column defaults are not compared** on PostgreSQL, in either direction.
 - **`xml` columns** are compared only for NULL differences.
 - **Foreign keys are matched by referenced table name without the schema**, so two same-named tables in different

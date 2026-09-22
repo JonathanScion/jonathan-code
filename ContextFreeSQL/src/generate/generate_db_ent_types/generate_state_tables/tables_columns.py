@@ -204,9 +204,12 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\tdiff_descr = Case When j.diff_descr Is NULL Then '' \n")
         script_db_state_tables.write(f"{align}\t\tELSE j.diff_descr || ', ' \n")
         script_db_state_tables.write(f"{align}\tEND || 'user_type_name is ' \n")
-        script_db_state_tables.write(f"{align}\t || CAST(DB.user_type_name AS {db_syntax.nvarchar_type}(10)) || ', should be ' \n")
-        script_db_state_tables.write(f"{align}\t || CAST(J.user_type_name AS {db_syntax.nvarchar_type}(10)) \n")
-        script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.udt_name as user_type_name \n")
+        script_db_state_tables.write(f"{align}\t || CAST(DB.user_type_name AS {db_syntax.nvarchar_type}) || ', should be ' \n")
+        script_db_state_tables.write(f"{align}\t || CAST(J.user_type_name AS {db_syntax.nvarchar_type}) \n")
+        # The script's side names a user defined type with its schema, so this side has to as well, or every
+        # enum column reads as different. The casts above lose their (10) for the same reason: a qualified
+        # name doesn't fit in ten characters and the description would read 'is scope_cre, should be scope_cre'
+        script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, CASE WHEN c.udt_schema = 'pg_catalog' THEN c.udt_name ELSE c.udt_schema || '.' || c.udt_name END as user_type_name \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
         script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")

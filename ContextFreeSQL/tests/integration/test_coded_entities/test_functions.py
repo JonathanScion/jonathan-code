@@ -13,7 +13,7 @@ from tests.conftest import execute_generated_script
 
 
 @pytest.mark.coded_entities
-@pytest.mark.skip(reason="Coded entities (functions/views/procedures) are only processed when scripting entire database, not when specific entities are filtered. This is by design.")
+@pytest.mark.skip(reason="These filter by a list of entities, which by design leaves coded entities alone - a named list means those entities and nothing else. Scripting a whole database or a whole schema does process them: see tests/integration/test_schema/test_types_and_code.py.")
 class TestFunctionOperations:
     """Tests for function and procedure operations."""
 

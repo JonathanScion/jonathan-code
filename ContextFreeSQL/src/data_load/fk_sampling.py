@@ -52,13 +52,17 @@ def _key_values(df: pd.DataFrame, cols: List[str]) -> Set[tuple]:
 
 def _fetch_rows(cur, table: str, cols: List[str], keys: Set[tuple]) -> pd.DataFrame:
     """The rows of table whose cols match one of keys."""
-    key_list = sorted(keys)
-    col_list = ', '.join(f'"{c}"' for c in cols)
+    key_list = sorted(keys, key=lambda k: tuple(str(v) for v in k))
+    # Compared as text on both sides: psycopg2 hands a uuid back as a str, and matching that against the
+    # column itself fails with 'operator does not exist: uuid = text' - which took the whole expansion down
+    # and left the sample referencing parents it doesn't carry
+    col_list = ', '.join(f'"{c}"::text' for c in cols)
     if len(cols) == 1:
-        cur.execute(f'SELECT * FROM {table} WHERE {col_list} = ANY(%s)', ([k[0] for k in key_list],))
+        cur.execute(f'SELECT * FROM {table} WHERE {col_list} = ANY(%s)', ([str(k[0]) for k in key_list],))
     else:  # multi-column key: match the tuples
         placeholders = ', '.join(['%s'] * len(key_list))
-        cur.execute(f'SELECT * FROM {table} WHERE ({col_list}) IN ({placeholders})', key_list)
+        cur.execute(f'SELECT * FROM {table} WHERE ({col_list}) IN ({placeholders})',
+                    [tuple(str(v) for v in k) for k in key_list])
 
     rows = cur.fetchall()
     return pd.DataFrame(rows) if rows else pd.DataFrame()

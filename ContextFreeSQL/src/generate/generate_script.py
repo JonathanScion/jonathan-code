@@ -5,6 +5,7 @@ import pandas as pd
 from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables, SQLScriptParams
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
+from src.generate.generate_db_ent_types.user_types import create_user_types
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
 from src.generate.generate_db_ent_types.generate_state_tables.tables_check_constraints import create_db_state_check_constraints
@@ -155,8 +156,11 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     generate_add_tables(db_type=db_type, sql_buffer=add_tables)
     generate_add_alter_drop_cols(db_type=db_type, sql_buffer=j2_cols_add_alter_drop, j2_alter_cols_not_null=j2_alter_cols_not_null)
     # Split coded entities: DROP before columns, CREATE after columns
-    generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables)
-    generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables)
+    # A list of entities means those entities and nothing else; a list of schemas means those schemas whole,
+    # code included, so the two are told apart here
+    got_specific_ents = bool(entity_filter)
+    generate_drop_coded_ents(db_type=db_type, sql_buffer=drop_coded_ents, remove_all_extra_ents = scrpt_ops.remove_all_extra_ents, got_specific_tables = got_specific_tables, got_specific_ents = got_specific_ents)
+    generate_add_coded_ents(db_type=db_type, sql_buffer=add_coded_ents, got_specific_tables = got_specific_tables, got_specific_ents = got_specific_ents)
     # The ScriptCode state table is only emitted when coded entities are in scope: without it the report and the
     # diff pages must not read it (e.g. db_ents_to_load lists only tables)
     got_coded_state = bool(script_db_state_coded.getvalue())
@@ -195,6 +199,17 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write("\t--Creating Schemas----------------------------------------------------------------\n")
         buffer.write(create_schemas.getvalue())
         buffer.write("\n\n")
+
+    # Types come after the schemas that hold them and before the tables whose columns are of those types.
+    # A filtered run needs the types its own columns use, so it is those columns that decide - not every
+    # column in the database, which would create types for tables this run isn't scripting
+    scripted_cols = schema_tables.columns
+    if got_specific_tables and not tbl_ents.empty and 'entkey' in tbl_ents.columns:
+        scripted_cols = schema_tables.columns[schema_tables.columns['object_id'].isin(set(tbl_ents['entkey']))]
+    create_types = create_user_types(db_type, schema_tables.udts, scripted_cols, got_specific_tables)
+    if create_types.getvalue():
+        buffer.write(create_types.getvalue())
+        buffer.write("\n")
 
     # Write DB state tables: for tables, for coded, for check constraints, for security. all state tables
     buffer.write(script_db_state_tables.getvalue())

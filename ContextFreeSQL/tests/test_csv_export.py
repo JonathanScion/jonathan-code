@@ -24,7 +24,7 @@ def test_booleans_are_written_the_way_copy_writes_them(tmp_path):
     })
     out = tmp_path / 'data.csv'
 
-    _write_data_csv(df, ['id', 'flag', 'name'], {'flag'}, str(out))
+    _write_data_csv(df, ['id', 'flag', 'name'], {'flag'}, {'id'}, set(), str(out))
 
     lines = out.read_text(encoding='utf-8').strip().splitlines()
     assert lines[0] == 'id,flag,name'
@@ -38,8 +38,31 @@ def test_other_columns_are_untouched(tmp_path):
     df = pd.DataFrame({'id': [1], 'flag': [True], 'dropped': ['x']})
     out = tmp_path / 'data.csv'
 
-    _write_data_csv(df, ['id', 'flag'], set(), str(out))
+    _write_data_csv(df, ['id', 'flag'], set(), set(), set(), str(out))
 
     lines = out.read_text(encoding='utf-8').strip().splitlines()
     assert lines[0] == 'id,flag'
     assert lines[1] == '1,True'    # not named as boolean, so left as pandas writes it
+
+
+def test_whole_number_floats_and_json(tmp_path):
+    """
+    An integer column holding a NULL becomes a float in pandas, and json comes back as Python objects.
+
+    Written as they are, COPY refuses both: 'invalid input syntax for type integer: "6.0"', then the same
+    for json, because a dict's repr uses single quotes. The comparison page reads 6.0 as a difference too.
+    """
+    df = pd.DataFrame({
+        'rank': [6.0, None],
+        'payload': [{'a': 1, 'b': "it's"}, None],
+        'amount': [1.5, 2.25],
+    })
+    out = tmp_path / 'data.csv'
+
+    _write_data_csv(df, ['rank', 'payload', 'amount'], set(), {'rank'}, {'payload'}, str(out))
+
+    lines = out.read_text(encoding='utf-8').strip().splitlines()
+    assert lines[1].startswith('6,')                        # not 6.0
+    assert '""a"": 1' in lines[1] and '""b"": ""it' in lines[1]   # json, with CSV's doubled quotes
+    assert lines[1].endswith(',1.5')                        # a real float is left alone
+    assert lines[2] == ',,2.25'                             # nulls stay empty

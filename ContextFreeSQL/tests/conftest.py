@@ -158,6 +158,7 @@ class ScriptGenerator:
     def generate(
         self,
         tables: List[str],
+        schemas: List[str] = None,
         script_data: bool = False,
         script_security: bool = False,
         remove_extras: bool = True,
@@ -174,6 +175,7 @@ class ScriptGenerator:
 
         Args:
             tables: List of table names in 'schema.table' format
+            schemas: Schema names to script whole - tables and code alike, unlike a list of tables
             script_data: Whether to script table data (INSERT statements)
             script_security: Whether to script security (roles, permissions)
             remove_extras: Whether to drop entities not in source
@@ -228,8 +230,8 @@ class ScriptGenerator:
         schema = load_all_schema(self.db_conn, load_security=script_security)
 
         # Load entities
-        if tables:
-            tbl_ents = load_all_db_ents(self.db_conn, entity_filter=tables)
+        if tables or schemas:
+            tbl_ents = load_all_db_ents(self.db_conn, entity_filter=tables or None, schema_filter=schemas or None)
         else:
             tbl_ents = load_all_db_ents(self.db_conn)
 
@@ -241,14 +243,16 @@ class ScriptGenerator:
             load_all_tables_data(self.db_conn, db_all=schema, table_names=tables)
 
         # Generate script
-        db_ents_to_load = ListTables(tables=tables)
+        db_ents_to_load = ListTables(tables=tables, schemas=schemas or [])
         script = generate_all_script(
             schema,
             db_type=DBType.PostgreSQL,
             tbl_ents=tbl_ents,
             scrpt_ops=script_ops,
             input_output=input_output,
-            got_specific_tables=(len(tables) >= 1),
+            got_specific_tables=(len(tables) >= 1 or bool(schemas)),
+            entity_filter=tables or None,
+            schema_filter=schemas or None,
             tables_data=tables_data,
             sql_script_params=sql_script_params
         )

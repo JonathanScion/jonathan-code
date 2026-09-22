@@ -3,6 +3,7 @@ from io import StringIO
 import re
 import os
 import csv
+import json
 from enum import Enum
 from typing import Optional, Dict, List
 import datetime
@@ -223,6 +224,17 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             d_row_col["col_name"] for d_row_col in drows_cols
             if str(d_row_col.get("user_type_name", "")).lower() in ("bool", "boolean")
         }
+        # json and jsonb, which come back as Python objects
+        json_cols = {
+            d_row_col["col_name"] for d_row_col in drows_cols
+            if str(d_row_col.get("user_type_name", "")).lower() in ("json", "jsonb")
+        }
+        # Integer columns, which pandas turns into floats as soon as one row is NULL
+        int_cols = {
+            d_row_col["col_name"] for d_row_col in drows_cols
+            if str(d_row_col.get("user_type_name", "")).lower()
+            in ("int2", "int4", "int8", "smallint", "integer", "bigint", "serial", "bigserial", "smallserial")
+        }
 
         # Load columns for faster iteration #2411
         ar_cols = []
@@ -399,7 +411,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 if tables_data and tables_data.from_file:
                     # Print the COPY command user can execute to load from CSV
                     csv_filename = f"{drow_ent['entschema']}_{drow_ent['entname']}.csv"
-                    col_names = ", ".join(ar_cols)
+                    col_names = ", ".join(utils.pg_quote_ident(c) for c in ar_cols)
                     out_buffer.write(f"\t\t\tINSERT INTO scriptoutput (SQLText)\n")
                     out_buffer.write(f"\t\t\t\tVALUES ('COPY {s_ent_full_name_sql} ({col_names}) FROM ''' || basePath || '/{csv_filename}'' WITH (FORMAT CSV, HEADER);');\n")
                 else:
@@ -510,9 +522,11 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             os.makedirs(csv_output_dir, exist_ok=True)
 
             # Write CSV file with only the columns we need
-            _write_data_csv(tbl_data, ar_cols, bool_cols, csv_file_path)
+            _write_data_csv(tbl_data, ar_cols, bool_cols, int_cols, json_cols, csv_file_path)
 
-            col_names = ", ".join(ar_cols)
+            # Quoted: a column whose name starts with a digit is a syntax error bare, and a mixed case one
+            # folds to lower case and stops matching
+            col_names = ", ".join(utils.pg_quote_ident(c) for c in ar_cols)
             out_buffer.write(f"\t\t-- Loading data from CSV file: {csv_filename}\n")
             out_buffer.write(f"\t\tEXECUTE format('COPY {s_temp_table_name} ({col_names}) FROM %L WITH (FORMAT CSV, HEADER)', basePath || '/{csv_filename}');\n")
         else:
@@ -521,7 +535,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                 csv_output_dir = os.path.dirname(input_output.html_output_path).replace("\\", "/")
                 csv_file_path = f"{csv_output_dir}/{drow_ent['entschema']}_{drow_ent['entname']}.csv"
                 os.makedirs(csv_output_dir, exist_ok=True)
-                _write_data_csv(tbl_data, ar_cols, bool_cols, csv_file_path)
+                _write_data_csv(tbl_data, ar_cols, bool_cols, int_cols, json_cols, csv_file_path)
             # Generate INSERT statements. Rows are batched into multi-row VALUES (one row per line), so the table
             # name and column list aren't repeated per row - on a 1000 row table that is about 40% of the data
             # section. Plain SQL, so it runs in any client. batch_rows=1 gives one statement per row.
@@ -1938,20 +1952,54 @@ def _pg_row_key_cols(schema_tables: DBSchema, drow_ent) -> list:
 
 
 
-def _write_data_csv(tbl_data, cols, bool_cols, csv_file_path):
+def _write_data_csv(tbl_data, cols, bool_cols, int_cols, json_cols, csv_file_path):
     """Write the script's rows for a table, in the same shape the target's own rows are exported in.
 
-    pandas writes a Python bool as True/False; PostgreSQL's COPY writes t/f. The comparison page reads both
-    files as text, so every boolean column differed on every row and whole tables came out as "different".
-    Both sides now write true/false - which COPY also accepts on the way back in.
+    Two things pandas spells differently from PostgreSQL. A Python bool is written True/False where COPY
+    writes t/f, so every boolean column differed on every row of the comparison page. And an integer column
+    holding a NULL becomes a float column, so 6 is written 6.0 - which reads as a difference against the
+    target's 6, and which COPY refuses outright: 'invalid input syntax for type integer: "6.0"'.
     """
     out = tbl_data[cols]
-    if bool_cols:
+    if bool_cols or int_cols or json_cols:
         out = out.copy()
         for col in bool_cols:
             if col in out.columns:
-                out[col] = out[col].map(lambda v: v if utils.is_null_value(v) else ('true' if v else 'false'))
+                out[col] = _object_column(out[col], lambda v: 'true' if v else 'false')
+        for col in int_cols:
+            if col in out.columns:
+                out[col] = _object_column(out[col], _as_whole_number)
+        for col in json_cols:
+            if col in out.columns:
+                # psycopg2 hands json back as Python objects, whose repr uses single quotes and isn't JSON
+                out[col] = _object_column(out[col], _as_json_text)
     out.to_csv(csv_file_path, index=False)
+
+
+def _object_column(series, convert):
+    """Rewrite a column's values, keeping nulls, as an object column.
+
+    Built explicitly rather than with map, which re-infers the dtype: handing [6, nan] back to a float
+    column lands on float64 again, and the 6 is written 6.0 all the same.
+    """
+    values = [None if utils.is_null_value(v) else convert(v) for v in series]
+    return pd.Series(values, index=series.index, dtype=object)
+
+
+def _as_json_text(value):
+    """A dict or list back as JSON. Anything already text is left as it is."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    return value
+
+
+def _as_whole_number(value):
+    """6.0 -> 6, leaving anything that isn't a whole number alone."""
+    try:
+        as_float = float(value)
+    except (TypeError, ValueError):
+        return value
+    return int(as_float) if as_float.is_integer() else value
 
 
 def _skip_generated_cols_sql(schema_tables: DBSchema, drow_ent) -> str:

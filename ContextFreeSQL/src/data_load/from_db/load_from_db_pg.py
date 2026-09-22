@@ -22,6 +22,8 @@ class DBSchema(BaseModel):
     check_constraints: pd.DataFrame = Field(default_factory=pd.DataFrame)
     tables_data: Dict[str, pd.DataFrame] = Field(default_factory=dict)
     coded_ents: pd.DataFrame
+    # Enum types, which tables using them depend on
+    udts: pd.DataFrame = Field(default_factory=pd.DataFrame)
     # Security-related DataFrames
     roles: pd.DataFrame = Field(default_factory=pd.DataFrame)
     role_memberships: pd.DataFrame = Field(default_factory=pd.DataFrame)
@@ -49,6 +51,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
     fk_cols = _process_fk_cols_pg(columns, fks)
     check_constraints = _load_check_constraints(conn_settings)
     coded_ents = _load_coded_ents(conn_settings)
+    udts = _load_user_defined_types(conn_settings)
     #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format.
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
 
@@ -83,6 +86,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         fk_cols = fk_cols,
         check_constraints = check_constraints,
         coded_ents = coded_ents,
+        udts = udts,
         roles = roles,
         role_memberships = role_memberships,
         schema_permissions = schema_permissions,
@@ -153,13 +157,17 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
     try:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME, udt_name AS user_type_name, 
+        sql = """select table_schema || '.' || table_name as object_id,  COLUMN_NAME as col_name, ORDINAL_POSITION as column_id, table_schema, table_name, COLLATION_NAME as col_collation, COLLATION_NAME,
+                            -- An enum or domain has to be named with its schema, or the DDL only works when that
+                            -- schema happens to be on the search_path. Built-ins live in pg_catalog and are left bare
+                            CASE WHEN C.udt_schema = 'pg_catalog' THEN C.udt_name ELSE C.udt_schema || '.' || C.udt_name END AS user_type_name, 
                             CHARACTER_MAXIMUM_LENGTH as max_length ,NULL as col_xtype, NUMERIC_PRECISION as precision, NUMERIC_SCALE as scale, case WHEN IS_NULLABLE = 'YES' then 1 WHEN IS_NULLABLE = 'NO' then 0 END AS is_nullable,
                              null as IsRowGuidCol, null as col_default_name, COLUMN_DEFAULT as col_Default_Text, position(c.data_type in 'unsigned')>0 AS col_unsigned, 
                             NULL AS extra,
                             -- A generated column (GENERATED ALWAYS AS (...) STORED) is PostgreSQL's computed
                             -- column: it can't be written, so it is scripted as part of the table and left out
                             -- of INSERTs and UPDATEs, which is what is_computed already means everywhere else
+                            C.udt_schema,
                             case WHEN C.is_generated = 'ALWAYS' then 1 else 0 END AS is_computed,
                             C.generation_expression AS computed_definition,
                             case WHEN is_identity  = 'YES' then 1 WHEN is_identity  = 'NO' then 0 END AS is_identity, 
@@ -180,6 +188,44 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
             cur.close()
         if conn:
             conn.close()
+
+
+def _load_user_defined_types(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Enum types, with their labels in order.
+
+    A column of an enum type can't be created before the type exists, so these are scripted ahead of the
+    tables. Domains and composite types aren't read yet - see docs/TODO.md.
+    """
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql = """SELECT n.nspname AS type_schema, t.typname AS type_name,
+                        n.nspname || '.' || t.typname AS type_key,
+                        (SELECT string_agg(quote_literal(e.enumlabel), ', ' ORDER BY e.enumsortorder)
+                           FROM pg_enum e WHERE e.enumtypid = t.oid) AS labels_sql,
+                        (SELECT string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder)
+                           FROM pg_enum e WHERE e.enumtypid = t.oid) AS labels
+                 FROM pg_type t
+                 JOIN pg_namespace n ON n.oid = t.typnamespace
+                 WHERE t.typtype = 'e'
+                   AND n.nspname NOT IN ('information_schema', 'pg_catalog')
+                   AND n.nspname NOT LIKE 'pg_%'
+                 ORDER BY n.nspname, t.typname"""
+        cur.execute(sql)
+        return _results_to_df(cur, cur.fetchall())
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
 
 def _load_tables_columns_defaults(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
@@ -620,11 +666,17 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
         Left Join pg_type t on t.oid = p.prorettype 
         where n.nspname Not in ('pg_catalog', 'information_schema')            
         UNION
-        Select trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As code_schema,
-            trigger_name As code_name,
-            'TR' as EntType, 'Trigger' as enttype_pg, action_statement As definition, NULL as param_type_list 
-        From information_schema.triggers
-        Group By 1, 2, 3, 4, 5, 6
+        Select n.nspname || '.' || tg.tgname AS EntKey, n.nspname As code_schema,
+            tg.tgname As code_name,
+            'TR' as EntType, 'Trigger' as enttype_pg,
+            -- The whole CREATE TRIGGER. information_schema.triggers only carries the action, which on its
+            -- own ('EXECUTE FUNCTION f()') is not a statement that can be run
+            pg_get_triggerdef(tg.oid) As definition, NULL as param_type_list
+        From pg_trigger tg
+        Join pg_class c on c.oid = tg.tgrelid
+        Join pg_namespace n on n.oid = c.relnamespace
+        Where NOT tg.tgisinternal
+        And n.nspname Not In ('pg_catalog', 'information_schema')
         """
         #AND ( (n.nspname || '.' || p.proname) IN ({','.join(coded_schema_name_in)}) ) NOTE: reactivate this if you wnat specific loading. right above the last UNION
         # In implementation, this would be queried using an appropriate DB adapter
