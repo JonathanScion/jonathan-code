@@ -182,7 +182,12 @@ without them a row can't be addressed. Rows that exist on one side only are inse
 partial INSERT would leave out columns the table requires - and the script says how many of those there were.
 
 The grid scrolls while dragging past its edge, and the buttons appear as soon as anything is selected.
-Escape clears the selection, as does sorting or filtering, because the rows underneath move.
+Escape clears the selection, as does sorting or filtering, because the rows underneath move, and so does a
+plain click on a cell.
+
+Selecting a value to copy still works as it always did: a block only begins once the pointer reaches another
+cell, so dragging within one selects its text. Double-clicking takes the whole value rather than a word of
+it, which is what an id or a timestamp usually needs. Ctrl-click picks out a single cell as a block.
 
 ## Version and building
 

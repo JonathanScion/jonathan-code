@@ -1937,6 +1937,7 @@ License: MIT
             const tableBody = document.getElementById('tableBody');
             if (tableBody && !tableBody.dataset.cellDragBound) {
                 tableBody.addEventListener('mousedown', startCellDrag);
+                tableBody.addEventListener('dblclick', selectCellText);
                 tableBody.dataset.cellDragBound = 'yes';
             }
 
@@ -2089,39 +2090,75 @@ License: MIT
             return { rowIndex: Number(tr.dataset.rowIndex), colPos: Number(td.dataset.colPos) };
         }
 
+        // Pressing the button only notes where it happened. Nothing is selected until the pointer reaches
+        // another cell, so a press and drag inside one cell still selects its text the way it always did
         function startCellDrag(event) {
             if (event.button !== 0) return;                        // left button only
             if (event.target.closest('input, button, a, .col-resizer')) return;
             const cell = cellFromEvent(event);
             if (!cell) return;
 
-            event.preventDefault();                                // or the browser selects text instead
-            if (!(event.ctrlKey || event.metaKey)) cellSelections = [];
-            cellSelections.push({ anchor: cell, focus: cell });
-            cellDrag = { pointerY: event.clientY, pointerX: event.clientX };
+            cellDrag = {
+                anchor: cell,
+                addToSelection: event.ctrlKey || event.metaKey,
+                started: false,
+                pointerX: event.clientX,
+                pointerY: event.clientY
+            };
+        }
+
+        function beginBlock(focus) {
+            if (!cellDrag.addToSelection) cellSelections = [];
+            cellSelections.push({ anchor: cellDrag.anchor, focus: focus });
+            cellDrag.started = true;
+            // Whatever text the press began to select isn't what was meant
+            const selection = window.getSelection();
+            if (selection) selection.removeAllRanges();
             document.body.classList.add('cell-dragging');
-            paintCellSelection();
-            updateSelectionCount();
             startAutoScroll();
         }
 
         function extendCellDrag(event) {
             if (!cellDrag) return;
-            cellDrag.pointerY = event.clientY;
             cellDrag.pointerX = event.clientX;
+            cellDrag.pointerY = event.clientY;
+
             const cell = cellFromEvent(event);
-            if (cell) {
+            if (!cellDrag.started) {
+                // Only once the pointer reaches a different cell. Anything inside the one it started in is
+                // someone selecting that value to copy, however far they drag within it
+                const otherCell = cell && (cell.rowIndex !== cellDrag.anchor.rowIndex ||
+                                           cell.colPos !== cellDrag.anchor.colPos);
+                if (!otherCell) return;
+                beginBlock(cell);
+            } else if (cell) {
                 cellSelections[cellSelections.length - 1].focus = cell;
-                paintCellSelection();
-                updateSelectionCount();
             }
+
+            paintCellSelection();
+            updateSelectionCount();
         }
 
         function endCellDrag() {
             if (!cellDrag) return;
+            const wasDrag = cellDrag.started;
+            const addToSelection = cellDrag.addToSelection;
+            const anchor = cellDrag.anchor;
             cellDrag = null;
             document.body.classList.remove('cell-dragging');
             stopAutoScroll();
+
+            if (!wasDrag) {
+                // A click, not a drag. With ctrl it picks out the single cell; on its own it puts the
+                // selection away, so the next thing the reader does is select text in peace
+                if (addToSelection) {
+                    cellSelections.push({ anchor: anchor, focus: anchor });
+                    paintCellSelection();
+                } else if (cellSelections.length) {
+                    cellSelections = [];
+                    paintCellSelection();
+                }
+            }
             updateSelectionCount();
         }
 
@@ -2161,6 +2198,19 @@ License: MIT
                 const rowIndex = tr ? Number(tr.dataset.rowIndex) : -1;
                 td.classList.toggle('cell-selected', isCellSelected(rowIndex, Number(td.dataset.colPos)));
             });
+        }
+
+        // Double click selects the cell's whole value, ready to copy - a word at a time is rarely what is
+        // wanted for an id or a timestamp
+        function selectCellText(event) {
+            const td = event.target.closest('td[data-col-pos]');
+            if (!td) return;
+            const range = document.createRange();
+            range.selectNodeContents(td);
+            const selection = window.getSelection();
+            if (!selection) return;
+            selection.removeAllRanges();
+            selection.addRange(range);
         }
 
         document.addEventListener('mousemove', extendCellDrag);
