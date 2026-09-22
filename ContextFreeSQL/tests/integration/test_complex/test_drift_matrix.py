@@ -88,6 +88,7 @@ INSERT INTO {SCHEMA}.ticket (id, customer_id, title, body, rank, amount, opened_
 SCENARIOS = {
     'column is extra':            f'ALTER TABLE {SCHEMA}.customer ADD COLUMN nickname text',
     'column is missing':          f'ALTER TABLE {SCHEMA}.customer DROP COLUMN email',
+    'column with a default is missing': f'ALTER TABLE {SCHEMA}.customer DROP COLUMN active',
     'column type differs':        f'ALTER TABLE {SCHEMA}.customer ALTER COLUMN email TYPE varchar(80)',
     # PostgreSQL will not alter a column a view reads, in either direction, so the drift has to take the
     # view out of the way - and the script has to do the same thing to put the column back
@@ -99,6 +100,9 @@ SCENARIOS = {
     'column became nullable':     f'ALTER TABLE {SCHEMA}.customer ALTER COLUMN name DROP NOT NULL',
     'column became not null':     f'ALTER TABLE {SCHEMA}.ticket ALTER COLUMN opened_at SET NOT NULL',
     'default differs':            f'ALTER TABLE {SCHEMA}.customer ALTER COLUMN active SET DEFAULT false',
+    'default is missing':         f'ALTER TABLE {SCHEMA}.customer ALTER COLUMN active DROP DEFAULT',
+    'default is extra':           f"ALTER TABLE {SCHEMA}.customer ALTER COLUMN name SET DEFAULT 'nobody'",
+    'default on another table':   f"ALTER TABLE {SCHEMA}.tag ALTER COLUMN label SET DEFAULT 'none'",
     'index is missing':           f'DROP INDEX {SCHEMA}.ix_ticket_customer',
     'index is extra':             f'CREATE INDEX ix_extra ON {SCHEMA}.ticket (title)',
     'unique index is missing':    f'DROP INDEX {SCHEMA}.ux_customer_email',
@@ -121,9 +125,7 @@ SCENARIOS = {
 
 # Known gaps, documented in docs/TODO.md and README's limits. They are listed rather than left out, so the
 # matrix says what is not handled instead of quietly not asking
-EXPECTED_GAPS = {
-    'default differs': 'column defaults are not compared on PostgreSQL',
-}
+EXPECTED_GAPS = {}
 
 
 def admin_connection():

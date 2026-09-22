@@ -88,11 +88,6 @@ Dropping `scope_creator.equip_group` made the comparison flag foreign keys on `s
 to be matched by name only, so same-named tables in different schemas collide. It also produced needless drop and
 re-add statements for those keys. Found while testing the table pages; not investigated further.
 
-## Column defaults are not compared on PostgreSQL
-
-`ScriptDefaults` is never generated for PostgreSQL (`generate_drop_add_defaults` produces nothing), so a default
-that differs between source and target is neither reported nor fixed, in either direction.
-
 ## Sampling: give nullable foreign keys an option
 
 With `max_rows_per_table_retain_fk_integrity`, a nullable foreign key pulls its parent in like any other. Blanking

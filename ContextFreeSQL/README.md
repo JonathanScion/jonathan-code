@@ -231,7 +231,7 @@ failure names the kind of change. Each scenario uses a database of its own, so i
 - **Enum types are created, not altered.** An enum a scripted column uses is created where it is missing; one
   that exists with different values is reported and left alone, because changing it would mean dropping every
   column using it. Domain and composite types aren't read at all.
-- **Column defaults are not compared** on PostgreSQL, in either direction.
+- **A `nextval` default is left alone.** Serial and identity columns default to a sequence named after their own table, and each database has its own, so comparing those would report a difference that isn't one. Every other default is compared and set.
 - **`xml` columns** are compared only for NULL differences.
 - **Foreign keys are matched by referenced table name without the schema**, so two same-named tables in different
   schemas can produce spurious differences. Not fixed yet.

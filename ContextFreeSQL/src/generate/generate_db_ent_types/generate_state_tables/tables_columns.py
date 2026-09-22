@@ -69,6 +69,9 @@ def create_db_state_columns(
     script_db_state_tables.write(f"{align}\tcomputed_definition {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tcomputed_definition_diff bit null,\n")
     script_db_state_tables.write(f"{align}\tcomputed_definition_db {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
+    script_db_state_tables.write(f"{align}\tcol_default {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
+    script_db_state_tables.write(f"{align}\tcol_default_diff bit null,\n")
+    script_db_state_tables.write(f"{align}\tcol_default_db {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tcolStat smallint null DEFAULT 0,\n")
     script_db_state_tables.write(f"{align}\tdiff_descr {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
     script_db_state_tables.write(f"{align}\tSQL_CREATE {db_syntax.nvarchar_type} {db_syntax.max_length_str} null,\n")
@@ -102,7 +105,7 @@ def create_db_state_columns(
             alter_col = f"'ALTER TABLE {row['table_schema']}.{row['table_name']} DROP COLUMN {pg_quote_ident(row['col_name'])}'"
             
         
-        script_db_state_tables.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition, SQL_CREATE, SQL_ALTER, SQL_DROP{',SQL_ALTER_PostData_NotNULL' if scripting_data else ''})\n")
+        script_db_state_tables.write(f"{align}INSERT INTO {db_syntax.temp_table_prefix}ScriptCols (table_schema,table_name,col_name,user_type_name,max_length,precision,scale,is_nullable,is_identity,is_computed,collation_name,computed_definition,col_default, SQL_CREATE, SQL_ALTER, SQL_DROP{',SQL_ALTER_PostData_NotNULL' if scripting_data else ''})\n")
         script_db_state_tables.write(f"{align}VALUES ({quote_str_or_null(row['table_schema'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['table_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['col_name'])},")
@@ -115,6 +118,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['is_computed'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['collation_name'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(row['computed_definition'])},")
+        script_db_state_tables.write(f"{align}{quote_str_or_null(row['col_default_text'])},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(get_col_sql(sys_cols_row=row, table_schema = row['table_schema'], table_name = row['table_name'], script_state = DBEntScriptState.Add, db_type = DBType.PostgreSQL, column_identity =False, force_allow_null = scripting_data or False, actual_size = True))},")
         script_db_state_tables.write(f"{align}{quote_str_or_null(get_col_sql(sys_cols_row=row, table_schema = row['table_schema'], table_name = row['table_name'], script_state = DBEntScriptState.Alter, db_type = DBType.PostgreSQL, column_identity =False, force_allow_null = False, actual_size = True))},")
         script_db_state_tables.write(f"{alter_col}")
@@ -323,6 +327,29 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}where J.is_nullable <> DB.is_nullable \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")
     
+    # Column default
+    script_db_state_tables.write(f"{align}\n")
+    script_db_state_tables.write(f"{align}--col_default \n")
+    if db_type == DBType.PostgreSQL:
+        # A serial or identity column defaults to nextval() on a sequence named after its own table, and each
+        # side has its own. Comparing those texts would report a difference that isn't one, and then point the
+        # target's column at the source's sequence, so a nextval default is left alone
+        script_db_state_tables.write(f"update {db_syntax.temp_table_prefix}ScriptCols Set col_default_diff = B'1', colStat = 3, col_default_db=DB.col_default, \n")
+        script_db_state_tables.write(f"{align}\tdiff_descr = Case When j.diff_descr Is NULL Then '' \n")
+        script_db_state_tables.write(f"{align}\t\tELSE j.diff_descr || ', ' \n")
+        script_db_state_tables.write(f"{align}\tEND || 'default is ' || COALESCE(DB.col_default, 'none') \n")
+        script_db_state_tables.write(f"{align}\t || ', should be ' || COALESCE(J.col_default, 'none') \n")
+        script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.column_default as col_default \n")
+        script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
+        script_db_state_tables.write(f"{align}where J.col_default IS DISTINCT FROM DB.col_default \n")
+        script_db_state_tables.write(f"{align}AND COALESCE(J.col_default, '') NOT LIKE 'nextval(%' AND COALESCE(DB.col_default, '') NOT LIKE 'nextval(%' \n")
+        # Only columns both sides have. A column the target alone holds is already marked extra (colStat 2),
+        # and this comparison counts a NULL as a difference, so without this it would overwrite that
+        script_db_state_tables.write(f"{align}AND COALESCE(J.colStat, 0) IN (0, 3) \n")
+        script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")
+
     # Is_identity
     script_db_state_tables.write(f"{align}\n")
     script_db_state_tables.write(f"{align}--is_identity \n")

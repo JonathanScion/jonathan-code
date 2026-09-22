@@ -392,6 +392,15 @@ def get_col_sql(
             if 'auto_increment' in extra_val.lower():
                 sql.append(" AUTO_INCREMENT")
 
+    # A column added to a table that already exists carries its default with it. Inline in a CREATE TABLE the
+    # caller adds it (and turns a nextval default into serial), so this is only for the ADD form. A nextval
+    # default is left out: it names a sequence of the source's, which the target has no reason to have
+    if (db_type == DBType.PostgreSQL and script_state == DBEntScriptState.Add
+            and not utils.is_null_value(sys_cols_row.get('col_default_text'))):
+        default_text = str(sys_cols_row['col_default_text'])
+        if not default_text.lower().startswith('nextval('):
+            sql.append(f" DEFAULT {default_text}")
+
     return "".join(sql)
 
 
