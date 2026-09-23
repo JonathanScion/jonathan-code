@@ -21,7 +21,9 @@ def create_db_state_temp_tables_for_tables(
     scripting_data: Optional[bool] = False,
     script_table_ops: Optional[ScriptTableOptions] = None,
     pre_add_constraints_data_checks: bool = False,
-    got_specific_tables: bool = False
+    got_specific_tables: bool = False,
+    entity_filter: list | None = None,
+    schema_filter: list | None = None
 ) -> StringIO:
     
     script_db_state_tables = StringIO()
@@ -64,7 +66,9 @@ def create_db_state_temp_tables_for_tables(
         tbl_ents_to_script = tables_to_script,
         db_type = db_type,
         schema_tables = schema_tables,
-        got_specific_tables = got_specific_tables
+        got_specific_tables = got_specific_tables,
+        entity_filter = entity_filter,
+        schema_filter = schema_filter
     )
     script_db_state_tables.write(create_state_tables.getvalue())
     
@@ -114,7 +118,9 @@ def create_db_state_tables(
     tbl_ents_to_script: pd.DataFrame,
     num_tabs: int,
     db_type: DBType, #that's the destination db type
-    got_specific_tables: bool = False
+    got_specific_tables: bool = False,
+    entity_filter: list | None = None,
+    schema_filter: list | None = None
 ) -> StringIO:
 
     db_syntax = DBSyntax.get_syntax(db_type)
@@ -236,7 +242,16 @@ def create_db_state_tables(
         )
 
     # Add tables that need to be dropped (only when not scripting specific tables)
-    if not got_specific_tables:
+    # A named list of tables means those tables, so nothing else is in scope and nothing else is extra.
+    # A named schema means that schema whole, the way it does for views, functions and triggers, so a table
+    # the target alone holds in that schema is extra - restricted to the named schemas and no further
+    skip_extra_tables = bool(entity_filter) if entity_filter is not None or schema_filter else got_specific_tables
+    extras_schema_sql = ""
+    if schema_filter and not entity_filter:
+        schemas_in = ", ".join("'" + str(name).lower().replace("'", "''") + "'" for name in schema_filter)
+        extras_schema_sql = f" AND LOWER(DB.table_schema) IN ({schemas_in})"
+
+    if not skip_extra_tables:
         script_builder.write(f"\n{align}--table only on DB (need to drop)")
         if db_type == DBType.MSSQL:
             script_builder.write(
@@ -260,7 +275,7 @@ def create_db_state_tables(
             FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%'
             ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
             AND LOWER(J.table_name) = LOWER(DB.table_name)
-            WHERE J.table_name Is NULL; """
+            WHERE J.table_name Is NULL{extras_schema_sql}; """
             )
 
     script_builder.write("\n")

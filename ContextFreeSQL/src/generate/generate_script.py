@@ -87,7 +87,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
             tbl_ents = tbl_ents,
             script_ops = scrpt_ops,
             schema_tables = schema_tables,
-            got_specific_tables = got_specific_tables
+            got_specific_tables = got_specific_tables,
+            entity_filter = entity_filter,
+            schema_filter = schema_filter
         )
 
     
