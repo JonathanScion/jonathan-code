@@ -294,3 +294,31 @@ def pg_col_diff_expr(left: str, right: str, col_name: str, type_name: str) -> st
     cast = "::jsonb" if str(type_name).lower() == "json" else ""
     col = pg_quote_ident(col_name)
     return f"({left}.{col}{cast}<> {right}.{col}{cast})"
+
+# Type names made of more than one word, which have to become single tokens before casts can be stripped:
+# '::text AND x' must not read as a cast to a type called 'text AND x'
+_PG_MULTI_WORD_TYPES = [
+    'character varying', 'double precision', 'bit varying',
+    'timestamp without time zone', 'timestamp with time zone',
+    'time without time zone', 'time with time zone',
+]
+
+
+def pg_normalized_definition_expr(column: str) -> str:
+    """SQL that reduces a constraint definition to a form two databases can agree on.
+
+    PostgreSQL does not always render an expression the way it was given. Applying a definition it printed
+    can produce a different printing of the same thing: an IN list on a varchar column comes back as
+    ANY ((ARRAY['a'::character varying])::text[]) in one database and
+    ANY (ARRAY[('a'::character varying)::text]) in the other. Compared as text those never match, so the
+    script dropped and re-added the constraint on every run, for ever.
+
+    Casts, spaces and parentheses are removed, which is enough for that and keeps the operators and operands
+    in order. Two constraints whose difference is only how the expression is bracketed therefore read as the
+    same - noted in README's limits.
+    """
+    expr = f"LOWER({column})"
+    for name in _PG_MULTI_WORD_TYPES:
+        expr = f"REPLACE({expr}, '{name}', '{name.replace(' ', '')}')"
+    expr = rf"REGEXP_REPLACE({expr}, '::[a-z_][a-z0-9_]*(\[\])?', '', 'g')"
+    return f"REPLACE(REPLACE(REPLACE({expr}, ' ', ''), '(', ''), ')', '')"

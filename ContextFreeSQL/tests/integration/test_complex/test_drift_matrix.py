@@ -19,6 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
+from src.utils.funcs import pg_normalized_definition_expr
 from tests.conftest import load_test_config
 
 SCHEMA = 'app'
@@ -36,7 +37,9 @@ CREATE TABLE {SCHEMA}.customer (
     email       text,
     joined_on   date,
     "MixedCase" text,
-    active      boolean DEFAULT true
+    active      boolean DEFAULT true,
+    kind        varchar(10),
+    CONSTRAINT ck_customer_kind CHECK (kind IN ('staff', 'guest'))
 );
 
 CREATE TABLE {SCHEMA}.ticket (
@@ -109,6 +112,9 @@ SCENARIOS = {
     'foreign key is missing':     f'ALTER TABLE {SCHEMA}.ticket DROP CONSTRAINT fk_ticket_customer',
     'check is missing':           f'ALTER TABLE {SCHEMA}.ticket DROP CONSTRAINT ck_ticket_amount',
     'check is extra':             f'ALTER TABLE {SCHEMA}.customer ADD CONSTRAINT ck_extra CHECK (id > 0)',
+    'check condition differs':    (f'ALTER TABLE {SCHEMA}.ticket DROP CONSTRAINT ck_ticket_amount;'
+                                   f' ALTER TABLE {SCHEMA}.ticket ADD CONSTRAINT ck_ticket_amount'
+                                   f' CHECK (amount IS NULL OR amount >= -1)'),
     'table is missing':           f'DROP TABLE {SCHEMA}.tag',
     'table is extra':             f'CREATE TABLE {SCHEMA}.leftover (id int PRIMARY KEY, x text)',
     'view is missing':            f'DROP VIEW {SCHEMA}.open_tickets',
@@ -165,8 +171,12 @@ def snapshot(conn):
         cur.execute("SELECT 'index ' || indexdef FROM pg_indexes WHERE schemaname = %s ORDER BY 1", (SCHEMA,))
         lines += [r[0] for r in cur.fetchall()]
 
-        cur.execute("""
-            SELECT 'constraint ' || con.conname || ' ' || pg_get_constraintdef(con.oid)
+        # Normalized, the way the script compares them: PostgreSQL re-printing the same expression its own
+        # way is not a difference, and asserting on the exact text here would demand what the script
+        # deliberately doesn't do
+        cur.execute(f"""
+            SELECT 'constraint ' || con.conname || ' '
+                   || {pg_normalized_definition_expr('pg_get_constraintdef(con.oid)')}
             FROM pg_constraint con JOIN pg_namespace n ON n.oid = con.connamespace
             WHERE n.nspname = %s ORDER BY 1""", (SCHEMA,))
         lines += [r[0] for r in cur.fetchall()]
@@ -210,7 +220,7 @@ def snapshot(conn):
     return lines
 
 
-def generate_script(db_name, work_dir):
+def generate_script(db_name, work_dir, print_exec=False):
     """Run the tool over the whole scratch database and return the script it wrote."""
     import json
     cfg = load_test_config()
@@ -228,7 +238,7 @@ def generate_script(db_name, work_dir):
                         'script_data': True, 'max_rows_per_table_retain_fk_integrity': False},
         'input_output': {'html_template_path': '', 'html_output_path': os.path.join(work_dir, 'r.html'),
                          'diff_template_path': '', 'diff_output_dir': work_dir, 'output_sql': out_sql},
-        'sql_script_params': {'print': False, 'print_exec': False, 'exec_code': True,
+        'sql_script_params': {'print': print_exec, 'print_exec': print_exec, 'exec_code': True,
                               'html_report': False, 'export_csv': False},
     }
     config_path = os.path.join(work_dir, 'config.json')
@@ -284,4 +294,56 @@ def test_one_drift_at_a_time(scenario, tmp_path):
         f'after running the script the database still differs\n'
         f'  missing: {missing[:6]}\n'
         f'  extra:   {extra[:6]}'
+    )
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_a_constraint_the_target_renders_differently_is_left_alone(tmp_path):
+    """
+    PostgreSQL does not always print an expression the way it was given.
+
+    An IN list on a varchar column comes back as ANY ((ARRAY['a'::character varying])::text[]); applying that
+    printing produces ANY (ARRAY[('a'::character varying)::text]) - the same constraint, printed differently.
+    Compared as text the two never match, so the script dropped and re-added the constraint on every run and
+    never converged. Nothing here changes what the constraint means, so the script should say nothing.
+    """
+    db_name = 'cfs_drift_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, SOURCE_SQL)
+            script = generate_script(db_name, str(tmp_path), print_exec=True)
+
+            # The same constraint, in the other printing PostgreSQL uses for it: each element cast to
+            # text rather than the whole array. Both are stored as written, and this is the form a target
+            # ends up with - ContextFreeTest2 had exactly this
+            run_sql(conn, f'ALTER TABLE {SCHEMA}.customer DROP CONSTRAINT ck_customer_kind')
+            run_sql(conn, f"ALTER TABLE {SCHEMA}.customer ADD CONSTRAINT ck_customer_kind"
+                          f" CHECK ((kind)::text = ANY (ARRAY[('staff'::character varying)::text,"
+                          f" ('guest'::character varying)::text]))")
+
+            with conn.cursor() as cur:
+                cur.execute("""SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                                WHERE conname = 'ck_customer_kind'""")
+                stored = cur.fetchone()[0]
+            assert '::text,' in stored, f'the other printing was not kept, so this proves nothing: {stored}'
+
+            # What the script says it will do is the proof. Applying the source's printing stores the
+            # other printing again, so the database looks the same either way and only the report shows
+            # whether the run has settled
+            with conn.cursor() as cur:
+                cur.execute(script)
+                reported = [r[0] for r in cur.fetchall() if r[0]]
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    about_it = [line for line in reported if 'ck_customer_kind' in line]
+    assert not about_it, (
+        'the constraint is reported as different from itself, so no run ever settles: '
+        + ' | '.join(about_it[:4])
     )

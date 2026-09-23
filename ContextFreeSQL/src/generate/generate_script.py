@@ -222,7 +222,8 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # A view reading a column whose type is about to change has to go and come back: PostgreSQL will not
     # alter such a column underneath it. Marking the view as different puts it through the machinery that
     # already drops changed code before the column changes and creates it again afterwards
-    if db_type == DBType.PostgreSQL and script_db_state_coded.getvalue():
+    # Needs both state tables: ScriptCode for the views, ScriptCols for the columns
+    if db_type == DBType.PostgreSQL and script_db_state_coded.getvalue() and script_db_state_tables.getvalue():
         buffer.write("--Views over columns whose type is about to change---------------------------------\n")
         buffer.write("UPDATE ScriptCode SET codeStat = 3\n")
         buffer.write("WHERE COALESCE(codeStat, 0) = 0 AND UPPER(ScriptCode.ent_type) = 'VIEW'\n")

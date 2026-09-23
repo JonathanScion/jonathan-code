@@ -5,7 +5,8 @@ import pandas as pd
 from io import StringIO
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, ScriptTableOptions, DBEntScriptState
 from src.data_load.from_db.load_from_db_pg import DBSchema
-from src.utils.funcs import quote_str_or_null, quote_str_or_null_bool, numeric_or_null, bool_to_sql_bit_boolean_val
+from src.utils.funcs import (quote_str_or_null, quote_str_or_null_bool, numeric_or_null,
+                             bool_to_sql_bit_boolean_val, pg_normalized_definition_expr)
 
 
 def create_db_state_check_constraints(
@@ -190,6 +191,12 @@ def create_db_state_check_constraints(
             script_db_state_tables.write(f"{align}\tAND J.ccStat IS NULL;\n")
 
         elif db_type == DBType.PostgreSQL:
+            # Exact text first, and the normalized forms only if that differs. PostgreSQL does not always print
+            # an expression the way it was given, so applying the definition it printed can produce a different
+            # printing of the same constraint - which as text never matches, and had the script dropping and
+            # re-adding the constraint on every run for ever
+            norm_j = pg_normalized_definition_expr('J.constraint_definition')
+            norm_db = pg_normalized_definition_expr('DB.constraint_definition')
             script_db_state_tables.write(f"""{align}UPDATE ScriptCheckConstraints SET constraint_definition_diff = True, ccStat = 3
 {align}FROM ScriptCheckConstraints J
 {align}INNER JOIN (
@@ -205,6 +212,7 @@ def create_db_state_check_constraints(
 {align}\tAND LOWER(J.table_name) = LOWER(DB.table_name)
 {align}\tAND LOWER(J.constraint_name) = LOWER(DB.constraint_name)
 {align}WHERE J.constraint_definition <> DB.constraint_definition
+{align}\tAND {norm_j} <> {norm_db}
 {align}\tAND J.ccStat IS NULL
 {align}\tAND (ScriptCheckConstraints.table_schema = J.table_schema
 {align}\t\tAND ScriptCheckConstraints.table_name = J.table_name

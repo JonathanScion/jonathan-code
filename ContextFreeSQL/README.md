@@ -232,6 +232,10 @@ failure names the kind of change. Each scenario uses a database of its own, so i
   that exists with different values is reported and left alone, because changing it would mean dropping every
   column using it. Domain and composite types aren't read at all.
 - **A `nextval` default is left alone.** Serial and identity columns default to a sequence named after their own table, and each database has its own, so comparing those would report a difference that isn't one. Every other default is compared and set.
+- **A check constraint is compared without its casts, spaces or brackets.** PostgreSQL does not always print
+  an expression the way it was given, and applying its own printing can produce a different printing of the
+  same constraint - so comparing the text never matched and the script re-applied it on every run. Two checks
+  whose only difference is how the expression is bracketed therefore read as the same.
 - **`xml` columns** are compared only for NULL differences.
 - **Foreign keys are matched by referenced table name without the schema**, so two same-named tables in different
   schemas can produce spurious differences. Not fixed yet.

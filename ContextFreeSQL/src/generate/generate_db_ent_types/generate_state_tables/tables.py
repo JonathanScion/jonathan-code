@@ -27,7 +27,7 @@ def create_db_state_temp_tables_for_tables(
     script_db_state_tables = StringIO()
         
     # Select and sort tables to script
-    #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?    
+    #!RN: i need to get the ROW. (actually.... why am i doing this here at all...dont i create state tables here?
     mask = (tbl_ents['scriptschema'] == True) & (tbl_ents['enttype'] == 'Table')
     rows_tables_script = tbl_ents[mask].sort_values('scriptsortorder') 
     

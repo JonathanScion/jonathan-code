@@ -737,7 +737,10 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
                 Group By 1, 2, 3, 4, 5, 6, 7, 8"""
         cur.execute(entities_sql)
         entities_results = cur.fetchall()
-        tbl_ents = pd.DataFrame(entities_results)
+        # Keep the columns when there is nothing to load - an empty frame built from no rows has none at
+        # all, and every caller masks on entschema, enttype and scriptschema. A new database, or a filter
+        # that matched nothing, used to end in KeyError: 'scriptschema'
+        tbl_ents = _results_to_df(cur, entities_results)
         
         # Apply filters if provided. Both narrow: with a list and schemas, an entity has to satisfy both
         if entity_filter:
