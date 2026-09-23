@@ -33,6 +33,8 @@ class DBSchema(BaseModel):
     function_permissions: pd.DataFrame = Field(default_factory=pd.DataFrame)
     default_privileges: pd.DataFrame = Field(default_factory=pd.DataFrame)
     rls_policies: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    # Whether row level security is switched on per table, which is separate from the policies themselves
+    rls_tables: pd.DataFrame = Field(default_factory=pd.DataFrame)
 
 
     class Config:
@@ -65,6 +67,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         function_permissions = _load_function_permissions(conn_settings)
         default_privileges = _load_default_privileges(conn_settings)
         rls_policies = _load_rls_policies(conn_settings)
+        rls_tables = _load_rls_tables(conn_settings)
     else:
         roles = pd.DataFrame()
         role_memberships = pd.DataFrame()
@@ -74,6 +77,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         function_permissions = pd.DataFrame()
         default_privileges = pd.DataFrame()
         rls_policies = pd.DataFrame()
+        rls_tables = pd.DataFrame()
 
     return DBSchema(
         schemas = schemas,
@@ -94,7 +98,8 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         column_permissions = column_permissions,
         function_permissions = function_permissions,
         default_privileges = default_privileges,
-        rls_policies = rls_policies
+        rls_policies = rls_policies,
+        rls_tables = rls_tables
     )
 
 def _load_schemas(conn_settings: DBConnSettings) -> pd.DataFrame:
@@ -998,20 +1003,23 @@ def _load_schema_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # From the catalog: information_schema.usage_privileges does not carry schema privileges at all
+        # (it covers collations, domains and sequences), so this always came back empty
         sql = """SELECT
-                    grantor,
-                    grantee,
-                    object_schema as schema_name,
-                    privilege_type,
-                    is_grantable
-                FROM information_schema.usage_privileges
-                WHERE object_type = 'SCHEMA'
-                  AND grantee NOT IN ('PUBLIC', 'postgres')
-                  AND grantee NOT LIKE 'pg_%'
-                  AND object_schema NOT IN ('pg_catalog', 'information_schema')
-                  AND object_schema NOT LIKE 'pg_temp%'
-                  AND object_schema NOT LIKE 'pg_toast%'
-                ORDER BY object_schema, grantee, privilege_type"""
+                    o.rolname AS grantor,
+                    g.rolname AS grantee,
+                    n.nspname AS schema_name,
+                    a.privilege_type,
+                    CASE WHEN a.is_grantable THEN 'YES' ELSE 'NO' END AS is_grantable
+                FROM pg_namespace n
+                CROSS JOIN LATERAL aclexplode(n.nspacl) a
+                JOIN pg_roles g ON g.oid = a.grantee
+                JOIN pg_roles o ON o.oid = a.grantor
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND n.nspname NOT LIKE 'pg_%'
+                  AND g.rolname NOT IN ('PUBLIC', 'postgres')
+                  AND g.rolname NOT LIKE 'pg_%'
+                ORDER BY n.nspname, g.rolname, a.privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
         return _results_to_df(cur, results)
@@ -1119,26 +1127,67 @@ def _load_function_permissions(conn_settings: DBConnSettings) -> pd.DataFrame:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # Read from the catalog rather than information_schema.routine_privileges, which identifies a
+        # function only by specific_name ('total_730542'): a name no GRANT statement can use. The argument
+        # types are what a GRANT needs, and they are what tells two overloads apart
         sql = """SELECT
-                    grantor,
-                    grantee,
-                    specific_schema,
-                    specific_name,
-                    routine_schema,
-                    routine_name,
-                    privilege_type,
-                    is_grantable
-                FROM information_schema.routine_privileges
-                WHERE grantee NOT IN ('PUBLIC', 'postgres')
-                  AND grantee NOT LIKE 'pg_%'
-                  AND specific_schema NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY routine_schema, routine_name, grantee, privilege_type"""
+                    o.rolname AS grantor,
+                    g.rolname AS grantee,
+                    n.nspname AS specific_schema,
+                    n.nspname AS routine_schema,
+                    p.proname AS routine_name,
+                    pg_get_function_identity_arguments(p.oid) AS routine_args,
+                    a.privilege_type,
+                    CASE WHEN a.is_grantable THEN 'YES' ELSE 'NO' END AS is_grantable
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                CROSS JOIN LATERAL aclexplode(p.proacl) a
+                JOIN pg_roles g ON g.oid = a.grantee
+                JOIN pg_roles o ON o.oid = a.grantor
+                WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+                  AND g.rolname NOT IN ('PUBLIC', 'postgres')
+                  AND g.rolname NOT LIKE 'pg_%'
+                ORDER BY n.nspname, p.proname, g.rolname, a.privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
         return _results_to_df(cur, results)
 
     except Exception as e:
         print(f"Error loading function permissions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+
+def _load_rls_tables(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """Which tables have row level security switched on, and whether it is forced.
+
+    Separate from the policies: a policy has no effect until the table has RLS enabled, and a table can
+    have it enabled with no policies at all.
+    """
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        sql = """SELECT n.nspname AS table_schema, c.relname AS table_name,
+                        c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE c.relkind = 'r'
+                   AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                   AND n.nspname NOT LIKE 'pg_%'
+                 ORDER BY n.nspname, c.relname"""
+        cur.execute(sql)
+        return _results_to_df(cur, cur.fetchall())
+
+    except Exception as e:
+        print(f"Error: {e}")
         return pd.DataFrame()
 
     finally:
@@ -1156,18 +1205,25 @@ def _load_default_privileges(conn_settings: DBConnSettings) -> pd.DataFrame:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
+        # One row per privilege granted, rather than a raw acl string that nothing could generate from.
+        # The defining role is not filtered on: excluding 'postgres' threw away every default privilege set
+        # up by a superuser, which in practice is most of them
         sql = """SELECT
-                    pg_get_userbyid(d.defaclrole) as role_name,
-                    CASE WHEN d.defaclnamespace = 0 THEN NULL
-                         ELSE n.nspname
-                    END as schema_name,
-                    d.defaclobjtype as object_type,
-                    pg_catalog.array_to_string(d.defaclacl, ',') as acl_string
+                    d_role.rolname AS role_name,
+                    n.nspname AS schema_name,
+                    d.defaclobjtype AS object_type,
+                    g.rolname AS grantee,
+                    a.privilege_type,
+                    CASE WHEN a.is_grantable THEN 'YES' ELSE 'NO' END AS is_grantable
                 FROM pg_default_acl d
-                LEFT JOIN pg_namespace n ON d.defaclnamespace = n.oid
-                WHERE pg_get_userbyid(d.defaclrole) NOT LIKE 'pg_%'
-                  AND pg_get_userbyid(d.defaclrole) NOT IN ('postgres')
-                ORDER BY role_name, schema_name, object_type"""
+                JOIN pg_roles d_role ON d_role.oid = d.defaclrole
+                LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+                CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+                JOIN pg_roles g ON g.oid = a.grantee
+                WHERE d_role.rolname NOT LIKE 'pg_%'
+                  AND g.rolname NOT LIKE 'pg_%'
+                  AND g.rolname <> 'postgres'
+                ORDER BY d_role.rolname, n.nspname, d.defaclobjtype, g.rolname, a.privilege_type"""
         cur.execute(sql)
         results = cur.fetchall()
         return _results_to_df(cur, results)

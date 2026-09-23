@@ -322,3 +322,19 @@ def pg_normalized_definition_expr(column: str) -> str:
         expr = f"REPLACE({expr}, '{name}', '{name.replace(' ', '')}')"
     expr = rf"REGEXP_REPLACE({expr}, '::[a-z_][a-z0-9_]*(\[\])?', '', 'g')"
     return f"REPLACE(REPLACE(REPLACE({expr}, ' ', ''), '(', ''), ')', '')"
+
+
+def pg_text_array_literal(value: Any) -> str:
+    """A list of names as a quoted PostgreSQL array literal, for a column that is later cast to text[].
+
+    psycopg2 hands a name[] back as a Python list, and str() on that gives ['a', 'b'] - which is neither an
+    array literal nor valid inside a SQL string, so the INSERT carrying it did not parse at all.
+    """
+    if is_null_value(value):
+        return "NULL"
+    if isinstance(value, str):
+        text = value if value.startswith('{') else '{' + value + '}'
+    else:
+        quoted = ['"' + str(item).replace('\\', '\\\\').replace('"', '\\"') + '"' for item in value]
+        text = '{' + ','.join(quoted) + '}'
+    return "'" + text.replace("'", "''") + "'"

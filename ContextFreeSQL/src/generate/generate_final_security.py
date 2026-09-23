@@ -94,7 +94,7 @@ def generate_security_state_tables(db_type: DBType, sql_buffer: StringIO, db_sch
     sql_buffer.write("\t\tgrantee varchar(128) NOT NULL,\n")
     sql_buffer.write("\t\troutine_schema varchar(128) NOT NULL,\n")
     sql_buffer.write("\t\troutine_name varchar(128) NOT NULL,\n")
-    sql_buffer.write("\t\tspecific_name varchar(256),\n")
+    sql_buffer.write("\t\troutine_args text,\n")   # the argument types, which is what a GRANT names
     sql_buffer.write("\t\tprivilege_type varchar(64) NOT NULL,\n")
     sql_buffer.write("\t\tis_grantable varchar(3),\n")
     sql_buffer.write("\t\tpermStat smallint DEFAULT 0\n")
@@ -112,6 +112,38 @@ def generate_security_state_tables(db_type: DBType, sql_buffer: StringIO, db_sch
     sql_buffer.write("\t\tusing_expression text,\n")
     sql_buffer.write("\t\twith_check_expression text,\n")
     sql_buffer.write("\t\tpolicyStat smallint DEFAULT 0\n")
+    sql_buffer.write("\t);\n\n")
+
+    # Whether row level security is switched on, which is not the same thing as having a policy: a policy
+    # does nothing at all until the table has it enabled
+    _write_drop_if_exists(sql_buffer, "ScriptRLSTables")
+    sql_buffer.write("\tCREATE TEMP TABLE ScriptRLSTables (\n")
+    sql_buffer.write("\t\ttable_schema varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\ttable_name varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\trls_enabled boolean,\n")
+    sql_buffer.write("\t\trls_forced boolean\n")
+    sql_buffer.write("\t);\n\n")
+
+    # Schema level grants (USAGE, CREATE)
+    _write_drop_if_exists(sql_buffer, "ScriptSchemaPermissions")
+    sql_buffer.write("\tCREATE TEMP TABLE ScriptSchemaPermissions (\n")
+    sql_buffer.write("\t\tgrantee varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\tschema_name varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\tprivilege_type varchar(64) NOT NULL,\n")
+    sql_buffer.write("\t\tis_grantable varchar(3),\n")
+    sql_buffer.write("\t\tpermStat smallint DEFAULT 0\n")
+    sql_buffer.write("\t);\n\n")
+
+    # What future objects are granted, per owning role, schema and kind of object
+    _write_drop_if_exists(sql_buffer, "ScriptDefaultPrivileges")
+    sql_buffer.write("\tCREATE TEMP TABLE ScriptDefaultPrivileges (\n")
+    sql_buffer.write("\t\trole_name varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\tschema_name varchar(128),\n")
+    sql_buffer.write("\t\tobject_type varchar(4) NOT NULL,\n")
+    sql_buffer.write("\t\tgrantee varchar(128) NOT NULL,\n")
+    sql_buffer.write("\t\tprivilege_type varchar(64) NOT NULL,\n")
+    sql_buffer.write("\t\tis_grantable varchar(3),\n")
+    sql_buffer.write("\t\tprivStat smallint DEFAULT 0\n")
     sql_buffer.write("\t);\n\n")
 
 
@@ -207,12 +239,12 @@ def generate_security_inserts(db_type: DBType, sql_buffer: StringIO, db_schema, 
             grantee = utils.quote_str_or_null(row.get('grantee'))
             routine_schema = utils.quote_str_or_null(row.get('routine_schema'))
             routine_name = utils.quote_str_or_null(row.get('routine_name'))
-            specific_name = utils.quote_str_or_null(row.get('specific_name'))
+            routine_args = utils.quote_str_or_null(row.get('routine_args'))
             privilege_type = utils.quote_str_or_null(row.get('privilege_type'))
             is_grantable = utils.quote_str_or_null(row.get('is_grantable'))
 
-            sql_buffer.write(f"INSERT INTO ScriptFunctionPermissions (grantor, grantee, routine_schema, routine_name, specific_name, privilege_type, is_grantable) ")
-            sql_buffer.write(f"VALUES ({grantor}, {grantee}, {routine_schema}, {routine_name}, {specific_name}, {privilege_type}, {is_grantable});\n")
+            sql_buffer.write(f"INSERT INTO ScriptFunctionPermissions (grantor, grantee, routine_schema, routine_name, routine_args, privilege_type, is_grantable) ")
+            sql_buffer.write(f"VALUES ({grantor}, {grantee}, {routine_schema}, {routine_name}, {routine_args}, {privilege_type}, {is_grantable});\n")
         sql_buffer.write("\n")
 
     # Insert RLS policies (filtered by scripted tables if specified)
@@ -228,13 +260,56 @@ def generate_security_inserts(db_type: DBType, sql_buffer: StringIO, db_schema, 
             table_name = utils.quote_str_or_null(row.get('table_name'))
             policy_name = utils.quote_str_or_null(row.get('policy_name'))
             permissive = utils.quote_str_or_null(row.get('permissive'))
-            roles = utils.quote_str_or_null(row.get('roles'))
+            # A list, not a string: it is cast to text[] when the policy is created
+            roles = utils.pg_text_array_literal(row.get('roles'))
             command = utils.quote_str_or_null(row.get('command'))
             using_expr = utils.quote_str_or_null(row.get('using_expression'))
             with_check_expr = utils.quote_str_or_null(row.get('with_check_expression'))
 
             sql_buffer.write(f"INSERT INTO ScriptRLSPolicies (table_schema, table_name, policy_name, permissive, roles, command, using_expression, with_check_expression) ")
             sql_buffer.write(f"VALUES ({table_schema}, {table_name}, {policy_name}, {permissive}, {roles}, {command}, {using_expr}, {with_check_expr});\n")
+        sql_buffer.write("\n")
+
+    # Whether RLS is on, for the tables being scripted
+    rls_tabs = getattr(db_schema, 'rls_tables', None)
+    if rls_tabs is not None and not rls_tabs.empty:
+        sql_buffer.write("-- Row level security, per table\n")
+        if scripted_tables is not None:
+            rls_tabs = rls_tabs[
+                rls_tabs.apply(lambda r: f"{r['table_schema']}.{r['table_name']}" in scripted_tables, axis=1)
+            ]
+        for _, row in rls_tabs.iterrows():
+            sql_buffer.write("INSERT INTO ScriptRLSTables (table_schema, table_name, rls_enabled, rls_forced) ")
+            sql_buffer.write(f"VALUES ({utils.quote_str_or_null(row.get('table_schema'))}, "
+                             f"{utils.quote_str_or_null(row.get('table_name'))}, "
+                             f"{utils.quote_str_or_null_bool(row.get('rls_enabled'))}, "
+                             f"{utils.quote_str_or_null_bool(row.get('rls_forced'))});\n")
+        sql_buffer.write("\n")
+
+    # Schema level grants
+    schema_perms = getattr(db_schema, 'schema_permissions', None)
+    if schema_perms is not None and not schema_perms.empty:
+        sql_buffer.write("-- Schema Permissions\n")
+        for _, row in schema_perms.iterrows():
+            sql_buffer.write("INSERT INTO ScriptSchemaPermissions (grantee, schema_name, privilege_type, is_grantable) ")
+            sql_buffer.write(f"VALUES ({utils.quote_str_or_null(row.get('grantee'))}, "
+                             f"{utils.quote_str_or_null(row.get('schema_name'))}, "
+                             f"{utils.quote_str_or_null(row.get('privilege_type'))}, "
+                             f"{utils.quote_str_or_null(row.get('is_grantable'))});\n")
+        sql_buffer.write("\n")
+
+    # Default privileges - what a role's future objects are granted
+    default_privs = getattr(db_schema, 'default_privileges', None)
+    if default_privs is not None and not default_privs.empty and 'grantee' in default_privs.columns:
+        sql_buffer.write("-- Default Privileges\n")
+        for _, row in default_privs.iterrows():
+            sql_buffer.write("INSERT INTO ScriptDefaultPrivileges (role_name, schema_name, object_type, grantee, privilege_type, is_grantable) ")
+            sql_buffer.write(f"VALUES ({utils.quote_str_or_null(row.get('role_name'))}, "
+                             f"{utils.quote_str_or_null(row.get('schema_name'))}, "
+                             f"{utils.quote_str_or_null(row.get('object_type'))}, "
+                             f"{utils.quote_str_or_null(row.get('grantee'))}, "
+                             f"{utils.quote_str_or_null(row.get('privilege_type'))}, "
+                             f"{utils.quote_str_or_null(row.get('is_grantable'))});\n")
         sql_buffer.write("\n")
 
 
@@ -432,6 +507,78 @@ def generate_grant_table_permissions(db_type: DBType, sql_buffer: StringIO):
     sql_buffer.write("\t\tEND LOOP;\n")
     sql_buffer.write("\tEND;\n")
 
+    # Schema grants: the schemas exist by now, and a table grant is no use without USAGE on its schema
+    sql_buffer.write("\n\t--Granting Schema Permissions--------------------------------------------\n")
+    sql_buffer.write("\tdeclare temprow record; v_sql text;\n")
+    sql_buffer.write("\tBEGIN\n")
+    sql_buffer.write("\t\tFOR temprow IN\n")
+    sql_buffer.write("\t\t\tSELECT sp.* FROM ScriptSchemaPermissions sp\n")
+    sql_buffer.write("\t\t\tWHERE NOT EXISTS (\n")
+    sql_buffer.write("\t\t\t\tSELECT 1 FROM pg_namespace n\n")
+    sql_buffer.write("\t\t\t\tCROSS JOIN LATERAL aclexplode(n.nspacl) a\n")
+    sql_buffer.write("\t\t\t\tJOIN pg_roles g ON g.oid = a.grantee\n")
+    sql_buffer.write("\t\t\t\tWHERE n.nspname = sp.schema_name AND g.rolname = sp.grantee\n")
+    sql_buffer.write("\t\t\t\t\tAND a.privilege_type = sp.privilege_type)\n")
+    sql_buffer.write("\t\tLOOP\n")
+    utils.add_print(db_type, 3, sql_buffer, "'Granting ' || temprow.privilege_type || ' ON SCHEMA ' || temprow.schema_name || ' TO ' || temprow.grantee")
+    sql_buffer.write("\t\t\tv_sql := 'GRANT ' || temprow.privilege_type || ' ON SCHEMA ' || quote_ident(temprow.schema_name) ||\n")
+    sql_buffer.write("\t\t\t\t' TO ' || quote_ident(temprow.grantee) ||\n")
+    sql_buffer.write("\t\t\t\tCASE WHEN temprow.is_grantable = 'YES' THEN ' WITH GRANT OPTION' ELSE '' END;\n")
+    utils.add_exec_sql(db_type, 3, sql_buffer, "v_sql")
+    sql_buffer.write("\t\tEND LOOP;\n")
+    sql_buffer.write("\tEND;\n")
+
+    # Default privileges: what a role's future objects are granted
+    sql_buffer.write("\n\t--Default Privileges-----------------------------------------------------\n")
+    sql_buffer.write("\tdeclare temprow record; v_sql text;\n")
+    sql_buffer.write("\tBEGIN\n")
+    sql_buffer.write("\t\tFOR temprow IN\n")
+    sql_buffer.write("\t\t\tSELECT dp.* FROM ScriptDefaultPrivileges dp\n")
+    sql_buffer.write("\t\t\tWHERE NOT EXISTS (\n")
+    sql_buffer.write("\t\t\t\tSELECT 1 FROM pg_default_acl d\n")
+    sql_buffer.write("\t\t\t\tJOIN pg_roles dr ON dr.oid = d.defaclrole\n")
+    sql_buffer.write("\t\t\t\tLEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace\n")
+    sql_buffer.write("\t\t\t\tCROSS JOIN LATERAL aclexplode(d.defaclacl) a\n")
+    sql_buffer.write("\t\t\t\tJOIN pg_roles g ON g.oid = a.grantee\n")
+    sql_buffer.write("\t\t\t\tWHERE dr.rolname = dp.role_name AND g.rolname = dp.grantee\n")
+    sql_buffer.write("\t\t\t\t\tAND d.defaclobjtype = dp.object_type\n")
+    sql_buffer.write("\t\t\t\t\tAND COALESCE(n.nspname, '') = COALESCE(dp.schema_name, '')\n")
+    sql_buffer.write("\t\t\t\t\tAND a.privilege_type = dp.privilege_type)\n")
+    sql_buffer.write("\t\tLOOP\n")
+    utils.add_print(db_type, 3, sql_buffer, "'Default privilege: ' || temprow.privilege_type || ' on new ' || temprow.object_type || ' of ' || temprow.role_name || ' to ' || temprow.grantee")
+    # defaclobjtype: r tables, S sequences, f functions, T types, n schemas
+    sql_buffer.write("\t\t\tv_sql := 'ALTER DEFAULT PRIVILEGES FOR ROLE ' || quote_ident(temprow.role_name) ||\n")
+    sql_buffer.write("\t\t\t\tCASE WHEN temprow.schema_name IS NOT NULL THEN ' IN SCHEMA ' || quote_ident(temprow.schema_name) ELSE '' END ||\n")
+    sql_buffer.write("\t\t\t\t' GRANT ' || temprow.privilege_type || ' ON ' ||\n")
+    sql_buffer.write("\t\t\t\tCASE temprow.object_type WHEN 'r' THEN 'TABLES' WHEN 'S' THEN 'SEQUENCES'\n")
+    sql_buffer.write("\t\t\t\t\tWHEN 'f' THEN 'FUNCTIONS' WHEN 'T' THEN 'TYPES' WHEN 'n' THEN 'SCHEMAS' ELSE 'TABLES' END ||\n")
+    sql_buffer.write("\t\t\t\t' TO ' || quote_ident(temprow.grantee) ||\n")
+    sql_buffer.write("\t\t\t\tCASE WHEN temprow.is_grantable = 'YES' THEN ' WITH GRANT OPTION' ELSE '' END;\n")
+    utils.add_exec_sql(db_type, 3, sql_buffer, "v_sql")
+    sql_buffer.write("\t\tEND LOOP;\n")
+    sql_buffer.write("\tEND;\n")
+
+    # Row level security has to be switched on for a policy to do anything, and off where the source has it off
+    sql_buffer.write("\n\t--Row Level Security on tables-------------------------------------------\n")
+    sql_buffer.write("\tdeclare temprow record; v_sql text;\n")
+    sql_buffer.write("\tBEGIN\n")
+    sql_buffer.write("\t\tFOR temprow IN\n")
+    sql_buffer.write("\t\t\tSELECT rt.* FROM ScriptRLSTables rt\n")
+    sql_buffer.write("\t\t\tJOIN pg_class c ON c.relname = rt.table_name\n")
+    sql_buffer.write("\t\t\tJOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = rt.table_schema\n")
+    sql_buffer.write("\t\t\tWHERE c.relkind = 'r'\n")
+    sql_buffer.write("\t\t\t\tAND (c.relrowsecurity <> rt.rls_enabled OR c.relforcerowsecurity <> rt.rls_forced)\n")
+    sql_buffer.write("\t\tLOOP\n")
+    utils.add_print(db_type, 3, sql_buffer, "'Row level security on ' || temprow.table_schema || '.' || temprow.table_name || ': ' || CASE WHEN temprow.rls_enabled THEN 'enable' ELSE 'disable' END")
+    sql_buffer.write("\t\t\tv_sql := 'ALTER TABLE ' || quote_ident(temprow.table_schema) || '.' || quote_ident(temprow.table_name) ||\n")
+    sql_buffer.write("\t\t\t\tCASE WHEN temprow.rls_enabled THEN ' ENABLE' ELSE ' DISABLE' END || ' ROW LEVEL SECURITY';\n")
+    utils.add_exec_sql(db_type, 3, sql_buffer, "v_sql")
+    sql_buffer.write("\t\t\tv_sql := 'ALTER TABLE ' || quote_ident(temprow.table_schema) || '.' || quote_ident(temprow.table_name) ||\n")
+    sql_buffer.write("\t\t\t\tCASE WHEN temprow.rls_forced THEN ' FORCE' ELSE ' NO FORCE' END || ' ROW LEVEL SECURITY';\n")
+    utils.add_exec_sql(db_type, 3, sql_buffer, "v_sql")
+    sql_buffer.write("\t\tEND LOOP;\n")
+    sql_buffer.write("\tEND;\n")
+
     # RLS Policies (also depends on tables)
     sql_buffer.write("\n\t--Creating/Altering RLS Policies------------------------------------------\n")
     sql_buffer.write("\tdeclare temprow record; v_sql text;\n")
@@ -478,9 +625,10 @@ def generate_grant_function_permissions(db_type: DBType, sql_buffer: StringIO):
     sql_buffer.write("\t\t\tSELECT * FROM ScriptFunctionPermissions WHERE permStat = 1\n")
     sql_buffer.write("\t\tLOOP\n")
     utils.add_print(db_type, 3, sql_buffer, "'Granting ' || temprow.privilege_type || ' ON FUNCTION ' || temprow.routine_schema || '.' || temprow.routine_name || ' TO ' || temprow.grantee")
-    sql_buffer.write("\t\t\t-- Note: specific_name includes parameter signature for overloaded functions\n")
+    sql_buffer.write("\t\t\t-- Named with its argument types, which is what tells two overloads apart\n")
     sql_buffer.write("\t\t\tv_sql := 'GRANT ' || temprow.privilege_type || ' ON FUNCTION ' ||\n")
-    sql_buffer.write("\t\t\t\tquote_ident(temprow.routine_schema) || '.' || temprow.specific_name ||\n")
+    sql_buffer.write("\t\t\t\tquote_ident(temprow.routine_schema) || '.' || quote_ident(temprow.routine_name) ||\n")
+    sql_buffer.write("\t\t\t\t'(' || COALESCE(temprow.routine_args, '') || ')' ||\n")
     sql_buffer.write("\t\t\t\t' TO ' || quote_ident(temprow.grantee) ||\n")
     sql_buffer.write("\t\t\t\tCASE WHEN temprow.is_grantable = 'YES' THEN ' WITH GRANT OPTION' ELSE '' END;\n")
     utils.add_exec_sql(db_type, 3, sql_buffer, "v_sql")
