@@ -55,16 +55,30 @@ It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped in
 header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
 
 ```bash
-python -m src.main --version      # contextfreesql 0.4.0
+python -m src.main --version      # contextfreesql 0.5.0
 ```
 
 ### Testing
-The test suite is minimal and not actively maintained. Test files exist in `tests/` directory but are primarily used for output validation rather than automated testing.
+124 tests, and they have teeth: most of them build a scratch database, generate a script from it,
+run that script against a second database and compare the two. Bugs in this project are found by
+running real SQL against real PostgreSQL, so a test that only inspects generated text is worth
+little - make it execute.
 
 ```bash
-# Run tests (if needed)
-pytest tests/
+pytest tests -q                     # everything (~2.5 minutes)
+pytest tests -q -m "not slow"       # skip the whole-database round trips
+pytest tests -q -m security         # one area
 ```
+
+Markers are registered in `tests/pytest.ini`: `schema`, `data`, `coded_entities`, `security`,
+`complex`, `slow`. Connection settings come from `tests/test_config.json` (or the environment) via
+`load_test_config()` in `tests/conftest.py`; scratch databases are named `cfs_*` and dropped at the end.
+
+Two traps worth knowing before writing a test here:
+- The HTML report and CSV files are written **by the server**, to `basePath` in the script - not by
+  Python. A test pointing that at pytest's `tmp_path` under AppData gets nothing and fails silently.
+- Assert on state the script can actually change. Several tests were written that could never have
+  failed: printing was off, or the asserted constraint form was one PostgreSQL does not store.
 
 ## Architecture Overview
 
@@ -349,11 +363,18 @@ PostgreSQL supports function overloading - multiple functions with the same name
 
 ## Known Issues and Limitations
 
-1. **Limited Test Coverage:** Test suite is minimal and not actively maintained
-2. **Single Database Connection:** No support for multi-database comparisons
-3. **No Incremental Scripting:** Always generates complete schema, no delta mode
-4. **Large Dataset Performance:** Loading all table data can be slow for large databases
-5. **MySQL Support:** Defined but not fully implemented
+1. **Single Database Connection:** No support for multi-database comparisons
+2. **No Incremental Scripting:** Always generates complete schema, no delta mode
+3. **Large Dataset Performance:** Loading all table data can be slow for large databases
+4. **MySQL Support:** Defined but not fully implemented
+
+Things the script deliberately does not put back, because it cannot without reporting a difference
+for ever afterwards (see `docs/TODO.md`):
+- **Enum types:** created when missing, but a differing enum is reported, not altered
+- **Column position:** a re-added column lands at the end of the table
+- **`nextval` defaults:** left alone, since the sequence name differs per database
+- **Tables with no primary key or unique index:** their data cannot be compared, so it is skipped
+- **Generated columns:** a type change on one is reported, not applied
 
 ## Security Scripting
 
