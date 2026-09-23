@@ -54,8 +54,12 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write("\t\t\tUNION ALL\n")
         sql_buffer.write("\t\t\t-- Data entries (only when dataStat indicates difference)\n")
         sql_buffer.write("\t\t\tSELECT SD.table_schema, SD.table_name, 'Data' as entry_type,\n")
-        sql_buffer.write("\t\t\t\tCASE SD.dataStat\n")
-        sql_buffer.write("\t\t\t\t\tWHEN 3 THEN 'different'\n")
+        # A table that is only on one side takes its data with it, so the data says the same as the table
+        # rather than 'different' - there is nothing on the other side for it to differ from
+        sql_buffer.write("\t\t\t\tCASE\n")
+        sql_buffer.write("\t\t\t\t\tWHEN SD.tablestat = 1 THEN 'left-only'\n")
+        sql_buffer.write("\t\t\t\t\tWHEN SD.tablestat = 2 THEN 'right-only'\n")
+        sql_buffer.write("\t\t\t\t\tWHEN SD.dataStat = 3 THEN 'different'\n")
         sql_buffer.write("\t\t\t\t\tELSE 'equal'\n")
         sql_buffer.write("\t\t\t\tEND as status,\n")
         sql_buffer.write("\t\t\t\t-- Data diff files use compare_ prefix\n")

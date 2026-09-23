@@ -220,7 +220,7 @@ def snapshot(conn):
     return lines
 
 
-def generate_script(db_name, work_dir, print_exec=False):
+def generate_script(db_name, work_dir, print_exec=False, html_report=False):
     """Run the tool over the whole scratch database and return the script it wrote."""
     import json
     cfg = load_test_config()
@@ -239,7 +239,7 @@ def generate_script(db_name, work_dir, print_exec=False):
         'input_output': {'html_template_path': '', 'html_output_path': os.path.join(work_dir, 'r.html'),
                          'diff_template_path': '', 'diff_output_dir': work_dir, 'output_sql': out_sql},
         'sql_script_params': {'print': print_exec, 'print_exec': print_exec, 'exec_code': True,
-                              'html_report': False, 'export_csv': False},
+                              'html_report': html_report, 'export_csv': False},
     }
     config_path = os.path.join(work_dir, 'config.json')
     with open(config_path, 'w', encoding='utf-8') as f:
@@ -346,4 +346,51 @@ def test_a_constraint_the_target_renders_differently_is_left_alone(tmp_path):
     assert not about_it, (
         'the constraint is reported as different from itself, so no run ever settles: '
         + ' | '.join(about_it[:4])
+    )
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_the_report_says_one_side_only_for_the_data_of_a_missing_table():
+    """
+    A table on one side only takes its data with it.
+
+    The report used to call that data 'different', which reads as though the rows on both sides disagree -
+    there is no other side. It now says what the table itself says.
+    """
+    import json as _json
+    import re as _re
+    import shutil as _shutil
+
+    # PostgreSQL writes the report itself, so the folder has to be one the server can write to - pytest's
+    # temp folder under the user's AppData is not
+    work = Path(__file__).parent.parent.parent.parent / 'output' / ('_report_' + uuid.uuid4().hex[:8])
+    work.mkdir(parents=True, exist_ok=True)
+
+    db_name = 'cfs_drift_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, SOURCE_SQL)
+            script = generate_script(db_name, str(work), html_report=True)
+            run_sql(conn, f'DROP TABLE {SCHEMA}.tag')      # the table, and its rows, only on the script's side
+            with conn.cursor() as cur:
+                cur.execute(script)
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    try:
+        report = (work / 'r.html').read_text(encoding='utf-8')
+    finally:
+        _shutil.rmtree(work, ignore_errors=True)
+    entries = _json.loads(_re.search(r'reportData = (\[.*?\]);', report, _re.S).group(1))
+    for_tag = {e['type']: e['status'] for e in entries if e['name'] == 'tag'}
+
+    assert for_tag.get('Table') == 'left-only', for_tag
+    assert for_tag.get('Data') == 'left-only', (
+        f"the data of a table that only the script has should read the same as the table: {for_tag}"
     )
