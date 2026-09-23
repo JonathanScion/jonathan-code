@@ -220,8 +220,13 @@ def snapshot(conn):
     return lines
 
 
-def generate_script(db_name, work_dir, print_exec=False, html_report=False):
-    """Run the tool over the whole scratch database and return the script it wrote."""
+def generate_script(db_name, work_dir, print_exec=False, html_report=False,
+                    only_tables=None, only_schemas=None):
+    """Run the tool over the scratch database and return the script it wrote.
+
+    only_tables / only_schemas fill db_ents_to_load, which decides what counts as extra: a named schema
+    means that schema whole, a named table means that table and nothing else.
+    """
     import json
     cfg = load_test_config()
     project = Path(__file__).parent.parent.parent.parent
@@ -233,7 +238,7 @@ def generate_script(db_name, work_dir, print_exec=False, html_report=False):
                               'all_schemas': True, 'data_scripting_generate_dml_statements': False},
         'table_script_ops': {'column_identity': True, 'indexes': True, 'foreign_keys': True,
                              'defaults': True, 'check_constraints': True},
-        'db_ents_to_load': {'tables': [], 'schemas': []},
+        'db_ents_to_load': {'tables': only_tables or [], 'schemas': only_schemas or []},
         'tables_data': {'tables': [], 'schemas': [], 'from_file': False, 'max_rows_per_table': 0,
                         'script_data': True, 'max_rows_per_table_retain_fk_integrity': False},
         'input_output': {'html_template_path': '', 'html_output_path': os.path.join(work_dir, 'r.html'),
@@ -347,6 +352,90 @@ def test_a_constraint_the_target_renders_differently_is_left_alone(tmp_path):
         'the constraint is reported as different from itself, so no run ever settles: '
         + ' | '.join(about_it[:4])
     )
+
+def _tables_in(conn, schema):
+    with conn.cursor() as cur:
+        cur.execute("""SELECT table_name FROM information_schema.tables
+                       WHERE table_schema = %s AND table_type = 'BASE TABLE' ORDER BY 1""", (schema,))
+        return [r[0] for r in cur.fetchall()]
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_a_named_schema_means_that_schema_whole(tmp_path):
+    """
+    An extra table in a schema the script was told to script is extra, and goes.
+
+    This was the one thing left unfixed after a whole-schema drift run: extra columns, indexes and check
+    constraints inside the schema were dropped, and an extra view or function would have been, but an
+    extra table stayed - extras were skipped outright whenever any filter was set. Tables in schemas
+    outside the filter are a different matter, and must survive.
+    """
+    db_name = 'cfs_drift_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, SOURCE_SQL)
+            # a second schema, never named in the filter, whose table the script must not touch
+            run_sql(conn, 'CREATE SCHEMA other; CREATE TABLE other.keep_me (id int PRIMARY KEY)')
+
+            script = generate_script(db_name, str(tmp_path), only_schemas=[SCHEMA])
+
+            run_sql(conn, f'CREATE TABLE {SCHEMA}.leftover (id int PRIMARY KEY, x text)')
+            with conn.cursor() as cur:
+                cur.execute(script)
+
+            in_scope = _tables_in(conn, SCHEMA)
+            out_of_scope = _tables_in(conn, 'other')
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert 'leftover' not in in_scope, (
+        f'an extra table in the scripted schema was left behind: {in_scope}')
+    assert sorted(in_scope) == ['customer', 'tag', 'ticket'], (
+        f'the schema should be exactly what the script holds: {in_scope}')
+    assert out_of_scope == ['keep_me'], (
+        f'a table in a schema the script was never told about was dropped: {out_of_scope}')
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_a_named_table_means_that_table_and_nothing_else(tmp_path):
+    """
+    The other direction, and the one that would hurt: naming tables must not drop anything.
+
+    Scripting one table says nothing about the rest of the schema, so an extra table there is not extra -
+    it is simply not this script's business. Worth asserting, because the rule for a named schema is the
+    opposite and both run through the same condition.
+    """
+    db_name = 'cfs_drift_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, SOURCE_SQL)
+            script = generate_script(db_name, str(tmp_path), only_tables=[f'{SCHEMA}.customer'])
+
+            run_sql(conn, f'CREATE TABLE {SCHEMA}.leftover (id int PRIMARY KEY, x text)')
+            with conn.cursor() as cur:
+                cur.execute(script)
+
+            remaining = _tables_in(conn, SCHEMA)
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert sorted(remaining) == ['customer', 'leftover', 'tag', 'ticket'], (
+        f'scripting one table dropped tables it was never asked about: {remaining}')
+
 
 @pytest.mark.complex
 @pytest.mark.slow
