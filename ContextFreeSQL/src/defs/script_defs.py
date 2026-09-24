@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 class DBType(Enum):
     MSSQL = 1
@@ -125,8 +125,22 @@ class DBConnSettings:
     host: str
     db_name: str
     user: str
-    password: str
-    port: str
+    # May be left out of the config: it can come from --password, from PGPASSWORD, or from the prompt
+    password: str = ''
+    port: str = '5432'
+    # Passed to libpq only when set, so leaving one out keeps libpq's own behaviour and its PG* environment
+    # variables (PGSSLMODE, PGSSLROOTCERT, ...). A managed PostgreSQL that refuses plaintext needs
+    # sslmode 'require'; 'verify-full' also needs sslrootcert
+    sslmode: Optional[str] = None
+    sslrootcert: Optional[str] = None
+    sslcert: Optional[str] = None
+    sslkey: Optional[str] = None
+    connect_timeout: Optional[int] = None
+
+    def libpq_options(self) -> dict:
+        """The optional connection parameters that were actually set, ready to hand to psycopg2."""
+        named = ('sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'connect_timeout')
+        return {name: getattr(self, name) for name in named if getattr(self, name) not in (None, '')}
   
     
     

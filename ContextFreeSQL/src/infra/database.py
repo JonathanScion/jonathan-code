@@ -11,7 +11,8 @@ class Database:
             database=conn_settings.db_name,
             user=conn_settings.user,
             password=conn_settings.password,
-            port=conn_settings.port
+            port=conn_settings.port,
+            **conn_settings.libpq_options()
         )
         return conn
 

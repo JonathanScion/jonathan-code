@@ -7,7 +7,7 @@ from datetime import datetime
 import os
 import shutil
 
-from src.utils.load_config import load_config
+from src.utils.load_config import load_config, ConfigError
 from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.data_load.fk_sampling import expand_for_fk_integrity
@@ -186,6 +186,7 @@ Environment Variables (override config.json values):
   PGUSER       - Database user
   PGPASSWORD   - Database password
   PGDATABASE   - Database name
+  PGSSLMODE    - require, verify-full, disable, ... (or set "sslmode" in the config)
 ''',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
@@ -255,8 +256,13 @@ def main():
         show_config_docs()
         return
 
-    # Load configuration
-    config_vals: ConfigVals = load_config(args.config)
+    # Load configuration. A config that cannot be used is the user's to fix, so say what is wrong and stop -
+    # a traceback out of a bundled binary tells them nothing they can act on
+    try:
+        config_vals: ConfigVals = load_config(args.config)
+    except ConfigError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Apply environment variables (override config.json values)
     if os.environ.get('PGHOST'):
@@ -359,10 +365,12 @@ def main():
         tbl_ents = load_all_db_ents(config_vals.db_conn)
 
     if tbl_ents.empty:
-        # Empty either because nothing matched, or because loading failed (a connection error is reported above)
+        # Empty either because nothing matched, or because loading failed (a connection error is reported above).
+        # Either way no script is written, so this has to leave a failing exit code behind: a run that could not
+        # reach the database used to report success, which anything scripted around it would have believed
         print("ERROR: no entities to script. Check the messages above for a connection or query error, "
-              "and check db_ents_to_load's 'tables' and 'schemas'")
-        return
+              "and check db_ents_to_load's 'tables' and 'schemas'", file=sys.stderr)
+        sys.exit(1)
 
     # Which tables' data to script: the filters above, applied to the entities loaded above
     config_vals.tables_data.tables, script_all_data = resolve_data_tables(config_vals.tables_data, tbl_ents)

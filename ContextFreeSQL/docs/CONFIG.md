@@ -34,7 +34,16 @@ Database connection settings.
 | `db_name` | string | Yes | Name of the database to script |
 | `user` | string | Yes | Database username |
 | `password` | string | No | Database password. Can be omitted and provided via `--password` flag |
-| `port` | string | Yes | Database port (typically "5432" for PostgreSQL) |
+| `port` | string | No | Database port (default "5432") |
+| `sslmode` | string | No | `disable`, `allow`, `prefer`, `require`, `verify-ca` or `verify-full`. A managed PostgreSQL usually refuses plaintext and needs at least `require` |
+| `sslrootcert` | string | No | Certificate authority file, which `verify-ca` and `verify-full` need |
+| `sslcert` | string | No | Client certificate file, for a server that authenticates by certificate |
+| `sslkey` | string | No | Private key for `sslcert` |
+| `connect_timeout` | number | No | Seconds to wait for a connection before giving up. Without it a wrong host can hang for a long time |
+
+The five settings below `port` are passed to PostgreSQL only when present, so leaving one out keeps
+libpq's own behaviour along with its environment variables (`PGSSLMODE`, `PGSSLROOTCERT`, and so on).
+That means `PGSSLMODE=require` works without changing the config file at all.
 
 **Example:**
 ```json
