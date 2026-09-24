@@ -138,3 +138,11 @@ def test_a_bad_config_exits_with_a_message_and_not_a_traceback(tmp_path):
     assert result.returncode != 0, 'a config it cannot use should be a failing exit code'
     assert 'Traceback' not in output, f'a traceback reached the user:\n{output}'
     assert 'sslmodee' in output
+
+
+def test_password_command_is_accepted_and_is_not_a_libpq_option(tmp_path):
+    """It is resolved before connecting, so it must not be handed to libpq as a connection parameter."""
+    command = 'az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv'
+    config = load_config(write_config(tmp_path, password=None, password_command=command))
+    assert config.db_conn.password_command == command
+    assert config.db_conn.libpq_options() == {}, 'password_command reached libpq, which would be rejected'

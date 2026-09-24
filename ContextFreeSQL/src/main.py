@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 import os
 import shutil
+import subprocess
+import signal
 
 from src.utils.load_config import load_config, ConfigError
 from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
@@ -13,7 +15,12 @@ from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_e
 from src.data_load.fk_sampling import expand_for_fk_integrity
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
+from src.infra.database import Database
 from src.version import __version__  # set in src/version.py, bumped per build
+
+# How long a password_command gets. Long enough for a token fetch that has to talk to a cloud,
+# short enough that a command waiting for input does not hang the run for ever
+PASSWORD_COMMAND_TIMEOUT = 120
 
 
 def show_config_docs():
@@ -40,7 +47,11 @@ database:
   db_name     - Database name
   user        - Database username
   password    - Database password (or use --password flag)
+  password_command - Command whose output is the password, for one that is
+                fetched rather than stored (an Entra token, a vault)
   port        - Database port (default: 5432)
+  sslmode     - require, verify-full, disable, ... for a server needing SSL
+  connect_timeout - Seconds to wait for a connection
 
 scripting_options:
   remove_all_extra_ents    - Drop entities not in source (default: true)
@@ -247,6 +258,102 @@ More info:
     return parser.parse_args()
 
 
+def kill_process_tree(process) -> None:
+    """Kill the shell and everything it started, so nothing is left holding the pipes."""
+    try:
+        if os.name == 'posix':
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        else:
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(process.pid)],
+                           capture_output=True, timeout=20)
+    except Exception:
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+
+def run_password_command(command: str) -> str:
+    """Run the configured command and use what it writes to stdout as the password.
+
+    Only the program name is echoed, never the whole command line: a command is free to carry a secret of its
+    own (a vault token, say), and this output goes to terminals and CI logs. The password itself is never
+    printed, and stderr is left alone so the command can explain itself when it fails.
+    """
+    program = command.strip().split()[0] if command.strip() else command
+    print(f"Fetching the password with: {program} ...")
+
+    # Started in its own process group so the whole tree can be killed on timeout. subprocess.run's own
+    # timeout kills only the shell, and a grandchild still holding the pipes then blocks the read for ever -
+    # which is a guard that does not guard
+    popen_args = {'shell': True, 'stdout': subprocess.PIPE, 'stderr': subprocess.PIPE, 'text': True}
+    if os.name == 'posix':
+        popen_args['start_new_session'] = True
+    else:
+        popen_args['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+
+    process = subprocess.Popen(command, **popen_args)
+    try:
+        out, command_said = process.communicate(timeout=PASSWORD_COMMAND_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        kill_process_tree(process)
+        try:
+            process.communicate(timeout=10)
+        except Exception:
+            pass
+        print(f"error: the password_command ({program}) did not finish within {PASSWORD_COMMAND_TIMEOUT} seconds.", file=sys.stderr)
+        sys.exit(1)
+
+    if process.returncode != 0:
+        detail = (command_said or out or '').strip().splitlines()
+        print(f"error: the password_command ({program}) failed with exit code {process.returncode}."
+              + (f"\n  it said: {detail[-1]}" if detail else ''), file=sys.stderr)
+        sys.exit(1)
+
+    # A trailing newline is all but certain, and a password with one would fail authentication for no
+    # visible reason. Anything an access token can legitimately contain survives a strip()
+    password = out.strip()
+    if not password:
+        print(f"error: the password_command ({program}) printed nothing, so there is no password to use.",
+              file=sys.stderr)
+        sys.exit(1)
+    return password
+
+
+def check_connection(db_conn) -> None:
+    """Connect once before anything else, and turn a failure into one message worth reading."""
+    try:
+        Database.connect_to_database(db_conn).close()
+    except Exception as e:
+        message = str(e).strip()
+        print(f"error: cannot connect to {db_conn.db_name} on {db_conn.host} as {db_conn.user}:\n"
+              f"  {message}", file=sys.stderr)
+
+        lowered = message.lower()
+        if 'no password supplied' in lowered or 'password authentication failed' in lowered:
+            print("\n"
+                  "  A password has to reach the server. Any one of these does it:\n"
+                  "    --password=... on the command line, or -p to be asked for it\n"
+                  "    PGPASSWORD in the environment\n"
+                  "    \"password\" in the config's database section\n"
+                  "    \"password_command\" in the config, for a credential that is fetched\n"
+                  "\n"
+                  "  Azure PostgreSQL with Microsoft Entra: signing in with 'az login' does not authenticate\n"
+                  "  PostgreSQL, which knows nothing about Entra. It wants an access token as the password:\n"
+                  "    \"password_command\": \"az account get-access-token --resource-type oss-rdbms"
+                  " --query accessToken -o tsv\"\n"
+                  "  The principal also has to exist as a role on the server, which the Entra admin grants.",
+                  file=sys.stderr)
+        elif 'server does not support ssl' in lowered:
+            print("\n  The server is not offering SSL. Remove \"sslmode\" from the config, or set it to"
+                  " 'prefer'.", file=sys.stderr)
+        elif 'no pg_hba.conf entry' in lowered or 'ssl off' in lowered:
+            print("\n  The server is refusing the connection as configured. A managed PostgreSQL usually"
+                  " requires SSL:\n    add \"sslmode\": \"require\" to the config's database section.",
+                  file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     # Parse command line arguments
     args = parse_args()
@@ -275,7 +382,7 @@ def main():
         config_vals.db_conn.db_name = os.environ['PGDATABASE']
     # PGPASSWORD is handled below with other password options
 
-    # Handle password: command line > env var > config file > interactive prompt
+    # Handle password: command line > env var > password_command > config file > interactive prompt
     if args.password == 'PROMPT':
         # --password flag given without value, prompt for it
         config_vals.db_conn.password = getpass.getpass('Password: ')
@@ -285,9 +392,16 @@ def main():
     elif os.environ.get('PGPASSWORD'):
         # Environment variable set, use it
         config_vals.db_conn.password = os.environ['PGPASSWORD']
+    elif config_vals.db_conn.password_command:
+        config_vals.db_conn.password = run_password_command(config_vals.db_conn.password_command)
     elif not config_vals.db_conn.password:
-        # No password anywhere, prompt for it
+        # Nothing anywhere. Not an error: trust authentication and ~/.pgpass both want no password sent
         config_vals.db_conn.password = getpass.getpass('Password: ')
+
+    # One connection now, so a server that cannot be reached is one clear message. Each loader catches its own
+    # errors and carries on, which for a failed connection meant the same line twenty times over and then a
+    # complaint about db_ents_to_load, before anything had even been read
+    check_connection(config_vals.db_conn)
 
     # Resolve output filename template placeholders
     config_vals.input_output.output_sql = resolve_output_filename(

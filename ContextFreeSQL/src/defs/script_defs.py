@@ -136,6 +136,11 @@ class DBConnSettings:
     sslcert: Optional[str] = None
     sslkey: Optional[str] = None
     connect_timeout: Optional[int] = None
+    # A command whose output is the password, run through the shell on every run. For a credential that is
+    # fetched rather than stored: a Microsoft Entra access token (which is what Azure PostgreSQL wants as the
+    # password, and expires within the hour), a vault, a keychain. Not a libpq option - it is resolved before
+    # connecting, in src/main.py
+    password_command: Optional[str] = None
 
     def libpq_options(self) -> dict:
         """The optional connection parameters that were actually set, ready to hand to psycopg2."""

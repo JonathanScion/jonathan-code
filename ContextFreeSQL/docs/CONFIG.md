@@ -34,6 +34,7 @@ Database connection settings.
 | `db_name` | string | Yes | Name of the database to script |
 | `user` | string | Yes | Database username |
 | `password` | string | No | Database password. Can be omitted and provided via `--password` flag |
+| `password_command` | string | No | A command whose output is used as the password, run through the shell on every run. For a credential that is fetched rather than stored: a Microsoft Entra access token, a vault, a keychain. Only the program name is echoed, never the whole command line, and the password itself is never printed |
 | `port` | string | No | Database port (default "5432") |
 | `sslmode` | string | No | `disable`, `allow`, `prefer`, `require`, `verify-ca` or `verify-full`. A managed PostgreSQL usually refuses plaintext and needs at least `require` |
 | `sslrootcert` | string | No | Certificate authority file, which `verify-ca` and `verify-full` need |
@@ -41,9 +42,32 @@ Database connection settings.
 | `sslkey` | string | No | Private key for `sslcert` |
 | `connect_timeout` | number | No | Seconds to wait for a connection before giving up. Without it a wrong host can hang for a long time |
 
-The five settings below `port` are passed to PostgreSQL only when present, so leaving one out keeps
-libpq's own behaviour along with its environment variables (`PGSSLMODE`, `PGSSLROOTCERT`, and so on).
-That means `PGSSLMODE=require` works without changing the config file at all.
+The SSL settings and `connect_timeout` are passed to PostgreSQL only when present, so leaving one out
+keeps libpq's own behaviour along with its environment variables (`PGSSLMODE`, `PGSSLROOTCERT`, and so
+on). That means `PGSSLMODE=require` works without changing the config file at all.
+
+A password is taken from the first of these that has one: `--password`, `PGPASSWORD`,
+`password_command`, `password`, and finally a prompt. Nothing at all is not an error - trust
+authentication and `~/.pgpass` both want no password sent.
+
+### Azure Database for PostgreSQL with Microsoft Entra
+
+Signing in with `az login` does not authenticate PostgreSQL: PostgreSQL knows nothing about Entra. What
+it wants is an Entra **access token, used as the password**, and that token expires within the hour -
+which is what `password_command` is for.
+
+```json
+"database": {
+  "host": "your-server.postgres.database.azure.com",
+  "db_name": "postgres",
+  "user": "you@yourcompany.com",
+  "sslmode": "require",
+  "password_command": "az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv"
+}
+```
+
+The Entra principal also has to exist as a role on the server, which the server's Entra administrator
+grants. Without that the token is valid and the login is still refused, naming the principal.
 
 **Example:**
 ```json
