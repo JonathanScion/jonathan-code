@@ -79,7 +79,7 @@ python -m src.main --version
 ```
 
 **Environment variables** override the config's `database` section: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
-`PGDATABASE`. A password is taken from `--password`, then `PGPASSWORD`, then the config; if all are empty it prompts.
+`PGDATABASE`. A password is taken from the first of these that has one: `--password`, `PGPASSWORD`, `password_command`, `password`; if none does, it prompts. Nothing at all is fine too — trust authentication and `~/.pgpass` want no password sent.
 
 **Connecting to a server that requires SSL** (most managed PostgreSQL): add `"sslmode": "require"` to the
 `database` section, or set `PGSSLMODE=require`. `sslrootcert`, `sslcert`, `sslkey` and `connect_timeout` can be
