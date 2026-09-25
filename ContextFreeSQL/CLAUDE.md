@@ -55,11 +55,11 @@ It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped in
 header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
 
 ```bash
-python -m src.main --version      # contextfreesql 0.6.2
+python -m src.main --version      # contextfreesql 0.7.0
 ```
 
 ### Testing
-150 tests, and they have teeth: most of them build a scratch database, generate a script from it,
+156 tests, and they have teeth: most of them build a scratch database, generate a script from it,
 run that script against a second database and compare the two. Bugs in this project are found by
 running real SQL against real PostgreSQL, so a test that only inspects generated text is worth
 little - make it execute.

@@ -587,6 +587,8 @@ def main():
                 template_path=config_vals.input_output.html_template_path,
                 output_path=config_vals.input_output.html_output_path,
                 source_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}",
+                diff_template_path=config_vals.input_output.diff_template_path,
+                diff_output_dir=config_vals.input_output.diff_output_dir,
             )
         except Exception as e:
             print(f"error: the comparison against the target failed: {e}", file=sys.stderr)

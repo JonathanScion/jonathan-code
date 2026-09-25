@@ -229,3 +229,100 @@ def test_the_report_is_written_even_when_the_server_cannot_write_files(tmp_path)
     entries = json.loads(re.search(r'reportData = (\[.*?\]);',
                                    report.read_text(encoding='utf-8'), re.S).group(1))
     assert entries, 'the report came out empty'
+
+
+DIFFERING_TARGET_SQL = """
+CREATE SCHEMA app;
+CREATE TABLE app.customer (id int PRIMARY KEY, name varchar(120), phone text);
+CREATE TABLE app.ticket (id int PRIMARY KEY, customer_id int NOT NULL, title text);
+CREATE VIEW app.open_tickets AS SELECT t.id FROM app.ticket t;
+"""
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_the_diff_pages_are_written_here_too_and_the_report_links_resolve(tmp_path):
+    """The report links to a page per differing entity, so those have to be written as well."""
+    source_db = 'cfs_rep_s_' + uuid.uuid4().hex[:8]
+    target_db = 'cfs_rep_t_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {source_db}')
+    run_sql(admin, f'CREATE DATABASE {target_db}')
+    try:
+        for db, sql in ((source_db, SOURCE_SQL), (target_db, DIFFERING_TARGET_SQL)):
+            conn = db_connection(db)
+            try:
+                run_sql(conn, sql)
+            finally:
+                conn.close()
+
+        source_config, target_config = write_configs(tmp_path, source_db, target_db)
+        result = run_tool(source_config, '--report-on', target_config)
+        assert result.returncode == 0, f'{result.stdout}\n{result.stderr}'
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {source_db} WITH (FORCE)')
+        run_sql(admin, f'DROP DATABASE IF EXISTS {target_db} WITH (FORCE)')
+        admin.close()
+
+    page = (tmp_path / 'report.html').read_text(encoding='utf-8')
+    entries = json.loads(re.search(r'reportData = (\[.*?\]);', page, re.S).group(1))
+
+    linked = [e['diffFile'] for e in entries if e.get('diffFile')]
+    assert linked, f'nothing was different, so this proves nothing: {[(e["name"], e["status"]) for e in entries]}'
+
+    unresolved = [name for name in linked if not (tmp_path / name).exists()]
+    assert not unresolved, f'the report links to pages that were not written: {unresolved}'
+
+    for name in linked:
+        diff_page = (tmp_path / name).read_text(encoding='utf-8')
+        assert not re.findall(r'\[\[[A-Za-z_]+\]\]', diff_page), f'{name} still holds placeholders'
+        assert len(diff_page) > 1000, f'{name} looks empty'
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_it_says_when_the_role_cannot_see_the_whole_target(tmp_path):
+    """
+    A role sees nothing of a table it holds no privilege on, and the comparison then calls that table
+    missing. Believing it - and running with execCode on - would try to create what is already there.
+    """
+    source_db = 'cfs_rep_s_' + uuid.uuid4().hex[:8]
+    target_db = 'cfs_rep_t_' + uuid.uuid4().hex[:8]
+    role = 'cfs_rep_blind'
+    admin = admin_connection()
+    run_sql(admin, f'DROP ROLE IF EXISTS {role}')
+    run_sql(admin, f"CREATE ROLE {role} LOGIN PASSWORD 'p'")
+    run_sql(admin, f'CREATE DATABASE {source_db}')
+    run_sql(admin, f'CREATE DATABASE {target_db}')
+    try:
+        run_sql(admin, f'GRANT CONNECT ON DATABASE {target_db} TO {role}')
+        conn = db_connection(source_db)
+        try:
+            run_sql(conn, SOURCE_SQL)
+        finally:
+            conn.close()
+        conn = db_connection(target_db)
+        try:
+            # The tables are there, but the role is given no privilege on them
+            run_sql(conn, DIFFERING_TARGET_SQL)
+            run_sql(conn, f'GRANT USAGE ON SCHEMA app TO {role}')
+            run_sql(conn, f'GRANT USAGE, CREATE ON SCHEMA public TO {role}')
+        finally:
+            conn.close()
+
+        source_config, target_config = write_configs(tmp_path, source_db, target_db,
+                                                     target_user=role, target_password='p')
+        result = run_tool(source_config, '--report-on', target_config)
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {source_db} WITH (FORCE)')
+        run_sql(admin, f'DROP DATABASE IF EXISTS {target_db} WITH (FORCE)')
+        try:
+            run_sql(admin, f'DROP ROLE IF EXISTS {role}')
+        except psycopg2.Error:
+            pass
+        admin.close()
+
+    assert result.returncode == 0, f'{result.stdout}\n{result.stderr}'
+    assert 'can see 0 of the' in result.stdout, (
+        'a role that can see none of the target was not warned about:\n' + result.stdout)
+    assert 'reported as missing' in result.stdout
