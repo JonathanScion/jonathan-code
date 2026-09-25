@@ -121,11 +121,22 @@ def _not_extension_owned(schema_expr: str, table_expr: str) -> str:
 
 
 def _load_extensions(conn_settings: DBConnSettings) -> pd.DataFrame:
-    """The installed extensions, so the script can create them before anything that needs them.
+    """The extensions the schema actually depends on, so the script can create them before the tables.
 
     Without this, a table with a pgvector column fails on the target with 'type "public.vector" does not
     exist': the type belongs to the extension, and no CREATE TYPE the script could write would produce it.
-    plpgsql is left out - every database has it, and it is not something a script should be creating.
+
+    Only the ones something depends on. A managed PostgreSQL carries extensions that are the platform's
+    business rather than the schema's - an Azure server holds pgaadauth, azure and pg_stat_statements
+    alongside vector - and creating those on a target is usually refused. Since the whole script is one
+    atomic block, one refusal rolls the entire run back, so scripting an extension nothing needs is not a
+    harmless extra. A dependency means one of:
+
+      - a column whose type the extension provides (vector, citext, hstore, geometry)
+      - an index using an access method it provides (pgvector's hnsw and ivfflat)
+      - an index using an operator class it provides (vector_cosine_ops, gin_trgm_ops)
+
+    plpgsql is left out whatever depends on it: every database already has it.
     """
     conn = None
     cur = None
@@ -134,14 +145,49 @@ def _load_extensions(conn_settings: DBConnSettings) -> pd.DataFrame:
         cur = conn.cursor(cursor_factory=RealDictCursor)
         # schema_is_its_own: the extension created that schema itself, the way pg_cron creates 'cron'. Such an
         # extension is not relocatable, and naming its schema in CREATE EXTENSION ... WITH SCHEMA is refused
-        sql = """SELECT e.extname AS extension_name, n.nspname AS schema_name, e.extversion AS version,
-                        EXISTS (SELECT 1 FROM pg_depend d
-                                WHERE d.classid = 'pg_namespace'::regclass AND d.objid = n.oid
-                                  AND d.deptype = 'e' AND d.refobjid = e.oid) AS schema_is_its_own
-                 FROM pg_extension e
-                 JOIN pg_namespace n ON n.oid = e.extnamespace
-                 WHERE e.extname <> 'plpgsql'
-                 ORDER BY e.extname"""
+        sql = """
+        WITH user_schemas AS (
+            SELECT oid, nspname FROM pg_namespace
+            WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+              AND nspname NOT LIKE 'pg_temp%' AND nspname NOT LIKE 'pg_toast%'
+        ),
+        needed AS (
+            -- a column's type
+            SELECT d.refobjid AS extension_oid
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN user_schemas ns ON ns.oid = c.relnamespace
+            JOIN pg_depend d ON d.classid = 'pg_type'::regclass AND d.objid = a.atttypid
+                            AND d.deptype = 'e'
+            WHERE a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p', 'v', 'm')
+            UNION
+            -- an index's access method, such as pgvector's hnsw
+            SELECT d.refobjid
+            FROM pg_index ix
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN user_schemas ns ON ns.oid = t.relnamespace
+            JOIN pg_depend d ON d.classid = 'pg_am'::regclass AND d.objid = i.relam
+                            AND d.deptype = 'e'
+            UNION
+            -- an operator class the index names, such as vector_cosine_ops
+            SELECT d.refobjid
+            FROM pg_index ix
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN user_schemas ns ON ns.oid = t.relnamespace
+            CROSS JOIN LATERAL unnest(ix.indclass::oid[]) AS used(opclass_oid)
+            JOIN pg_depend d ON d.classid = 'pg_opclass'::regclass AND d.objid = used.opclass_oid
+                            AND d.deptype = 'e'
+        )
+        SELECT e.extname AS extension_name, n.nspname AS schema_name, e.extversion AS version,
+               EXISTS (SELECT 1 FROM pg_depend d
+                       WHERE d.classid = 'pg_namespace'::regclass AND d.objid = n.oid
+                         AND d.deptype = 'e' AND d.refobjid = e.oid) AS schema_is_its_own
+        FROM pg_extension e
+        JOIN pg_namespace n ON n.oid = e.extnamespace
+        WHERE e.extname <> 'plpgsql'
+          AND e.oid IN (SELECT extension_oid FROM needed)
+        ORDER BY e.extname"""
         cur.execute(sql)
         return _results_to_df(cur, cur.fetchall())
 

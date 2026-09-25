@@ -14,6 +14,7 @@
     "script_schemas": true,
     "all_schemas": true,
     "script_security": false,
+    "script_extensions": true,
     "code_compare_no_whitespace": false,
     "data_scripting_leave_report_fields_updated": true,
     "data_scripting_leave_report_fields_updated_save_old_value": true,

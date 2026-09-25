@@ -86,6 +86,10 @@ class ScriptingOptions:
    script_schemas: bool = True  # turning it off from MA, when doing only data. for now, its always on other wise 07-17-14
    all_schemas: bool = True  # if off, will only script schemas that we are using in entities we chose to script
    script_security: bool = True  # Script roles, permissions, RLS policies
+   # Create the extensions the scripted schema depends on (a column's type, an index's access method or
+   # operator class). Off leaves them to whoever administers the target, and a column of an extension type
+   # then fails there unless the extension is already installed
+   script_extensions: bool = True
    #code comparison
    code_compare_no_whitespace : bool = False
 

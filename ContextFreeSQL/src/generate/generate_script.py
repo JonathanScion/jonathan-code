@@ -211,9 +211,10 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if got_specific_tables and not tbl_ents.empty and 'entkey' in tbl_ents.columns:
         scripted_cols = schema_tables.columns[schema_tables.columns['object_id'].isin(set(tbl_ents['entkey']))]
     # Before the types and tables: a column can be of a type an extension owns, and nothing else can create it
-    create_exts = create_extensions(db_type, schema_tables.extensions)
-    if create_exts.getvalue():
-        buffer.write(create_exts.getvalue())
+    if scrpt_ops.script_extensions:
+        create_exts = create_extensions(db_type, schema_tables.extensions)
+        if create_exts.getvalue():
+            buffer.write(create_exts.getvalue())
 
     create_types = create_user_types(db_type, schema_tables.udts, scripted_cols, got_specific_tables)
     if create_types.getvalue():

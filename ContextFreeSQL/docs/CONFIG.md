@@ -122,6 +122,7 @@ Controls what gets scripted and how.
 | `script_schemas` | bool | `true` | Include schema (namespace) DDL in output |
 | `all_schemas` | bool | `true` | Script all schemas. If `false`, only scripts schemas used by selected entities |
 | `script_security` | bool | `true` | Include security objects: roles, permissions, RLS policies |
+| `script_extensions` | bool | `true` | Create the extensions the scripted schema depends on, before the tables. Only the ones something needs: a column's type (`vector`, `citext`, `geometry`), an index's access method (`hnsw`) or its operator class (`vector_cosine_ops`). Extensions merely installed on the server are left out, since a managed PostgreSQL carries its own and creating those on a target is refused. Set `false` to leave extensions to whoever administers the target |
 | `column_collation` | bool | `true` | Include column collation settings |
 | `code_compare_no_white_space` | bool | `true` | Ignore whitespace when comparing coded entities (functions, procedures) |
 | `code_compare_no_whitespace` | bool | `false` | Alternative whitespace comparison flag |

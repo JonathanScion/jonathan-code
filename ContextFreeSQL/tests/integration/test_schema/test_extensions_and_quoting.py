@@ -56,14 +56,15 @@ def run_sql(conn, sql):
         cur.execute(sql)
 
 
-def generate_script(db_name, work_dir):
+def generate_script(db_name, work_dir, script_extensions=True):
     cfg = load_test_config()
     out_sql = os.path.join(work_dir, 'ext.sql')
     config = {
         'database': {'host': cfg.host, 'db_name': db_name, 'user': cfg.user,
                      'password': cfg.password, 'port': cfg.port},
         'scripting_options': {'remove_all_extra_ents': True, 'script_security': False,
-                              'all_schemas': True, 'data_scripting_generate_dml_statements': False},
+                              'all_schemas': True, 'data_scripting_generate_dml_statements': False,
+                              'script_extensions': script_extensions},
         'table_script_ops': {'column_identity': True, 'indexes': True, 'foreign_keys': True,
                              'defaults': True, 'check_constraints': True},
         'db_ents_to_load': {'tables': [], 'schemas': []},
@@ -252,3 +253,82 @@ def test_the_termination_expression_carries_no_raw_newline_or_backslash():
     assert '\n' not in expression, 'a real newline ended up in the generated SQL'
     assert '\\' not in expression, 'a backslash ended up in the generated SQL'
     assert 'CHR(10)' in expression and 'CHR(9)' in expression
+
+
+@pytest.mark.schema
+@pytest.mark.slow
+def test_only_the_extensions_the_schema_depends_on_are_scripted(tmp_path):
+    """
+    A managed PostgreSQL carries extensions that are the platform's business, not the schema's.
+
+    An Azure server holds pgaadauth, azure and pg_stat_statements alongside vector. Creating those on a
+    target is refused, and since the script is one atomic block a single refusal rolls the whole run back -
+    so scripting an extension nothing needs is not a harmless extra. Here citext stands in for a type the
+    schema uses, pg_trgm for an operator class an index names, and tablefunc and hstore for the platform's
+    own, installed but depended on by nothing.
+    """
+    db_name = 'cfs_dep_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    if not citext_is_available(admin):
+        admin.close()
+        pytest.skip('citext is not available on this server')
+
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, """
+                CREATE EXTENSION citext;
+                CREATE EXTENSION pg_trgm;
+                CREATE EXTENSION tablefunc;
+                CREATE EXTENSION hstore;
+                CREATE SCHEMA app;
+                CREATE TABLE app.notes (id int PRIMARY KEY, label public.citext NOT NULL, body text);
+                CREATE INDEX ix_notes_body_trgm ON app.notes USING gin (body public.gin_trgm_ops);
+            """)
+            script = generate_script(db_name, str(tmp_path))
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert 'CREATE EXTENSION IF NOT EXISTS citext' in script, 'the type its column uses was not scripted'
+    assert 'CREATE EXTENSION IF NOT EXISTS pg_trgm' in script, 'the operator class its index names was not scripted'
+    assert 'CREATE EXTENSION IF NOT EXISTS tablefunc' not in script, (
+        'an extension nothing depends on was scripted, which on a managed server means a refusal that '
+        'rolls the whole run back')
+    assert 'CREATE EXTENSION IF NOT EXISTS hstore' not in script, 'same, for hstore'
+
+
+@pytest.mark.schema
+@pytest.mark.slow
+def test_scripting_extensions_can_be_turned_off(tmp_path):
+    """For a target whose extensions someone else administers."""
+    db_name = 'cfs_noext_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    if not citext_is_available(admin):
+        admin.close()
+        pytest.skip('citext is not available on this server')
+
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, """
+                CREATE EXTENSION citext;
+                CREATE SCHEMA app;
+                CREATE TABLE app.notes (id int PRIMARY KEY, label public.citext NOT NULL);
+            """)
+            on = generate_script(db_name, str(tmp_path))
+            off = generate_script(db_name, str(tmp_path), script_extensions=False)
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert 'CREATE EXTENSION IF NOT EXISTS citext' in on
+    assert 'CREATE EXTENSION' not in off, 'script_extensions: false still scripted an extension'
+    # The table is still scripted either way - only the extension is left out
+    assert 'app.notes' in off
