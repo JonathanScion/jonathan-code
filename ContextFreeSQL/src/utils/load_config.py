@@ -37,6 +37,51 @@ def _section(cls, data: dict, section: str):
     return cls(**data)
 
 
+def write_target_config_template(path: Union[str, Path], source: DBConnSettings) -> Path:
+    """Write a starting point for a --report-on file, shaped like the source's own connection.
+
+    The point is that the format is obvious: same keys, same spelling, the source's values already in
+    place so only the host and database have to change. A literal password is deliberately not copied -
+    duplicating a credential into a file nobody asked for is how secrets end up committed - but
+    password_command is, since it is a command rather than a secret and is the part that is fiddly to
+    get right.
+    """
+    path = Path(path)
+    database = {'host': source.host, 'db_name': source.db_name, 'user': source.user,
+                'port': source.port}
+    for name in ('sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'connect_timeout', 'password_command'):
+        value = getattr(source, name, None)
+        if value not in (None, ''):
+            database[name] = value
+    if not source.password_command:
+        database['password'] = ''
+
+    content = {
+        '_comment': 'Target for --report-on. Only the "database" section is read; what to script comes '
+                    'from the source config. Nothing here is changed on the target: the run compares and '
+                    'reports.',
+        'database': database,
+    }
+    if path.parent and not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(content, indent=2) + '\n', encoding='utf-8')
+    return path
+
+
+def load_target_db_conn(config_path: Union[str, Path]) -> DBConnSettings:
+    """The 'database' section of a --report-on file. Everything else in it, if any, is ignored."""
+    config_path = Path(config_path)
+    try:
+        data = json.loads(config_path.read_text(encoding='utf-8'))
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"{config_path} is not valid JSON: {e}") from None
+
+    if not isinstance(data, dict) or 'database' not in data:
+        raise ConfigError(f"{config_path} has no 'database' section, which is the one thing it needs.")
+
+    return _section(DBConnSettings, data['database'], 'database')
+
+
 def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
     """Load configuration from JSON file and return ConfigVals object."""
 

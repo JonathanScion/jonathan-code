@@ -179,6 +179,15 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
             sql_buffer.write("\t\t\tFROM ScriptRLSPolicies SRLSP\n")
         sql_buffer.write("\t\t) combined;\n")
         sql_buffer.write("\t\t\n")
+        # Hand the findings back instead of writing the file. Only the data goes back, a few KB of JSON
+        # rather than the rendered page: whoever ran the script has the template and can render it, and is
+        # the only one who can write to their own filesystem anyway
+        sql_buffer.write("\t\tIF reportToCaller = True THEN\n")
+        sql_buffer.write(f"\t\t\tINSERT INTO scriptreport (kind, name, content)\n")
+        sql_buffer.write(f"\t\t\tVALUES ('report', '{html_output_filename}', result_string);\n")
+        sql_buffer.write("\t\t\tRAISE NOTICE 'Report data returned to the caller (% entries)',"
+                         " COALESCE(json_array_length(result_string::json), 0);\n")
+        sql_buffer.write("\t\tELSE\n")
         sql_buffer.write("\t\t-- Read the HTML template file\n")
         sql_buffer.write("\t\tSELECT pg_read_file(input_file) INTO html_content;\n")
         sql_buffer.write("\t\t\n")
@@ -204,6 +213,7 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write("\t\tDROP TABLE temp_html_file;\n")
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\t\tRAISE NOTICE 'HTML report successfully created: %', output_file;\n")
+        sql_buffer.write("\t\tEND IF; --reportToCaller\n")
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\tEXCEPTION\n")
         sql_buffer.write("\t\tWHEN OTHERS THEN\n")

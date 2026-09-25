@@ -63,6 +63,25 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     buffer.write("\tIF FOUND THEN\n")
     buffer.write("\t\tDROP TABLE scriptoutput;\n")
     buffer.write("\tEND IF;\n")
+    if db_type == DBType.PostgreSQL:
+        # What reportToCaller fills instead of writing files. A temp table outlives the DO block for as long as
+        # the session does, so whoever ran the script can read it afterwards on the same connection
+        buffer.write("\tperform n.nspname, c.relname\n")
+        buffer.write("\tFROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n")
+        buffer.write("\tWHERE n.nspname LIKE 'pg_temp_%' AND c.relname='scriptreport' AND pg_catalog.pg_table_is_visible(c.oid);\n")
+        buffer.write("\tIF FOUND THEN\n")
+        buffer.write("\t\tDROP TABLE scriptreport;\n")
+        buffer.write("\tEND IF;\n")
+        buffer.write("\tCREATE TEMP TABLE scriptreport\n")
+        buffer.write("\t(\n")
+        buffer.write("\t\tid bigserial,\n")
+        buffer.write("\t\tkind character varying (32),   -- 'report' or 'diff'\n")
+        buffer.write("\t\tname character varying (256),  -- the file it should be written to\n")
+        buffer.write("\t\tent_schema character varying (128),\n")
+        buffer.write("\t\tent_name character varying (128),\n")
+        buffer.write("\t\tcontent text\n")
+        buffer.write("\t);\n")
+
     buffer.write("\tCREATE TEMP TABLE scriptoutput\n")
     buffer.write("\t(\n")
     if db_type == DBType.PostgreSQL:
@@ -520,6 +539,12 @@ def build_script_header(db_syntax: DBSyntax, scrpt_ops: ScriptingOptions, sql_sc
     header.write(f"{db_syntax.set_operator} {bool_to_sql(sql_script_params.html_report)}; -- Generate HTML comparison report for data differences\n")
     header.write(f"\t{db_syntax.var_prefix}exportCsv {db_syntax.boolean_type} ")
     header.write(f"{db_syntax.set_operator} {bool_to_sql(sql_script_params.export_csv)}; -- Export source/target data to CSV files\n")
+    if db_type == DBType.PostgreSQL:
+        # Hand the report back as rows instead of writing files. The files are written by the server, so they
+        # need a server that shares your filesystem; returning the data lets whoever ran the script write them
+        # instead. contextfreesql --report-on turns this on for its own run
+        header.write(f"\t{db_syntax.var_prefix}reportToCaller {db_syntax.boolean_type} ")
+        header.write(f"{db_syntax.set_operator} false; -- Return the report as rows rather than writing files\n")
     if include_base_path:
         header.write(f"\t{db_syntax.var_prefix}basePath TEXT ")
         header.write(f"{db_syntax.set_operator} '{base_path}'; -- Base path for CSV/HTML files. MODIFY THIS if you move the script!\n")

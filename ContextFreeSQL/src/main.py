@@ -9,13 +9,14 @@ import shutil
 import subprocess
 import signal
 
-from src.utils.load_config import load_config, ConfigError
+from src.utils.load_config import load_config, load_target_db_conn, write_target_config_template, ConfigError
 from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
 from src.data_load.fk_sampling import expand_for_fk_integrity
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 from src.infra.database import Database
+from src.report_on_target import run_and_write_report
 from src.version import __version__  # set in src/version.py, bumped per build
 
 # How long a password_command gets. Long enough for a token fetch that has to talk to a cloud,
@@ -249,6 +250,14 @@ More info:
         help='Path to config.json file (default: src/config.json)'
     )
     parser.add_argument(
+        '--report-on',
+        metavar='TARGET_CONFIG',
+        default=None,
+        help='Run the generated script against this target and write the HTML report locally. '
+             'The file needs only a "database" section. Nothing is changed on the target: the run '
+             'compares and reports. If the file does not exist it is created as a starting point.'
+    )
+    parser.add_argument(
         '--password', '-p',
         nargs='?',
         const='PROMPT',  # If --password is given without value, set to PROMPT
@@ -318,6 +327,44 @@ def run_password_command(command: str) -> str:
               file=sys.stderr)
         sys.exit(1)
     return password
+
+
+def resolve_target_config(path: str, source_db_conn):
+    """The target connection for --report-on, or a written template and a stop if the file is not there."""
+    target_path = Path(path)
+    if not target_path.exists():
+        written = write_target_config_template(target_path, source_db_conn)
+        print(f"\nThere was no target config at {written}, so one has been written, "
+              f"filled in from {source_db_conn.host}/{source_db_conn.db_name}.")
+        print("  Change 'host' and 'db_name' to the target, then run the same command again.")
+        if not source_db_conn.password_command:
+            print("  The password was deliberately not copied. Fill in \"password\", or use"
+                  " \"password_command\", PGPASSWORD, or leave it empty to be asked.")
+        sys.exit(1)
+
+    try:
+        target = load_target_db_conn(target_path)
+    except ConfigError as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if (target.host, target.db_name) == (source_db_conn.host, source_db_conn.db_name):
+        print(f"error: the target in {target_path} is the same database the script was generated from"
+              f" ({target.host}/{target.db_name}). Comparing a database with itself reports nothing."
+              f" Change 'host' or 'db_name'.", file=sys.stderr)
+        sys.exit(1)
+
+    if target.password_command:
+        target.password = run_password_command(target.password_command)
+    elif not target.password:
+        if os.environ.get('PGPASSWORD'):
+            target.password = os.environ['PGPASSWORD']
+        else:
+            target.password = getpass.getpass(f'Password for the target ({target.db_name} on {target.host}): ')
+
+    print(f"Target for the report: {target.db_name} on {target.host}")
+    check_connection(target)
+    return target
 
 
 def check_connection(db_conn) -> None:
@@ -402,6 +449,12 @@ def main():
     # errors and carries on, which for a failed connection meant the same line twenty times over and then a
     # complaint about db_ents_to_load, before anything had even been read
     check_connection(config_vals.db_conn)
+
+    # Before reading the source, which takes a while: a target file that is not there yet is written from
+    # the source's own connection, so the shape is obvious and only the host and database need changing
+    target_db_conn = None
+    if args.report_on:
+        target_db_conn = resolve_target_config(args.report_on, config_vals.db_conn)
 
     # Resolve output filename template placeholders
     config_vals.input_output.output_sql = resolve_output_filename(
@@ -523,6 +576,26 @@ def main():
        f.write(script)
 
     print(f"Script written to: {config_vals.input_output.output_sql}")
+
+    # --report-on: run that script against the target and write the report here. The script itself is
+    # untouched - it keeps the flags the config asked for, and the run uses its own copy with execCode off
+    if target_db_conn is not None:
+        try:
+            summary = run_and_write_report(
+                script=script,
+                target_conn_settings=target_db_conn,
+                template_path=config_vals.input_output.html_template_path,
+                output_path=config_vals.input_output.html_output_path,
+                source_label=f"{config_vals.db_conn.host}.{config_vals.db_conn.db_name}",
+            )
+        except Exception as e:
+            print(f"error: the comparison against the target failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"\n{summary['statements']} statement(s) would be needed to make"
+              f" {target_db_conn.db_name} match.")
+        for path in summary['written']:
+            print(f"Report written to: {path}")
 
 
 if __name__ == "__main__":
