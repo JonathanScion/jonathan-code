@@ -301,7 +301,9 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write("\t\t\t) ssql ON ssql.ent_schema = LOWER(st.table_schema) AND ssql.ent_name = LOWER(st.table_name)\n")
         # Aggregate once (not per table): scriptoutput can hold many data statements
         sql_buffer.write("\t\t\tLEFT JOIN (\n")
-        sql_buffer.write("\t\t\t\tSELECT LOWER(SO.ent_schema) AS ent_schema, LOWER(SO.ent_name) AS ent_name, json_agg(SO.SQLText ORDER BY SO.id) AS statements\n")
+        # Terminated the same way as the returned statements, so the report and the output agree
+        sql_buffer.write("\t\t\t\tSELECT LOWER(SO.ent_schema) AS ent_schema, LOWER(SO.ent_name) AS ent_name, "
+                         f"json_agg({utils.pg_terminated_statement('SO.SQLText')} ORDER BY SO.id) AS statements\n")
         sql_buffer.write("\t\t\t\tFROM scriptoutput SO\n")
         sql_buffer.write("\t\t\t\tWHERE SO.ent_schema IS NOT NULL\n")
         sql_buffer.write("\t\t\t\tGROUP BY LOWER(SO.ent_schema), LOWER(SO.ent_name)\n")

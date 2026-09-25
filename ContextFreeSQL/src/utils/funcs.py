@@ -338,3 +338,34 @@ def pg_text_array_literal(value: Any) -> str:
         quoted = ['"' + str(item).replace('\\', '\\\\').replace('"', '\\"') + '"' for item in value]
         text = '{' + ','.join(quoted) + '}'
     return "'" + text.replace("'", "''") + "'"
+
+
+def pg_terminated_statement(column: str) -> str:
+    """A SQL expression giving <column> with exactly one trailing semicolon, so the reported statements can
+    be copied and run as a batch.
+
+    Three kinds of row are left exactly as they are, because a semicolon would be wrong or just noise:
+      - one that already ends in ';'
+      - a description or comment row: scriptoutput carries those alongside the statements, and the DML print
+        writes whole commented-out INSERTs
+      - a statement whose last line is a trailing comment, where the ';' would land inside the comment and
+        silently swallow the end of the statement
+
+    The trailing whitespace is given explicitly. One-argument RTRIM removes spaces only, so a statement
+    ending in a newline kept it and the semicolon landed on a line of its own.
+
+    The whitespace characters are built with CHR() rather than written as escapes: the expression goes
+    through a Python string and then a SQL string literal, and a backslash does not survive both intact.
+    """
+    newline = "CHR(10)"
+    whitespace = f"' ' || CHR(9) || {newline} || CHR(13)"
+    trimmed = f"RTRIM({column}, {whitespace})"
+    last_line_is_a_comment = (
+        f"{trimmed} ~ ('(^|' || {newline} || ')[ ' || CHR(9) || ']*--[^' || {newline} || ']*$')"
+    )
+    return (
+        f"CASE WHEN {column} IS NULL OR BTRIM({column}) = '' THEN {column}"
+        f" WHEN {trimmed} LIKE '%;' THEN {column}"
+        f" WHEN {last_line_is_a_comment} THEN {column}"
+        f" ELSE {trimmed} || ';' END"
+    )

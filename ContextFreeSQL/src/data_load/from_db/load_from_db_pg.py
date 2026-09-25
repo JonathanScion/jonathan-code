@@ -24,6 +24,8 @@ class DBSchema(BaseModel):
     coded_ents: pd.DataFrame
     # Enum types, which tables using them depend on
     udts: pd.DataFrame = Field(default_factory=pd.DataFrame)
+    # Installed extensions: created on the target before anything that uses what they bring
+    extensions: pd.DataFrame = Field(default_factory=pd.DataFrame)
     # Security-related DataFrames
     roles: pd.DataFrame = Field(default_factory=pd.DataFrame)
     role_memberships: pd.DataFrame = Field(default_factory=pd.DataFrame)
@@ -54,6 +56,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
     check_constraints = _load_check_constraints(conn_settings)
     coded_ents = _load_coded_ents(conn_settings)
     udts = _load_user_defined_types(conn_settings)
+    extensions = _load_extensions(conn_settings)
     #defaults = #in MSSQL there was a separate query for defaults. in PG, seems to me that loading columns has defaults in it. so verify, and then if i implement MSSQL, see if need separate query or can go by PG format.
     #MSSQL was: SELECT SCHEMA_NAME(o.schema_id) AS table_schema, OBJECT_NAME(o.object_id) AS table_name, d.name as default_name, d.definition as default_definition, c.name as col_name FROM sys.default_constraints d INNER JOIN sys.objects o ON d.parent_object_id=o.object_id INNER jOIN sys.columns c on d.parent_object_id=c.object_id AND d.parent_column_id = c.column_id
 
@@ -91,6 +94,7 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         check_constraints = check_constraints,
         coded_ents = coded_ents,
         udts = udts,
+        extensions = extensions,
         roles = roles,
         role_memberships = role_memberships,
         schema_permissions = schema_permissions,
@@ -102,14 +106,72 @@ def load_all_schema(conn_settings: DBConnSettings, load_security: bool = True) -
         rls_tables = rls_tables
     )
 
+def _not_extension_owned(schema_expr: str, table_expr: str) -> str:
+    """A SQL predicate excluding tables that belong to an extension.
+
+    CREATE EXTENSION brings them, and a script that tries to build them itself fails - or, worse, half
+    succeeds. Every loader keyed by a table uses this, so an extension's tables are absent from the columns,
+    indexes, keys and constraints as well as from the table list.
+    """
+    return (f" AND NOT EXISTS (SELECT 1 FROM pg_class ext_c"
+            f" JOIN pg_namespace ext_n ON ext_n.oid = ext_c.relnamespace"
+            f" JOIN pg_depend ext_d ON ext_d.objid = ext_c.oid"
+            f" AND ext_d.classid = 'pg_class'::regclass AND ext_d.deptype = 'e'"
+            f" WHERE ext_n.nspname = {schema_expr} AND ext_c.relname = {table_expr}) ")
+
+
+def _load_extensions(conn_settings: DBConnSettings) -> pd.DataFrame:
+    """The installed extensions, so the script can create them before anything that needs them.
+
+    Without this, a table with a pgvector column fails on the target with 'type "public.vector" does not
+    exist': the type belongs to the extension, and no CREATE TYPE the script could write would produce it.
+    plpgsql is left out - every database has it, and it is not something a script should be creating.
+    """
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # schema_is_its_own: the extension created that schema itself, the way pg_cron creates 'cron'. Such an
+        # extension is not relocatable, and naming its schema in CREATE EXTENSION ... WITH SCHEMA is refused
+        sql = """SELECT e.extname AS extension_name, n.nspname AS schema_name, e.extversion AS version,
+                        EXISTS (SELECT 1 FROM pg_depend d
+                                WHERE d.classid = 'pg_namespace'::regclass AND d.objid = n.oid
+                                  AND d.deptype = 'e' AND d.refobjid = e.oid) AS schema_is_its_own
+                 FROM pg_extension e
+                 JOIN pg_namespace n ON n.oid = e.extnamespace
+                 WHERE e.extname <> 'plpgsql'
+                 ORDER BY e.extname"""
+        cur.execute(sql)
+        return _results_to_df(cur, cur.fetchall())
+
+    except Exception as e:
+        print(f"Error loading extensions: {e}")
+        return pd.DataFrame()
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 def _load_schemas(conn_settings: DBConnSettings) -> pd.DataFrame:
     conn = None
     cur = None
     try:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        sql =  """select schema_name, schema_owner as principal_name from information_schema.schemata 
-                    WHERE schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and schema_name NOT LIKE 'pg_temp%' and schema_name NOT LIKE 'pg_toast%'"""
+        # A schema an extension brought with it is left out: CREATE EXTENSION makes it, and trying to make it
+        # here fails anyway. pg_cron's 'cron' schema is owned by a superuser the connecting user cannot SET
+        # ROLE to, so the CREATE SCHEMA ... AUTHORIZATION is refused outright
+        sql =  """select s.schema_name, s.schema_owner as principal_name from information_schema.schemata s
+                    WHERE s.schema_name NOT IN ('pg_catalog','information_schema', 'pg_toast') and s.schema_name NOT LIKE 'pg_temp%' and s.schema_name NOT LIKE 'pg_toast%'
+                    AND NOT EXISTS (
+                        SELECT 1 FROM pg_depend d
+                        JOIN pg_namespace n ON n.oid = d.objid
+                        WHERE d.classid = 'pg_namespace'::regclass AND d.deptype = 'e'
+                          AND n.nspname = s.schema_name)"""
         cur.execute(sql)
          
         results = cur.fetchall()
@@ -138,7 +200,13 @@ def _load_tables(conn_settings: DBConnSettings) -> pd.DataFrame:
                             NULL as ident_seed, 
                             NULL as ident_incr, Now() as db_now, null as table_sql  
                             FROM information_schema.TABLES E where TABLE_TYPE LIKE '%TABLE%'
-                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')""" 
+                            and TABLE_SCHEMA not in ('information_schema', 'pg_catalog')
+                            and not exists (select 1 from pg_class c
+                                            join pg_namespace n on n.oid = c.relnamespace
+                                            join pg_depend d on d.objid = c.oid
+                                                            and d.classid = 'pg_class'::regclass
+                                                            and d.deptype = 'e'
+                                            where n.nspname = E.table_schema and c.relname = E.table_name)"""
         cur.execute(sql)
          
         results = cur.fetchall()
@@ -178,7 +246,7 @@ def _load_tables_columns(conn_settings: DBConnSettings) -> pd.DataFrame:
                             case WHEN is_identity  = 'YES' then 1 WHEN is_identity  = 'NO' then 0 END AS is_identity, 
                             identity_generation, identity_start as indent_seed, identity_increment as indent_incr, identity_maximum, identity_minimum, identity_cycle
                             FROM information_schema.COLUMNS C
-                             where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') """
+                             where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') """ + _not_extension_owned('C.TABLE_SCHEMA', 'C.TABLE_NAME')
         cur.execute(sql)
         results = cur.fetchall()
         
@@ -326,8 +394,9 @@ def _load_tables_indexes(conn_settings: DBConnSettings) -> pd.DataFrame:
                 inner JOIN pg_class cls ON cls.oid=ix.indexrelid inner JOIN pg_am am ON am.oid=cls.relam
                 inner join pg_indexes idx on idx.schemaname=scm.nspname and idx.tablename=t.relname and idx.indexname=i.relname
                 Left Join pg_constraint cnst on t.oid = cnst.conrelid And i.oid=cnst.conindid And cnst.contype='u'	
-            where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')"""
-            
+            where scm.nspname not in ('pg_catalog','information_schema', 'pg_toast')
+            """ + _not_extension_owned('scm.nspname', 't.relname')
+
         cur.execute(sql)
         results = cur.fetchall()
 
@@ -468,7 +537,8 @@ def _load_tables_foreign_keys(conn_settings: DBConnSettings) -> pd.DataFrame:
                             inner join pg_namespace ns on ns.oid = t.relnamespace
                             inner join pg_class t_f on fk.confrelid=t_f.oid
                                 inner join pg_namespace ns_f on ns_f.oid = t_f.relnamespace
-                        where fk.contype = 'f'"""
+                        where fk.contype = 'f'
+                        """ + _not_extension_owned('ns.nspname', 't.relname')
         cur.execute(sql)
         results = cur.fetchall()
         
@@ -605,6 +675,7 @@ def _load_check_constraints(conn_settings: DBConnSettings) -> pd.DataFrame:
             INNER JOIN pg_namespace ns ON t.relnamespace = ns.oid
             WHERE con.contype = 'c'
               AND ns.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+              """ + _not_extension_owned('ns.nspname', 't.relname') + """
               AND ns.nspname NOT LIKE 'pg_temp%'
             ORDER BY ns.nspname, t.relname, con.conname
         """
@@ -651,8 +722,12 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
                 'V' as EntType, 'View' as enttype_pg, 
                 'CREATE OR REPLACE VIEW ' || table_schema || '.' || table_name || E'\\nAS\\n' || view_definition AS definition, 
                 NULL as param_type_list 
-        From information_schema.views
+        From information_schema.views v
         Where table_schema Not In ('information_schema', 'pg_catalog')
+        -- Anything an extension owns is created by CREATE EXTENSION, not by this script
+        And Not Exists (Select 1 From pg_class c Join pg_namespace n On n.oid = c.relnamespace
+                        Join pg_depend d On d.objid = c.oid And d.classid = 'pg_class'::regclass And d.deptype = 'e'
+                        Where n.nspname = v.table_schema And c.relname = v.table_name)
         UNION
         Select n.nspname || '.' || p.proname  AS EntKey, n.nspname as code_schema,
             p.proname as code_name,    
@@ -669,7 +744,9 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
         Left Join pg_namespace n on p.pronamespace = n.oid
         Left Join pg_language l on p.prolang = l.oid
         Left Join pg_type t on t.oid = p.prorettype 
-        where n.nspname Not in ('pg_catalog', 'information_schema')            
+        where n.nspname Not in ('pg_catalog', 'information_schema')
+        And Not Exists (Select 1 From pg_depend d Where d.objid = p.oid
+                        And d.classid = 'pg_proc'::regclass And d.deptype = 'e')
         UNION
         Select n.nspname || '.' || tg.tgname AS EntKey, n.nspname As code_schema,
             tg.tgname As code_name,
@@ -682,6 +759,8 @@ def _load_coded_ents(conn_settings: DBConnSettings) -> pd.DataFrame:
         Join pg_namespace n on n.oid = c.relnamespace
         Where NOT tg.tgisinternal
         And n.nspname Not In ('pg_catalog', 'information_schema')
+        And Not Exists (Select 1 From pg_depend d Where d.objid = c.oid
+                        And d.classid = 'pg_class'::regclass And d.deptype = 'e')
         """
         #AND ( (n.nspname || '.' || p.proname) IN ({','.join(coded_schema_name_in)}) ) NOTE: reactivate this if you wnat specific loading. right above the last UNION
         # In implementation, this would be queried using an appropriate DB adapter
@@ -716,10 +795,12 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
                     table_schema as EntSchema, table_name as EntName, 'U' as EntBaseType, 'Table' AS EntType, NULL as EntParamList, NULL as EntParamListTypes
                 FROM information_schema.tables
                 where table_schema not in ('information_schema', 'pg_catalog') and TABLE_TYPE<>'VIEW'
+                """ + _not_extension_owned('table_schema', 'table_name') + """
                 UNION
                 select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, table_schema || '.' || table_name AS EntKey,table_schema as EntSchema, table_name as EntName, 'V' as EntBaseType, 'View' as EntType, NULL as EntParamList, NULL as EntParamListTypes
                 from information_schema.views
                 where table_schema not in ('information_schema', 'pg_catalog')
+                """ + _not_extension_owned('table_schema', 'table_name') + """
                 UNION
                 select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, n.nspname || '.' || p.proname  AS EntKey, n.nspname as EntSchema,
                     p.proname as EntName,
@@ -732,6 +813,8 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
                 left join pg_language l on p.prolang = l.oid
                 left join pg_type t on t.oid = p.prorettype
                 where n.nspname not in ('pg_catalog', 'information_schema')
+                  and not exists (select 1 from pg_depend ext_d where ext_d.objid = p.oid
+                                  and ext_d.classid = 'pg_proc'::regclass and ext_d.deptype = 'e')
                 UNION
                 Select CAST(1 as boolean) AS ScriptSchema, CAST(0 as boolean) as ScriptData, CAST(0 as bit) as ScriptSortOrder, trigger_schema || '.' || trigger_name AS EntKey, trigger_schema As EntSchema,
                                         trigger_name As EntName,
@@ -739,6 +822,8 @@ def load_all_db_ents(conn_settings: DBConnSettings, entity_filter: Optional[List
                                         'Trigger' as EntType,
                                         NULL as EntParamList, NULL as EntParamListTypes
                 FROM information_schema.triggers
+                WHERE trigger_schema not in ('information_schema', 'pg_catalog')
+                """ + _not_extension_owned('event_object_schema', 'event_object_table') + """
                 Group By 1, 2, 3, 4, 5, 6, 7, 8"""
         cur.execute(entities_sql)
         entities_results = cur.fetchall()

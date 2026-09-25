@@ -9,4 +9,4 @@ Used by:
 Versioning: MAJOR.MINOR.PATCH - MINOR for new features, PATCH for fixes only.
 """
 
-__version__ = '0.5.3'
+__version__ = '0.6.0'

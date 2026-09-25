@@ -6,10 +6,12 @@ from src.data_load.from_db.load_from_db_pg import DBSchema
 from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput, ListTables, SQLScriptParams
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.user_types import create_user_types
+from src.generate.generate_db_ent_types.extensions import create_extensions
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
 from src.generate.generate_db_ent_types.generate_state_tables.tables_check_constraints import create_db_state_check_constraints
 from src.utils import code_funcs
+from src.utils import funcs as utils
 from src.version import __version__
 
 from src.generate.generate_final_indexes_fks import generate_pre_drop_post_add_indexes_fks
@@ -208,6 +210,11 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     scripted_cols = schema_tables.columns
     if got_specific_tables and not tbl_ents.empty and 'entkey' in tbl_ents.columns:
         scripted_cols = schema_tables.columns[schema_tables.columns['object_id'].isin(set(tbl_ents['entkey']))]
+    # Before the types and tables: a column can be of a type an extension owns, and nothing else can create it
+    create_exts = create_extensions(db_type, schema_tables.extensions)
+    if create_exts.getvalue():
+        buffer.write(create_exts.getvalue())
+
     create_types = create_user_types(db_type, schema_tables.udts, scripted_cols, got_specific_tables)
     if create_types.getvalue():
         buffer.write(create_types.getvalue())
@@ -465,7 +472,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     if db_type == DBType.PostgreSQL:
         buffer.write("END; --main DO block\n")
         buffer.write("$$\n")
-        buffer.write(";select SQLText from scriptoutput WHERE NOT report_only ORDER BY id\n")
+        # Every reported statement ends in a semicolon, so the whole result can be copied and run as a batch
+        buffer.write(f";select {utils.pg_terminated_statement('SQLText')} AS SQLText"
+                     " from scriptoutput WHERE NOT report_only ORDER BY id\n")
 
     elif db_type == DBType.MSSQL:
         buffer.write("SET NOCOUNT OFF\n")

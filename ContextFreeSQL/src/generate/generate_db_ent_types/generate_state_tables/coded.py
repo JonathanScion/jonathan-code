@@ -264,6 +264,10 @@ where DB.ent_name Is null
     RIGHT JOIN (Select v.table_schema || '.' || v.table_name AS EntKey, v.table_schema as ent_schema, v.table_name as ent_name, 'View' as ent_type, '' as param_type_list 
         From information_schema.views v
         Where v.table_schema Not In ('information_schema', 'pg_catalog')
+        -- What an extension owns is not extra: it belongs to the extension, and dropping it is refused
+        And Not Exists (Select 1 From pg_class xc Join pg_namespace xn On xn.oid = xc.relnamespace
+                        Join pg_depend xd On xd.objid = xc.oid And xd.classid = 'pg_class'::regclass And xd.deptype = 'e'
+                        Where xn.nspname = v.table_schema And xc.relname = v.table_name)
         UNION
         Select n.nspname || '.' || p.proname AS EntKey, n.nspname as ent_schema,
         p.proname As ent_name,
@@ -275,11 +279,16 @@ where DB.ent_name Is null
         From pg_proc p 
         Left Join pg_namespace n on p.pronamespace = n.oid
         where n.nspname Not in ('pg_catalog', 'information_schema')
+        And Not Exists (Select 1 From pg_depend xd Where xd.objid = p.oid
+                        And xd.classid = 'pg_proc'::regclass And xd.deptype = 'e')
         UNION
         Select t.trigger_schema || '.' || t.trigger_name AS ent_type, t.trigger_schema As ent_schema,
         t.trigger_name As ent_name,
         'Trigger' as enttype, '' as param_type_list
         From information_schema.triggers t
+        Where Not Exists (Select 1 From pg_class xc Join pg_namespace xn On xn.oid = xc.relnamespace
+                        Join pg_depend xd On xd.objid = xc.oid And xd.classid = 'pg_class'::regclass And xd.deptype = 'e'
+                        Where xn.nspname = t.event_object_schema And xc.relname = t.event_object_table)
         Group By 1, 2, 3, 4
     ) DB ON LOWER(J.ent_schema) = LOWER(DB.ent_schema) 
     AND LOWER(J.ent_name) = LOWER(DB.ent_name) 

@@ -55,11 +55,11 @@ It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped in
 header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
 
 ```bash
-python -m src.main --version      # contextfreesql 0.5.3
+python -m src.main --version      # contextfreesql 0.6.0
 ```
 
 ### Testing
-145 tests, and they have teeth: most of them build a scratch database, generate a script from it,
+148 tests, and they have teeth: most of them build a scratch database, generate a script from it,
 run that script against a second database and compare the two. Bugs in this project are found by
 running real SQL against real PostgreSQL, so a test that only inspects generated text is worth
 little - make it execute.
@@ -375,6 +375,10 @@ for ever afterwards (see `docs/TODO.md`):
 - **`nextval` defaults:** left alone, since the sequence name differs per database
 - **Tables with no primary key or unique index:** their data cannot be compared, so it is skipped
 - **Generated columns:** a type change on one is reported, not applied
+- **Extensions:** created when missing, but never upgraded (that is `ALTER EXTENSION ... UPDATE`, which can
+  rewrite data) and never dropped (dropping one takes everything depending on it). What an extension owns -
+  its types, functions, tables and its own schema - is left out of the comparison entirely, on both sides:
+  `CREATE EXTENSION` brings those, and neither creating nor dropping them object by object works
 
 ## Security Scripting
 

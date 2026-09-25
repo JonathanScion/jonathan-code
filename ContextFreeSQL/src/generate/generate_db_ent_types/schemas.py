@@ -66,11 +66,15 @@ def create_db_state_schemas(dbtype: DBType, tbl_ents: pd.DataFrame, tbl_schemas:
                 sql_create += f" AUTHORIZATION {row['principal_name']};"
             create_schemas.write(sql_create + "');\n")
         else:  # PostgreSQL
-            sql_create = f"{'\t' * ident_level}'CREATE SCHEMA {row['schema_name']}"
+            # Quoted, and only where it is needed. A role or schema whose name holds anything outside
+            # [a-z0-9_] is a syntax error bare: an Azure managed identity such as
+            # cze-a-i-nucowm-x-mikub-01-app parses as a subtraction, and a name that is merely capitalised
+            # would be silently folded to lower case and then not exist
+            sql_create = f"{'\t' * ident_level}'CREATE SCHEMA {utils.pg_quote_ident(row['schema_name'])}"
             if pd.isna(row['principal_name']):
                 sql_create += ";"
             else:
-                sql_create += f" AUTHORIZATION {row['principal_name']};"
+                sql_create += f" AUTHORIZATION {utils.pg_quote_ident(row['principal_name'])};"
             create_schemas.write(sql_create + "');\n")
 
     #now update against existing schemas

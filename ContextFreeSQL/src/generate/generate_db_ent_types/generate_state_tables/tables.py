@@ -273,6 +273,9 @@ def create_db_state_tables(
             RIGHT JOIN ( SELECT t.table_schema ,
             t.table_name
             FROM   information_schema.tables t  where t.table_schema not in ('information_schema', 'pg_catalog') AND t.table_schema NOT LIKE 'pg_temp%'  AND table_type like '%TABLE%'
+            AND NOT EXISTS (SELECT 1 FROM pg_class xc JOIN pg_namespace xn ON xn.oid = xc.relnamespace
+                            JOIN pg_depend xd ON xd.objid = xc.oid AND xd.classid = 'pg_class'::regclass AND xd.deptype = 'e'
+                            WHERE xn.nspname = t.table_schema AND xc.relname = t.table_name)
             ) DB ON LOWER(J.table_schema) = LOWER(DB.table_schema)
             AND LOWER(J.table_name) = LOWER(DB.table_name)
             WHERE J.table_name Is NULL{extras_schema_sql}; """
