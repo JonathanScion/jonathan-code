@@ -46,8 +46,10 @@ The SSL settings and `connect_timeout` are passed to PostgreSQL only when presen
 keeps libpq's own behaviour along with its environment variables (`PGSSLMODE`, `PGSSLROOTCERT`, and so
 on). That means `PGSSLMODE=require` works without changing the config file at all.
 
-A password is taken from the first of these that has one: `--password`, `PGPASSWORD`,
-`password_command`, `password`, and finally a prompt. Nothing at all is not an error - trust
+A password is taken from the first of these that has one: `--password`, `password_command`,
+`PGPASSWORD`, `password`, and finally a prompt. `password_command` comes before `PGPASSWORD` on
+purpose: it is there to fetch a credential that expires, and a stale token sitting in the
+environment would otherwise beat it. Nothing at all is not an error - trust
 authentication and `~/.pgpass` both want no password sent.
 
 ### Azure Database for PostgreSQL with Microsoft Entra

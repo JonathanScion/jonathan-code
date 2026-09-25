@@ -223,9 +223,10 @@ Examples:
 
 Priority (highest to lowest):
   1. Command line arguments (--password)
-  2. Environment variables (PGPASSWORD, etc.)
-  3. config.json values
-  4. Interactive prompt (for password only)
+  2. "password_command" in the config (run every time, for a credential that expires)
+  3. Environment variables (PGPASSWORD, etc.)
+  4. config.json values
+  5. Interactive prompt (for password only)
 
 Description:
   Extracts complete schema and data from a PostgreSQL database and generates
@@ -437,18 +438,24 @@ def main():
         config_vals.db_conn.db_name = os.environ['PGDATABASE']
     # PGPASSWORD is handled below with other password options
 
-    # Handle password: command line > env var > password_command > config file > interactive prompt
+    # Handle password: command line > password_command > env var > config file > interactive prompt.
+    #
+    # password_command comes before PGPASSWORD deliberately. It exists to fetch a credential that goes
+    # stale - an Entra access token lasts about an hour - and a PGPASSWORD left over from an earlier shell
+    # beat it, so the command never ran and the run failed with 'The access token has expired'. The
+    # environment cannot be reasoned about; a command in this config was put there on purpose.
+    # --password still wins over both, for the one-off override.
     if args.password == 'PROMPT':
         # --password flag given without value, prompt for it
         config_vals.db_conn.password = getpass.getpass('Password: ')
     elif args.password is not None:
         # --password=value given, use it
         config_vals.db_conn.password = args.password
+    elif config_vals.db_conn.password_command:
+        config_vals.db_conn.password = run_password_command(config_vals.db_conn.password_command)
     elif os.environ.get('PGPASSWORD'):
         # Environment variable set, use it
         config_vals.db_conn.password = os.environ['PGPASSWORD']
-    elif config_vals.db_conn.password_command:
-        config_vals.db_conn.password = run_password_command(config_vals.db_conn.password_command)
     elif not config_vals.db_conn.password:
         # Nothing anywhere. Not an error: trust authentication and ~/.pgpass both want no password sent
         config_vals.db_conn.password = getpass.getpass('Password: ')

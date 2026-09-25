@@ -81,3 +81,39 @@ def test_a_command_that_hangs_is_killed(monkeypatch):
     took = time.monotonic() - started
     assert exit_info.value.code == 1
     assert took < 60, f'it waited {took:.0f}s, so the timeout did not take effect'
+
+
+def test_password_command_beats_a_stale_environment_variable(tmp_path, monkeypatch):
+    """
+    PGPASSWORD must not shadow password_command.
+
+    An Entra access token lasts about an hour. With PGPASSWORD winning, a token exported into the shell
+    earlier in the day beat the command that exists to fetch a fresh one, and the run failed with 'The
+    access token has expired' while a perfectly good password_command sat in the config unused.
+    """
+    import json
+    import subprocess
+    config = {
+        'database': {'host': 'localhost', 'db_name': 'nonexistent_db_for_this_test',
+                     'user': 'postgres', 'port': '5432',
+                     'password_command': py("print('from-the-command')"),
+                     'connect_timeout': 3},
+        'scripting_options': {}, 'table_script_ops': {},
+        'db_ents_to_load': {'tables': [], 'schemas': []}, 'tables_data': {'tables': [], 'schemas': []},
+        'input_output': {},
+    }
+    path = tmp_path / 'c.json'
+    path.write_text(json.dumps(config), encoding='utf-8')
+
+    environment = dict(os.environ, PGPASSWORD='stale-token-from-this-morning')
+    result = subprocess.run([sys.executable, '-m', 'src.main', str(path)],
+                            capture_output=True, text=True, env=environment,
+                            cwd=str(Path(__file__).parent.parent))
+    output = result.stdout + result.stderr
+
+    # It cannot connect - the database does not exist - but it must have run the command to get there
+    assert 'Fetching the password with' in output, (
+        'password_command was skipped while PGPASSWORD was set:\n' + output)
+
+
+import os  # noqa: E402  (used by the test above)
