@@ -187,6 +187,8 @@ Command Line Options Summary:
 | --help           | -h    | Show this help message                           |
 | --version        | -v    | Show version number                              |
 | --show-config    | -c    | Show full config.json documentation              |
+| --report-on FILE |       | Compare against that target, write the report    |
+|                  |       | here. Changes nothing on the target              |
 | --password VALUE | -p    | Override database password from config           |
 | --password       | -p    | Prompt for password interactively                |
 | config           |       | Path to config.json (default: src/config.json)   |
@@ -204,6 +206,12 @@ Environment Variables (override config.json values):
         epilog='''
 Examples:
   contextfreesql config.json                    Run with config file
+  contextfreesql config.json --report-on target.json
+                                                Compare against target.json's database and
+                                                write the HTML report here. Nothing on the
+                                                target is changed. The target file needs only
+                                                a "database" section, and is written for you
+                                                if it does not exist yet
   contextfreesql config.json --password=secret  Override password
   contextfreesql config.json -p                 Prompt for password
   contextfreesql --show-config                  Show config.json documentation

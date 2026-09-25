@@ -112,6 +112,51 @@ PGPASSWORD=secret PGHOST=prod-server contextfreesql config.json
 
 ---
 
+## Reporting against a remote target: `--report-on`
+
+The generated script writes its HTML report with `pg_read_file` and `COPY TO`, which run on the
+**database server**. Against a managed PostgreSQL that cannot work: those need rights Azure and RDS do
+not grant, and the server's filesystem is not yours in any case. Run the comparison through the tool
+instead, and the report is written here:
+
+```bash
+contextfreesql source-config.json --report-on target-config.json
+```
+
+The script is generated exactly as usual and is left as it is. It is then run against the target with
+`execCode` **off** — comparing and reporting, changing nothing — and `database_report.html` and the
+per-entity diff pages are written to `input_output.html_output_path` and `diff_output_dir`. Applying the
+changes stays separate: the `.sql` is yours to run once you have read the report.
+
+The target file holds **only a `database` section**, with the same options as the source's. Everything
+about *what* to script still comes from the source config.
+
+```json
+{
+  "database": {
+    "host": "target.postgres.database.azure.com",
+    "db_name": "postgres",
+    "user": "you@yourcompany.com",
+    "sslmode": "require",
+    "password_command": "az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv"
+  }
+}
+```
+
+If the file does not exist it is written for you, filled in from the source's own connection so the shape
+is obvious, and the run stops so you can edit it. A literal `password` is deliberately not copied -
+duplicating a credential into a file nobody asked for is how secrets end up committed - but
+`password_command` is, since it is a command rather than a secret. Pointing it at the source's own
+database is refused: a database compared with itself reports nothing.
+
+**The connecting role has to be able to see the target.** A role sees nothing of a table it holds no
+privilege on, so a half-privileged role produces a report calling objects missing that are sitting right
+there - and acting on that, with `execCode` on, would try to create what already exists. The run counts
+what the role can see against what the catalog holds and says so when they differ; `pg_read_all_data` is
+enough to fix it.
+
+---
+
 ## Section: `scripting_options`
 
 Controls what gets scripted and how.
