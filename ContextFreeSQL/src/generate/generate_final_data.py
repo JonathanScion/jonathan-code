@@ -1856,7 +1856,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\tEND IF;\n")
             # Report output only: a failure here must not stop the script
             out_buffer.write("\tEXCEPTION WHEN OTHERS THEN\n")
-            out_buffer.write(f"\t\tRAISE NOTICE 'Error exporting CSV for {s_ent_full_name}: %', SQLERRM;\n")
+            out_buffer.write(f"\t\tRAISE WARNING 'Could not export CSV for {s_ent_full_name}: %. The export is "
+                             f"written by the database server itself (COPY TO), so it needs a server that "
+                             f"shares your filesystem - a local PostgreSQL.', SQLERRM;\n")
             out_buffer.write("\tEND;\n")
             out_buffer.write("END IF;\n\n")
 
@@ -1922,7 +1924,9 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: %', basePath || '/{compare_html_filename}';\n")
             # Report output only: a failure here must not stop the script
             out_buffer.write("\t\tEXCEPTION WHEN OTHERS THEN\n")
-            out_buffer.write(f"\t\t\tRAISE NOTICE 'Error creating comparison HTML for {s_ent_full_name}: %', SQLERRM;\n")
+            out_buffer.write(f"\t\t\tRAISE WARNING 'Could not write the comparison page for {s_ent_full_name}: "
+                             f"%. It is written by the database server itself (pg_read_file and COPY TO), so it "
+                             f"needs a server that shares your filesystem - a local PostgreSQL.', SQLERRM;\n")
             out_buffer.write("\t\tEND;\n")
             out_buffer.write("\tEND IF;\n")
 

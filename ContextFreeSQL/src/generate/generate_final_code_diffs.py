@@ -361,7 +361,9 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\tEXCEPTION\n")
         sql_buffer.write("\t\tWHEN OTHERS THEN\n")
-        sql_buffer.write("\t\t\tRAISE NOTICE 'Error creating diff files: %', SQLERRM;\n")
+        sql_buffer.write("\t\t\tRAISE WARNING 'Could not write the diff pages: %. They are written by the "
+                         "database server itself (pg_read_file and COPY TO), so they need a server that "
+                         "shares your filesystem - a local PostgreSQL.', SQLERRM;\n")
         sql_buffer.write("\tEND;\n")
         sql_buffer.write("END IF; --htmlReport (code diffs)\n")
 

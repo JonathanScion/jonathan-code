@@ -207,7 +207,12 @@ def generate_html_report(db_type: DBType, sql_buffer, input_output: InputOutput,
         sql_buffer.write("\t\t\n")
         sql_buffer.write("\tEXCEPTION\n")
         sql_buffer.write("\t\tWHEN OTHERS THEN\n")
-        sql_buffer.write("\t\t\tRAISE NOTICE 'Error creating HTML report: %', SQLERRM;\n")
+        # A WARNING, not a NOTICE: many clients do not show notices at all, so this failed in silence and
+        # looked like the report had simply not been asked for. The cause is almost always the same one
+        sql_buffer.write("\t\t\tRAISE WARNING 'Could not write the HTML report: %. The report is written by "
+                         "the database server itself (pg_read_file and COPY TO), so it needs a server that "
+                         "shares your filesystem - a local PostgreSQL. A managed server (Azure, RDS) grants "
+                         "neither, and its filesystem is not yours anyway.', SQLERRM;\n")
         sql_buffer.write("\tEND;\n")
         sql_buffer.write("END IF; --htmlReport\n")
 
