@@ -11,6 +11,9 @@ a few KB of JSON describing what it found, and the template is filled in here.
 
 Nothing is changed on the target: the script runs with execCode off.
 """
+import csv
+from decimal import Decimal
+import io
 import json
 import re
 from datetime import datetime
@@ -102,6 +105,64 @@ def warn_about_what_the_role_cannot_see(conn, user: str) -> int:
     return hidden
 
 
+def _rows_to_csv(rows, header) -> str:
+    """The target's rows as CSV, written the way the source CSV was so the page compares like with like.
+
+    The page reads both sides as CSV and matches them in the browser, so any difference in how a value is
+    spelled reads as a changed row. csv.writer with the source's own header order is what keeps them the
+    same - a boolean coming back from json as True has to land as 'true', the way the source side writes it.
+    """
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator='\n')
+    writer.writerow(header)
+    for row in rows:
+        values = []
+        for column in header:
+            value = row.get(column)
+            if value is None:
+                values.append('')
+            elif isinstance(value, bool):
+                values.append('true' if value else 'false')
+            elif isinstance(value, (dict, list)):
+                values.append(json.dumps(value))
+            else:
+                values.append(str(value))
+        writer.writerow(values)
+    return buffer.getvalue()
+
+
+def _write_data_compare_page(payload: dict, name: str, template: str, out_dir: Path) -> tuple:
+    """One data comparison page: the source CSV from disk, the target's rows from the script."""
+    source_csv_path = out_dir / payload.get('sourceCsvName', '')
+    source_csv = source_csv_path.read_text(encoding='utf-8') if source_csv_path.is_file() else ''
+
+    rows = payload.get('target_rows') or []
+    # The source CSV's header decides the columns and their order, so both sides line up. With no source
+    # side (a table the script has no rows for) the target's own keys are all there is to go on
+    if source_csv:
+        header = next(csv.reader(io.StringIO(source_csv)), [])
+    else:
+        header = list(rows[0].keys()) if rows else []
+    target_csv = _rows_to_csv(rows, header) if header else ''
+
+    data = {
+        'source': source_csv,
+        'target': target_csv,
+        'keys': payload.get('keys') or [],
+        'includeEqualRows': bool(payload.get('includeEqualRows')),
+        'tableName': payload.get('tableName', ''),
+        'sourceLabel': payload.get('sourceLabel', ''),
+        'targetLabel': payload.get('targetLabel', ''),
+        'version': __version__,
+    }
+    injected = '<script>window.autoLoadData = ' + json.dumps(data).replace('</', '<\\/') + ';</script>'
+    page = template.replace('</head>', injected + '</head>')
+    (out_dir / name).write_text(page, encoding='utf-8')
+
+    truncated = len(rows) >= int(payload.get('rowCap') or 0) > 0
+    return len(rows), truncated
+
+
 def run_and_write_report(script: str, target_conn_settings, template_path: str, output_path: str,
                          source_label: str, diff_template_path: str = '', diff_output_dir: str = '') -> dict:
     """Run the script against the target, then write the report from what it hands back.
@@ -134,6 +195,9 @@ def run_and_write_report(script: str, target_conn_settings, template_path: str, 
     diff_template = (Path(diff_template_path).read_text(encoding='utf-8')
                      if diff_template_path and Path(diff_template_path).exists() else None)
     diffs_written = 0
+    data_written = 0
+    data_truncated = []
+    data_skipped = []
 
     for kind, name, content in payloads:
         if kind == 'report':
@@ -144,6 +208,22 @@ def run_and_write_report(script: str, target_conn_settings, template_path: str, 
             # Beside the report, which is where its links point
             destination = Path(diff_output_dir or Path(output_path).parent) / name
             diffs_written += 1
+        elif kind == 'data':
+            out_dir = Path(diff_output_dir or Path(output_path).parent)
+            compare_template_path = out_dir / 'csv_compare_standalone.html'
+            if not compare_template_path.is_file():
+                data_skipped.append(name)
+                continue
+            # parse_float=Decimal keeps the digits PostgreSQL sent. numeric(8,2) comes back as 5.50, and a
+            # float turns that into 5.5 - so a row identical on both sides would read as different on that
+            # column, which is the one thing a comparison page must not do
+            payload = json.loads(content, parse_float=Decimal)
+            rows, truncated = _write_data_compare_page(
+                payload, name, compare_template_path.read_text(encoding='utf-8'), out_dir)
+            data_written += 1
+            if truncated:
+                data_truncated.append(f"{name} ({rows} rows)")
+            continue
         else:
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -151,8 +231,19 @@ def run_and_write_report(script: str, target_conn_settings, template_path: str, 
         if kind == 'report':
             written.append(str(destination))
 
+    where = diff_output_dir or Path(output_path).parent
     if diffs_written:
-        written.append(f"{diffs_written} diff page(s) in {diff_output_dir or Path(output_path).parent}")
+        written.append(f"{diffs_written} diff page(s) in {where}")
+    if data_written:
+        written.append(f"{data_written} data comparison page(s) in {where}")
+    if data_skipped:
+        print(f"  {len(data_skipped)} data comparison page(s) were not written: the template"
+              f" csv_compare_standalone.html is not in {where}.")
+    if data_truncated:
+        print(f"  The target side was capped for {len(data_truncated)} table(s), so rows past the cap read as"
+              f" missing from it: {', '.join(data_truncated[:4])}"
+              f"{' ...' if len(data_truncated) > 4 else ''}")
+        print("  Raise tables_data.max_rows_per_table, or compare those tables on their own.")
 
     if not payloads:
         print("  The script returned no report data. Its htmlReport flag may have been off when it was"

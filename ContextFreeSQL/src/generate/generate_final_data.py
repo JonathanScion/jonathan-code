@@ -1897,7 +1897,30 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write("\t\t\ttarget_csv text;\n")
             out_buffer.write("\t\t\tfinal_html text;\n")
             out_buffer.write("\t\t\tinjected_script text;\n")
+            out_buffer.write("\t\t\ttarget_rows text;\n")
             out_buffer.write("\t\tBEGIN\n")
+            # Hand the target's rows back and let the caller build the page. The source side is already a CSV
+            # file on the caller's disk - this tool wrote it - so only the target's rows have to travel, and
+            # they have to travel whatever happens: they are the one thing only the server can see.
+            # Capped, because a target table is a real table and this goes over the wire
+            configured_cap = tables_data.max_rows_per_table if tables_data else 0
+            target_row_cap = configured_cap if configured_cap and configured_cap > 0 else 50000
+            include_equal_rows_early = "true" if script_ops.data_comparison_include_equal_rows else "false"
+            quoted_cols = ", ".join(utils.pg_quote_ident(c) for c in table_columns_map[s_ent_full_name])
+            out_buffer.write("\t\t\tIF reportToCaller = True THEN\n")
+            out_buffer.write(f"\t\t\t\tEXECUTE 'SELECT COALESCE(json_agg(t)::text, ''[]'') FROM (SELECT {quoted_cols}"
+                             f" FROM {s_ent_full_name_sql} LIMIT {target_row_cap}) t' INTO target_rows;\n")
+            out_buffer.write("\t\t\t\tINSERT INTO scriptreport (kind, name, ent_schema, ent_name, content)\n")
+            out_buffer.write(f"\t\t\t\tVALUES ('data', '{compare_html_filename}',"
+                             f" '{drow_ent['entschema']}', '{drow_ent['entname']}',\n")
+            out_buffer.write(f"\t\t\t\t\tjson_build_object('target_rows', target_rows::json,\n")
+            out_buffer.write(f"\t\t\t\t\t\t'keys', {key_cols_sql_array},\n")
+            out_buffer.write(f"\t\t\t\t\t\t'includeEqualRows', {include_equal_rows_early},\n")
+            out_buffer.write(f"\t\t\t\t\t\t'tableName', '{s_ent_full_name_sql}',\n")
+            out_buffer.write(f"\t\t\t\t\t\t'sourceLabel', {left_title_sql}, 'targetLabel', {right_title_sql},\n")
+            out_buffer.write(f"\t\t\t\t\t\t'sourceCsvName', '{source_csv_filename}',\n")
+            out_buffer.write(f"\t\t\t\t\t\t'rowCap', {target_row_cap})::text);\n")
+            out_buffer.write("\t\t\tELSE\n")
             out_buffer.write(f"\t\t\t-- Read template and source CSV\n")
             out_buffer.write(f"\t\t\tSELECT pg_read_file(basePath || '/{csv_compare_template_filename}') INTO template_content;\n")
             out_buffer.write(f"\t\t\tSELECT COALESCE(pg_read_file(basePath || '/{source_csv_filename}', true), '') INTO source_csv;\n")
@@ -1922,6 +1945,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             out_buffer.write(f"\t\t\tDROP TABLE temp_compare_html;\n")
             out_buffer.write(f"\t\t\t\n")
             out_buffer.write(f"\t\t\tRAISE NOTICE 'Comparison HTML created: %', basePath || '/{compare_html_filename}';\n")
+            out_buffer.write("\t\t\tEND IF; --reportToCaller\n")
             # Report output only: a failure here must not stop the script
             out_buffer.write("\t\tEXCEPTION WHEN OTHERS THEN\n")
             out_buffer.write(f"\t\t\tRAISE WARNING 'Could not write the comparison page for {s_ent_full_name}: "

@@ -59,7 +59,8 @@ def run_sql(conn, sql):
         cur.execute(sql)
 
 
-def write_configs(work_dir, source_db, target_db, target_user=None, target_password=None):
+def write_configs(work_dir, source_db, target_db, target_user=None, target_password=None,
+                  script_data=False):
     """A source config and a target config, the way someone would have them on disk."""
     cfg = load_test_config()
     work = Path(work_dir)
@@ -70,7 +71,7 @@ def write_configs(work_dir, source_db, target_db, target_user=None, target_passw
         'table_script_ops': {'column_identity': True, 'indexes': True, 'foreign_keys': True,
                              'defaults': True, 'check_constraints': True},
         'db_ents_to_load': {'tables': [], 'schemas': []},
-        'tables_data': {'tables': [], 'schemas': [], 'script_data': False},
+        'tables_data': {'tables': [], 'schemas': [], 'script_data': script_data},
         'input_output': {'html_template_path': '', 'html_output_path': str(work / 'report.html'),
                          'diff_template_path': '', 'diff_output_dir': str(work),
                          'output_sql': str(work / 'out.sql')},
@@ -326,3 +327,85 @@ def test_it_says_when_the_role_cannot_see_the_whole_target(tmp_path):
     assert 'can see 0 of the' in result.stdout, (
         'a role that can see none of the target was not warned about:\n' + result.stdout)
     assert 'reported as missing' in result.stdout
+
+
+DATA_SOURCE_SQL = """
+CREATE SCHEMA app;
+CREATE TABLE app.item (id int PRIMARY KEY, name text NOT NULL, active boolean, tags jsonb, qty numeric(8,2));
+INSERT INTO app.item VALUES (1,'Alpha',true,'{"a":1}',5.50),(2,'Beta',false,NULL,0),(3,'Gamma',true,'{"b":[1,2]}',9.99);
+"""
+
+DATA_TARGET_SQL = """
+CREATE SCHEMA app;
+CREATE TABLE app.item (id int PRIMARY KEY, name text NOT NULL, active boolean, tags jsonb, qty numeric(8,2));
+INSERT INTO app.item VALUES (1,'Alpha',true,'{"a":1}',5.50),(2,'CHANGED',false,NULL,0),(4,'Extra',true,NULL,1);
+"""
+
+
+def _auto_load_data(page_path):
+    data = re.search(r'window\.autoLoadData = (\{.*?\});</script>',
+                     page_path.read_text(encoding='utf-8'), re.S)
+    assert data, f'{page_path.name} carries no data'
+    return json.loads(data.group(1))
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_the_data_comparison_pages_are_written_and_the_two_sides_line_up(tmp_path):
+    """
+    The data pages carry both sides' rows as CSV and match them in the browser.
+
+    So the two sides have to be written the same way: a row identical on both must come out byte for byte
+    identical, or the page calls it different. numeric(8,2) is the trap - the source writes 5.50, and a
+    target value parsed as a float comes back 5.5.
+    """
+    source_db = 'cfs_dat_s_' + uuid.uuid4().hex[:8]
+    target_db = 'cfs_dat_t_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {source_db}')
+    run_sql(admin, f'CREATE DATABASE {target_db}')
+    try:
+        for db, sql in ((source_db, DATA_SOURCE_SQL), (target_db, DATA_TARGET_SQL)):
+            conn = db_connection(db)
+            try:
+                run_sql(conn, sql)
+            finally:
+                conn.close()
+
+        source_config, target_config = write_configs(tmp_path, source_db, target_db, script_data=True)
+        result = run_tool(source_config, '--report-on', target_config)
+        assert result.returncode == 0, f'{result.stdout}\n{result.stderr}'
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {source_db} WITH (FORCE)')
+        run_sql(admin, f'DROP DATABASE IF EXISTS {target_db} WITH (FORCE)')
+        admin.close()
+
+    page = tmp_path / 'compare_app_item.html'
+    assert page.exists(), f'no data comparison page was written:\n{result.stdout}'
+
+    data = _auto_load_data(page)
+    assert data['keys'] == ['id'], f"the key columns did not come through: {data['keys']}"
+    assert data['tableName'] == 'app.item'
+
+    source_rows = data['source'].strip().split('\n')
+    target_rows = data['target'].strip().split('\n')
+    assert source_rows[0] == target_rows[0], f'the headers differ: {source_rows[0]} vs {target_rows[0]}'
+
+    unchanged_source = [r for r in source_rows if r.startswith('1,')][0]
+    unchanged_target = [r for r in target_rows if r.startswith('1,')][0]
+    assert unchanged_source == unchanged_target, (
+        'a row that is the same on both sides came out differently, so the page will call it changed:\n'
+        f'  source: {unchanged_source}\n  target: {unchanged_target}')
+
+    # and the real differences are both there to be seen
+    assert any(r.startswith('2,Beta') for r in source_rows)
+    assert any(r.startswith('2,CHANGED') for r in target_rows)
+    assert any(r.startswith('4,Extra') for r in target_rows), 'a target-only row is missing'
+    assert not any(r.startswith('4,') for r in source_rows)
+
+    # the report has to link to it
+    report_entries = json.loads(re.search(
+        r'reportData = (\[.*?\]);', (tmp_path / 'report.html').read_text(encoding='utf-8'), re.S).group(1))
+    data_entry = [e for e in report_entries if e['type'] == 'Data' and e['name'] == 'item']
+    assert data_entry, f'no data entry in the report: {[(e["type"], e["name"]) for e in report_entries]}'
+    assert data_entry[0]['diffFile'] == 'compare_app_item.html'
