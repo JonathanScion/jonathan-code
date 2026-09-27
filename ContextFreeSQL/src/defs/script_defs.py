@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 class DBType(Enum):
     MSSQL = 1
@@ -171,6 +171,18 @@ class ListTables:
     # False scripts no data at all - schema only. 'tables' and 'schemas' choose which tables' data to script;
     # this switches the whole data section off, which is much of the time a generated script takes to run
     script_data: bool = True
+    # A row filter per table, keyed 'schema.table', as a SQL condition: {"wpc.students": "studentid = 1"}.
+    # It selects which rows are scripted, not which tables - 'tables' and 'schemas' still do that. The
+    # condition goes in as written, bracketed, so an OR in it cannot widen the window. A filter present turns
+    # scripting_options.data_window_only on, or the script would delete every row outside the window
+    where: Dict[str, str] = field(default_factory=dict)
+    # With a filter set, also script the rows related to the ones selected: down to their children, then up to
+    # the parents of everything collected, so the foreign keys hold. Off scripts only the rows the filter
+    # matched, and any foreign key pointing outside them will fail
+    follow_related_rows: bool = True
+    # A stop for the walk. Reaching it means rows are missing, so a foreign key may fail on insert: the run
+    # says which table it was rather than leaving it to be discovered on the target
+    related_max_rows_per_table: int = 100000
 
 @dataclass
 class SQLScriptParams:

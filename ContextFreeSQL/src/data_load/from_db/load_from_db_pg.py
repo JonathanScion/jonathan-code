@@ -969,11 +969,19 @@ def _primary_key_order_by(cur, schema_name: str, table_only: str) -> str:
     return (' ORDER BY ' + ', '.join(f'"{c}"' for c in cols)) if cols else ''
 
 
-def load_all_tables_data(conn_settings: DBConnSettings, db_all: DBSchema, table_names: List[str], max_rows_per_table: int = 0) -> None:
+def load_all_tables_data(conn_settings: DBConnSettings, db_all: DBSchema, table_names: List[str],
+                         max_rows_per_table: int = 0, row_filters: Optional[Dict[str, str]] = None) -> None:
     """max_rows_per_table: 0 loads every row; above that, at most that many rows per table (a sample, see
-    tables_data.max_rows_per_table in docs/CONFIG.md)"""
+    tables_data.max_rows_per_table in docs/CONFIG.md)
+
+    row_filters: a SQL condition per 'schema.table', from tables_data.where. Bracketed as it goes in, so an
+    OR inside it cannot widen the window, and applied before max_rows_per_table. A condition the server
+    rejects stops the run naming the table: carrying on would script the whole table instead, which with
+    remove_all_extra_ents on is the difference between a window and a replacement.
+    """
     conn = None
     cur = None
+    filters = {str(k).lower(): v for k, v in (row_filters or {}).items() if v}
     try:
         conn = Database.connect_to_database(conn_settings)
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -987,6 +995,10 @@ def load_all_tables_data(conn_settings: DBConnSettings, db_all: DBSchema, table_
                 # Default to public schema if not specified
                 schema_name, table_only = 'public', table_name
                 query = f'SELECT * FROM {table_name}'
+
+            row_filter = filters.get(f'{schema_name}.{table_only}'.lower())
+            if row_filter:
+                query += f' WHERE ({row_filter})'
 
             if max_rows_per_table > 0:
                 try:
@@ -1006,12 +1018,29 @@ def load_all_tables_data(conn_settings: DBConnSettings, db_all: DBSchema, table_
                 # Store in the DBSchema object
                 db_all.tables_data[table_name] = df
                 
-                print(f"Loaded {len(df)} rows for table: {table_name}")
+                print(f"Loaded {len(df)} rows for table: {table_name}"
+                      + (f"  (where: {row_filter})" if row_filter else ""))
             except Exception as table_error:
+                # Without this the transaction stays aborted and every table after this one fails too,
+                # which reads as a broken database rather than one broken table
+                conn.rollback()
+
+                if row_filter:
+                    # A filter the server will not accept is not something to carry on past: skipping the
+                    # table scripts no rows for it, and a window nobody notices is empty is worse than a stop
+                    raise ValueError(
+                        f"the row filter for {table_name} was rejected: {table_error}\n"
+                        f"  tables_data.where[{table_name!r}] = {row_filter!r}\n"
+                        f"  It goes to PostgreSQL as written, so it has to be a condition that table accepts."
+                    ) from None
+
                 print(f"Error loading table {table_name}: {table_error}")
                 # Continue with other tables even if one fails
                 continue
 
+    except ValueError:
+        # A rejected row filter is a deliberate stop, not a connection problem: let it out
+        raise
     except Exception as e:
         print(f"Database connection error: {e}")
 

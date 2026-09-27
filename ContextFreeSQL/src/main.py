@@ -12,7 +12,7 @@ import signal
 from src.utils.load_config import load_config, load_target_db_conn, write_target_config_template, ConfigError
 from src.utils.resources import get_template_path, get_default_config_path, get_docs_path, is_bundled
 from src.data_load.from_db.load_from_db_pg import load_all_schema, load_all_db_ents, load_all_tables_data
-from src.data_load.fk_sampling import expand_for_fk_integrity
+from src.data_load.fk_sampling import expand_for_fk_integrity, expand_to_related_children
 from src.generate.generate_script import generate_all_script
 from src.defs.script_defs import DBType, ScriptingOptions, ConfigVals
 from src.infra.database import Database
@@ -126,10 +126,61 @@ def resolve_data_tables(tables_data, tbl_ents) -> tuple:
     return in_schemas, False
 
 
+def scriptable_table_names(tbl_ents) -> set:
+    """The tables the script covers, as 'schema.name'. A row outside them has nowhere to go on the target."""
+    table_rows = tbl_ents[tbl_ents['enttype'] == 'Table']
+    return set((table_rows['entschema'] + '.' + table_rows['entname']).tolist())
+
+
+def follow_related_rows(config_vals: ConfigVals, schema, tbl_ents, tables_to_script) -> None:
+    """With tables_data.where set, also script the rows related to the ones the filter selected.
+
+    Downwards only. The upward pass that follows (retain_fk_integrity) fetches the parents everything
+    collected needs, and the two must not be interleaved - see expand_to_related_children.
+    """
+    filters = config_vals.tables_data.where or {}
+    if not filters or not config_vals.tables_data.follow_related_rows:
+        return
+
+    seeds = {name for name in tables_to_script
+             if name.lower() in {k.lower() for k in filters}}
+    if not seeds:
+        return
+
+    added = expand_to_related_children(
+        config_vals.db_conn, schema.tables_data, schema.fk_cols, seeds,
+        scriptable_tables=scriptable_table_names(tbl_ents),
+        max_rows_per_table=config_vals.tables_data.related_max_rows_per_table)
+
+    for table, count in sorted(added.items()):
+        print(f"Related rows: {count} from {table} (reached from the filtered rows)")
+        if table not in config_vals.tables_data.tables:
+            config_vals.tables_data.tables.append(table)
+        name = tbl_ents['entschema'] + '.' + tbl_ents['entname']
+        tbl_ents.loc[(name == table) & (tbl_ents['enttype'] == 'Table'), 'scriptdata'] = True
+
+
+def warn_about_filters_that_match_no_scripted_table(config_vals: ConfigVals, tables_to_script) -> None:
+    """A filter naming a table the run does not script does nothing at all, silently."""
+    scripted = {str(t).lower() for t in tables_to_script}
+    for table in (config_vals.tables_data.where or {}):
+        if str(table).lower() not in scripted:
+            print(f"WARNING: tables_data.where names {table}, which this run does not script - that filter "
+                  f"does nothing. Check db_ents_to_load and tables_data's 'tables'/'schemas'")
+
+
 def retain_fk_integrity(config_vals: ConfigVals, schema, tbl_ents) -> None:
-    """With tables_data.max_rows_per_table_retain_fk_integrity on, add the rows the sampled rows reference, so the
-    script's foreign keys hold. Does nothing unless both that flag and max_rows_per_table are set."""
-    if not (config_vals.tables_data.max_rows_per_table > 0 and config_vals.tables_data.max_rows_per_table_retain_fk_integrity):
+    """Add the rows the selected rows reference, so the script's foreign keys hold.
+
+    Runs for a sample when max_rows_per_table_retain_fk_integrity asks for it, and always for a row filter:
+    a filtered row's parents are not optional. Scripting a student's grades without the courses they point
+    at leaves the target with a foreign key it cannot satisfy, which fails at the end of the run with
+    nothing to say why.
+    """
+    sampled = (config_vals.tables_data.max_rows_per_table > 0
+               and config_vals.tables_data.max_rows_per_table_retain_fk_integrity)
+    filtered = bool(config_vals.tables_data.where) and config_vals.tables_data.follow_related_rows
+    if not (sampled or filtered):
         return
 
     # Only tables the script covers: a parent outside it won't exist in a blank target anyway
@@ -471,6 +522,15 @@ def main():
     if args.report_on:
         target_db_conn = resolve_target_config(args.report_on, config_vals.db_conn)
 
+    # A row filter means the scripted rows are a window, not the table. Without data_window_only the script
+    # deletes every target row it does not carry - so scripting 'studentid = 1' would empty the table of
+    # everyone else. Forgetting that is not a mistake worth leaving available, so the filter turns it on
+    if config_vals.tables_data.where and not config_vals.script_ops.data_window_only:
+        config_vals.script_ops.data_window_only = True
+        filtered = ', '.join(sorted(config_vals.tables_data.where))
+        print(f"tables_data.where is set ({filtered}), so scripting_options.data_window_only has been turned"
+              f" on: the script will add and update the rows in the window and leave every other row alone.")
+
     # Resolve output filename template placeholders
     config_vals.input_output.output_sql = resolve_output_filename(
         config_vals.input_output.output_sql,
@@ -564,11 +624,44 @@ def main():
     if len(config_vals.tables_data.tables) >= 1:
         tables_to_script = config_vals.tables_data.tables
 
+        # With a filter set, the filtered tables are the seeds and every other table contributes only the
+        # rows the walk reaches from them. Loading the rest in full would defeat the point: asking for one
+        # student and getting every grade in the school. A table you do want whole alongside can say so with
+        # a filter of its own - "sch.courses": "true"
+        filters = config_vals.tables_data.where or {}
+        # A filter always makes the named tables the seeds. follow_related_rows decides only whether
+        # the walk runs - with it off you get the filtered rows and nothing else, rather than the
+        # filtered rows plus every other table in full, which is neither thing anyone asked for
+        seeds_only = bool(filters)
+        if seeds_only:
+            filtered_names = {str(k).lower() for k in filters}
+            tables_to_load = [t for t in tables_to_script if str(t).lower() in filtered_names]
+            print(f"Row filters are set, so only {', '.join(sorted(tables_to_load))} start with rows;"
+                  f" the rest contribute what the foreign keys reach from them.")
+        else:
+            tables_to_load = tables_to_script
+
         # Mark scriptdata=True for the tables whose data is scripted
         table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
         tbl_ents.loc[table_filter.isin(tables_to_script), 'scriptdata'] = True
 
-        load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_script, max_rows_per_table=config_vals.tables_data.max_rows_per_table)
+        try:
+            load_all_tables_data(config_vals.db_conn, db_all=schema, table_names=tables_to_load,
+                                 max_rows_per_table=config_vals.tables_data.max_rows_per_table,
+                                 row_filters=config_vals.tables_data.where)
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        warn_about_filters_that_match_no_scripted_table(config_vals, tables_to_script)
+        follow_related_rows(config_vals, schema, tbl_ents, tables_to_load)
+
+        # A table the walk never reached has no rows to script. Leaving scriptdata on would compare it
+        # against the target and call every row there an extra one
+        if seeds_only:
+            reached = {name for name, df in schema.tables_data.items() if df is not None and not df.empty}
+            config_vals.tables_data.tables = [t for t in tables_to_script if t in reached]
+            table_filter = tbl_ents['entschema'] + '.' + tbl_ents['entname']
+            tbl_ents.loc[~table_filter.isin(config_vals.tables_data.tables), 'scriptdata'] = False
         retain_fk_integrity(config_vals, schema, tbl_ents)
 
     # Copy CSV compare template if we have data tables to script (must be after tables_data.tables is populated)

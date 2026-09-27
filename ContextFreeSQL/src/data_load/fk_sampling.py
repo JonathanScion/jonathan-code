@@ -68,6 +68,103 @@ def _fetch_rows(cur, table: str, cols: List[str], keys: Set[tuple]) -> pd.DataFr
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+def _existing_key_rows(df: pd.DataFrame, cols: List[str]) -> Set[tuple]:
+    """The key tuples a table already holds, so the same rows are not fetched twice."""
+    return _key_values(df, cols) if df is not None and not df.empty else set()
+
+
+def expand_to_related_children(conn_settings: DBConnSettings, tables_data: Dict[str, pd.DataFrame],
+                               fk_cols: pd.DataFrame, seeds: Set[str],
+                               scriptable_tables: Optional[Set[str]] = None,
+                               max_rows_per_table: int = 100000) -> Dict[str, int]:
+    """Follow foreign keys *downwards* from the filtered rows: the student's grades, and their line items.
+
+    The opposite direction to expand_for_fk_integrity, and it must run before it, never interleaved. That
+    one pulls in parents for foreign key validity - a grade's course, the course's teacher. Walking down
+    again from those would fetch every grade of every course, which is most of the table arrived at through
+    a row that was only ever wanted as a lookup.
+
+    seeds: the tables a filter was given for. Only rows reachable downwards from those are collected.
+
+    Returns rows added per table. A table that hits max_rows_per_table stops there and is reported: rows are
+    then missing, and the foreign key that needed them will fail on the target rather than here.
+    """
+    pairs = _fk_pairs(fk_cols)
+    if not pairs or not seeds:
+        return {}
+
+    added: Dict[str, int] = {}
+    capped: List[str] = []
+    conn = None
+    cur = None
+    try:
+        conn = Database.connect_to_database(conn_settings)
+        from psycopg2.extras import RealDictCursor
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Only walk down from tables the filter seeded, and from whatever that reaches
+        reached: Set[str] = set(seeds)
+
+        for round_no in range(1, MAX_ROUNDS + 1):
+            added_this_round = 0
+            for child, parent, child_cols, parent_cols in pairs:
+                if parent not in reached:
+                    continue  # nothing selected in the parent yet, so nothing to follow down from
+                if scriptable_tables is not None and child not in scriptable_tables:
+                    continue  # a child the script does not cover cannot be scripted anyway
+
+                parent_df = tables_data.get(parent)
+                wanted = _key_values(parent_df, parent_cols) if parent_df is not None else set()
+                if not wanted:
+                    continue
+
+                child_df = tables_data.get(child)
+                if child_df is not None and len(child_df) >= max_rows_per_table:
+                    if child not in capped:
+                        capped.append(child)
+                    continue
+
+                fetched = _fetch_rows(cur, child, child_cols, wanted)
+                if fetched.empty:
+                    continue
+
+                # Only rows not already held: a child reached by two foreign keys would otherwise double
+                if child_df is not None and not child_df.empty:
+                    key_cols = [c for c in child_df.columns if c in fetched.columns]
+                    already = _existing_key_rows(child_df, key_cols)
+                    if already:
+                        keep = [not tuple(r) in already
+                                for r in fetched[key_cols].itertuples(index=False, name=None)]
+                        fetched = fetched[keep]
+                    if fetched.empty:
+                        continue
+                    tables_data[child] = pd.concat([child_df, fetched], ignore_index=True)
+                else:
+                    tables_data[child] = fetched
+
+                added[child] = added.get(child, 0) + len(fetched)
+                added_this_round += len(fetched)
+                reached.add(child)
+
+            if added_this_round == 0:
+                break
+        else:
+            print(f"Related rows: stopped after {MAX_ROUNDS} rounds - a self-referencing chain may be longer "
+                  f"than that, so some related rows may be missing")
+
+        for table in capped:
+            print(f"WARNING: {table} reached the {max_rows_per_table} row cap "
+                  f"(tables_data.related_max_rows_per_table), so related rows are missing from it and a "
+                  f"foreign key may fail when the script runs. Give it its own filter, or raise the cap")
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    return added
+
+
 def expand_for_fk_integrity(conn_settings: DBConnSettings, tables_data: Dict[str, pd.DataFrame],
                             fk_cols: pd.DataFrame, scriptable_tables: Optional[Set[str]] = None) -> List[str]:
     """Add every parent row the sampled rows reference, in place, in tables_data.

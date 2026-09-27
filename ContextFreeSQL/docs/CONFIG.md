@@ -307,6 +307,9 @@ Configure data scripting (INSERT statements).
 | `from_file` | bool | `false` | Write the scripted data to CSV files and have the script `COPY` them in, instead of embedding INSERT statements. See below |
 | `max_rows_per_table` | int | `0` | `0` scripts every row. Above that, at most this many rows per table - a sample for filling a blank database. See below |
 | `max_rows_per_table_retain_fk_integrity` | bool | `false` | With `max_rows_per_table` set, also script every row the sampled rows reference, so the foreign keys can be added. Parent tables then hold more rows than the limit. See below |
+| `where` | object | `{}` | A row filter per table, keyed `"schema.table"`, as a SQL condition: `{"sch.students": "id = 1"}`. Scripts an area of the database rather than whole tables. See below |
+| `follow_related_rows` | bool | `true` | With `where` set, also script the rows the foreign keys reach from the filtered ones. Off scripts only the rows the filter matched |
+| `related_max_rows_per_table` | int | `100000` | A stop for that walk. A table reaching it is named, because rows are then missing and a foreign key may fail on the target |
 
 **Behavior:**
 - **`script_data: false`**: No data at all, whatever `tables` and `schemas` say
@@ -426,6 +429,43 @@ The trade-off is that the script is no longer self-contained, and two things fol
   "from_file": false
 }
 ```
+
+---
+
+### `where`: scripting an area of the database
+
+Give a table a SQL condition and only its matching rows are scripted:
+
+```json
+"tables_data": {
+  "schemas": ["sch"],
+  "where": { "sch.students": "id = 1" }
+}
+```
+
+The named tables are the **seeds**. Every other table in scope contributes only the rows the foreign keys
+reach from them, so `students WHERE id = 1` brings that student, their grades, those grades' comments, and
+the courses and teachers those grades point at - and nothing else. A table you want whole alongside can say
+so with a filter of its own, `"sch.courses": "true"`.
+
+The walk goes **down** first, to the rows that belong to the filtered ones, and then **up**, to the rows
+they need. The order matters: pulling in a course as a parent and then walking down from it again would
+fetch every grade of every course, which is most of the table arrived at through a row wanted only as a
+lookup. `related_max_rows_per_table` stops a runaway and names the table, since rows missing there mean a
+foreign key that fails on the target.
+
+**A filter turns `scripting_options.data_window_only` on by itself**, and says so. Without it the script
+deletes every target row it does not carry - so scripting one student would empty the table of everyone
+else. Rows outside the window are left exactly as they are: not updated, not deleted. Extra rows *inside*
+the window are left too.
+
+The comparison is scoped to the window as well, or every row outside it would be reported as "only in the
+target" - on a real table, the whole table.
+
+The condition goes to PostgreSQL as written, bracketed, so an `OR` inside it cannot widen the window. One
+the server rejects stops the run naming the table: carrying on would script the whole table instead.
+
+With `max_rows_per_table` also set, the filter applies first and the cap second.
 
 ---
 

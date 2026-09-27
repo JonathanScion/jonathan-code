@@ -194,8 +194,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
         out_buffer.write("\n")
         
         # Get column info (drows_cols to hold a list of columns)
+        #
+        # A data window is a window of rows, not of columns. The column filter below belongs to a
+        # half-built MSSQL-era feature: nothing has ever populated _dataWindowcolused_, so asking for it
+        # raised KeyError and data_window_only crashed the run the moment anyone set it. It is honoured
+        # only if something really did populate the column
+        window_columns = (script_ops.data_window_only
+                          and DATA_WINDOW_COL_USED in schema_tables.columns.columns)
         if db_type == DBType.MSSQL:
-            if script_ops.data_window_only:
+            if window_columns:
                 drows_cols = schema_tables.columns[
                     (schema_tables.columns["object_id"] == drow_ent["entkey"]) & 
                     (schema_tables.columns["is_computed"] == 0) &
@@ -207,7 +214,7 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
                     (schema_tables.columns["is_computed"] == 0)
                 ].sort_values("column_id").to_dict('records')
         else:  # PostgreSQL
-            if script_ops.data_window_only:
+            if window_columns:
                 drows_cols = schema_tables.columns[
                     (schema_tables.columns["object_id"] == drow_ent["entkey"]) & 
                     ((schema_tables.columns["is_computed"] == 0) | (schema_tables.columns["is_computed"].isnull())) &
@@ -1146,7 +1153,15 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             # Build the JOIN condition for key columns
             key_join_condition = " AND ".join([f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}" for col_name in ar_key_cols])
 
-            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL)';\n")
+            # With a row filter, the comparison is scoped to the same window. Otherwise every row outside it
+            # is collected as 'only in the target' - on a real table that is the whole table, flooding the
+            # report and the data comparison page with rows this run was never about. Window against window
+            window_sql = ""
+            if tables_data and tables_data.where:
+                condition = {str(k).lower(): v for k, v in tables_data.where.items()}.get(s_ent_full_name.lower())
+                if condition:
+                    window_sql = f" AND ({condition.replace(chr(39), chr(39) * 2)})"
+            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL){window_sql}';\n")
 
             if not script_ops.data_window_only:
                 out_buffer.write("EXECUTE sqlCode;\n")
