@@ -40,8 +40,13 @@
     "schemas": [],
     "from_file": false,
     "max_rows_per_table": 0,
-"script_data": true,
-        "max_rows_per_table_retain_fk_integrity": false
+    "script_data": true,
+    "max_rows_per_table_retain_fk_integrity": false,
+    "where": {
+      "public.students": "id = 1"
+    },
+    "follow_related_rows": true,
+    "related_max_rows_per_table": 100000
   },
   "input_output": {
     "html_template_path": "",
