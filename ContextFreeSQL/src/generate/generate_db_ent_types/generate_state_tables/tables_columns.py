@@ -161,6 +161,16 @@ def create_db_state_columns(
     script_db_state_tables.write(f"{align}\n")
     
     # Generate columns only on DB (need to drop)
+    # Every comparison below joins ScriptCols to the database's own columns. Unfiltered, that subquery reads
+    # information_schema.columns for the whole database - every column of every table - and does it again for
+    # each comparison. On a database of any size that is where the time goes: scripting two tables out of
+    # 1200 spent 84 seconds per comparison, six minutes in all, before a single row was looked at. The
+    # extras query below was already filtered this way; these were not
+    scripted_tables_only = ""
+    if overall_table_schema_name_in_scripting:
+        scripted_tables_only = (f" AND C.table_schema || C.table_name IN"
+                                f" ({overall_table_schema_name_in_scripting})")
+
     if overall_table_schema_name_in_scripting:
         script_db_state_tables.write(f"{align}--columns only on DB (need to drop)\n")
         script_db_state_tables.write(f"INSERT INTO {db_syntax.temp_table_prefix}ScriptCols (table_schema, table_name, col_name, colStat, SQL_DROP) \n")
@@ -215,7 +225,7 @@ def create_db_state_columns(
         # name doesn't fit in ten characters and the description would read 'is scope_cre, should be scope_cre'
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, CASE WHEN c.udt_schema = 'pg_catalog' THEN c.udt_name ELSE c.udt_schema || '.' || c.udt_name END as user_type_name \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.user_type_name <> DB.user_type_name \n")
         script_db_state_tables.write(f"{align}AND (ScriptCols.table_schema = j.table_schema AND ScriptCols.table_name = j.table_name AND ScriptCols.col_name = j.col_name);\n")
@@ -240,7 +250,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || CAST(J.max_length AS {db_syntax.nvarchar_type}(10)) \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.CHARACTER_MAXIMUM_LENGTH \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.max_length <> DB.CHARACTER_MAXIMUM_LENGTH \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")
@@ -267,7 +277,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || CAST(J.precision AS {db_syntax.nvarchar_type}(10)) \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.numeric_precision AS precision \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.precision <> DB.precision \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")
@@ -294,7 +304,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || CAST(J.scale AS {db_syntax.nvarchar_type}(10)) \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.numeric_scale AS scale \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.scale <> DB.scale \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name));\n")
@@ -322,7 +332,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || CAST(J.is_nullable AS {db_syntax.nvarchar_type}(10)) \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, case WHEN c.IS_NULLABLE = 'YES' then CAST(1 AS BOOLEAN) WHEN c.IS_NULLABLE = 'NO' then CAST(0 AS BOOLEAN) END AS is_nullable \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.is_nullable <> DB.is_nullable \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")
@@ -341,7 +351,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || ', should be ' || COALESCE(J.col_default, 'none') \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, c.column_default as col_default \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.col_default IS DISTINCT FROM DB.col_default \n")
         script_db_state_tables.write(f"{align}AND COALESCE(J.col_default, '') NOT LIKE 'nextval(%' AND COALESCE(DB.col_default, '') NOT LIKE 'nextval(%' \n")
@@ -371,7 +381,7 @@ def create_db_state_columns(
         script_db_state_tables.write(f"{align}\t || CAST(J.is_identity AS {db_syntax.nvarchar_type}(10)) \n")
         script_db_state_tables.write(f"from {db_syntax.temp_table_prefix}ScriptCols J INNER join (select t.table_schema, t.table_name, c.column_name, case WHEN c.IS_IDENTITY = 'YES' then CAST(1 AS BOOLEAN)  WHEN c.IS_IDENTITY = 'NO' then CAST(0 AS BOOLEAN)  END AS is_identity \n")
         script_db_state_tables.write(f"{align}from information_schema.columns C INNER JOIN information_schema.tables T on c.table_schema=t.table_schema and c.table_name=t.table_name \n")
-        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%') DB  \n")
+        script_db_state_tables.write(f"{align}where C.TABLE_SCHEMA not in ('information_schema', 'pg_catalog') and t.table_type LIKE '%TABLE%'{scripted_tables_only}) DB  \n")
         script_db_state_tables.write(f"{align}on LOWER(J.table_schema) = LOWER(DB.table_schema) and LOWER(J.table_name) = LOWER(DB.table_name) and LOWER(J.col_name) = LOWER(DB.column_name) \n")
         script_db_state_tables.write(f"{align}where J.is_identity <> DB.is_identity \n")
         script_db_state_tables.write(f"{align}AND ( LOWER(ScriptCols.table_schema) = LOWER(j.table_schema) AND LOWER(ScriptCols.table_name) = LOWER(j.table_name) AND LOWER(ScriptCols.col_name) = LOWER(j.col_name) );\n")

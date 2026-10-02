@@ -1153,15 +1153,21 @@ def script_data(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.DataFrame
             # Build the JOIN condition for key columns
             key_join_condition = " AND ".join([f"p.{utils.pg_quote_ident(col_name)}=t.{utils.pg_quote_ident(col_name)}" for col_name in ar_key_cols])
 
-            # With a row filter, the comparison is scoped to the same window. Otherwise every row outside it
-            # is collected as 'only in the target' - on a real table that is the whole table, flooding the
-            # report and the data comparison page with rows this run was never about. Window against window
-            window_sql = ""
+            # With a row filter, the target side is narrowed to the same window, so rows outside it are not
+            # collected as 'only in the target' - on a real table that would be the whole table.
+            #
+            # The filter goes in a subquery rather than into this statement's WHERE. A condition written
+            # against one table ('work_order_nbr = ...') is ambiguous here, because the temp table in the
+            # join carries that column too, and PostgreSQL rejects the statement outright. Inside the
+            # subquery only the real table's columns are in scope, which is what the condition was written
+            # against
+            windowed_source = s_source_table_name
             if tables_data and tables_data.where:
                 condition = {str(k).lower(): v for k, v in tables_data.where.items()}.get(s_ent_full_name.lower())
                 if condition:
-                    window_sql = f" AND ({condition.replace(chr(39), chr(39) * 2)})"
-            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {s_source_table_name} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL){window_sql}';\n")
+                    escaped = condition.replace(chr(39), chr(39) * 2)
+                    windowed_source = f"(SELECT * FROM {s_source_table_name} WHERE ({escaped}))"
+            out_buffer.write(f"sqlCode := 'INSERT INTO {s_temp_table_name} (' || v_extra2_cols || '{FLD_COMPARE_STATE}) SELECT ' || v_extra2_select_cols || '''{RowState.EXTRA2.value}'' FROM {windowed_source} p LEFT JOIN {s_temp_table_name} t ON {key_join_condition} WHERE (t.{utils.pg_quote_ident(ar_key_cols[0])} IS NULL)';\n")
 
             if not script_ops.data_window_only:
                 out_buffer.write("EXECUTE sqlCode;\n")
