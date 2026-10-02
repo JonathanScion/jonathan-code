@@ -166,7 +166,7 @@ Controls what gets scripted and how.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `remove_all_extra_ents` | bool | `true` | When `true`, generates DROP statements for entities that exist in the target database but not in the source. **Use with caution!** |
-| `script_schemas` | bool | `true` | Include schema (namespace) DDL in output |
+| `script_schemas` | bool | `true` | Create and drop the schemas themselves - `CREATE SCHEMA`, `DROP SCHEMA`. Only the namespaces: a table's own DDL is not affected. Off, the target has to hold the schemas already, and anything the script creates in a missing one fails there with `schema "x" does not exist` |
 | `all_schemas` | bool | `true` | Script all schemas. If `false`, only scripts schemas used by selected entities |
 | `script_security` | bool | `true` | Include security objects: roles, permissions, RLS policies |
 | `script_extensions` | bool | `true` | Create the extensions the scripted schema depends on, before the tables. Only the ones something needs: a column's type (`vector`, `citext`, `geometry`), an index's access method (`hnsw`) or its operator class (`vector_cosine_ops`). Extensions merely installed on the server are left out, since a managed PostgreSQL carries its own and creating those on a target is refused. Set `false` to leave extensions to whoever administers the target |

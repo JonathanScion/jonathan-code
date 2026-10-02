@@ -98,9 +98,25 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
    
     
     # 2. State tables
-    # bOnlyData = tblEnts.Select("ScriptSchema=False AND ScriptData=True").Length > 0
-    # if oScriptOps.ScriptSchemas and (not bOnlyData):
-    create_schemas, drop_schemas = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+    #
+    # scripting_options.script_schemas covers the namespaces themselves - CREATE SCHEMA and DROP SCHEMA -
+    # and nothing else; a table's own DDL is not affected by it. Off, the target has to hold the schemas
+    # already, and anything the script creates in a missing one fails there with 'schema does not exist'.
+    #
+    # The flag was declared and documented but never read, so turning it off did nothing at all. Its own
+    # comment said what it was for ('turning it off from MA, when doing only data'), and the call below was
+    # commented out in the line this replaces
+    if scrpt_ops.script_schemas:
+        create_schemas, drop_schemas = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+    else:
+        create_schemas, drop_schemas = StringIO(), StringIO()
+        # The schema block is not self-contained: it writes three END; for the two BEGINs it opens, and the
+        # last one - labelled 'schema code' - closes the 'script initialization and execution' block opened
+        # before it. Dropping the block outright left that unclosed, and the whole script died at the far end
+        # with 'syntax error at end of input'. So the closing END still has to be written
+        if db_type == DBType.PostgreSQL:
+            create_schemas.write("\tEND; --script initialization and execution"
+                                 " (the schema block that used to close this is off)\n")
     
 
     script_db_state_tables: StringIO = create_db_state_temp_tables_for_tables(
