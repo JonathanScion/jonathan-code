@@ -409,3 +409,43 @@ def test_the_data_comparison_pages_are_written_and_the_two_sides_line_up(tmp_pat
     data_entry = [e for e in report_entries if e['type'] == 'Data' and e['name'] == 'item']
     assert data_entry, f'no data entry in the report: {[(e["type"], e["name"]) for e in report_entries]}'
     assert data_entry[0]['diffFile'] == 'compare_app_item.html'
+
+
+@pytest.mark.complex
+@pytest.mark.slow
+def test_the_statement_count_does_not_depend_on_the_config_s_print_exec(tmp_path):
+    """
+    The count comes from scriptoutput rows, which printExec decides are returned or report_only.
+
+    With print_exec false in the config, the run said '0 statement(s) would be needed' while the diff
+    pages showed real differences - a comparison claiming agreement that is not there. --report-on forces
+    the flag on for its own run, the way it already forces execCode off.
+    """
+    source_db = 'cfs_rep_s_' + uuid.uuid4().hex[:8]
+    target_db = 'cfs_rep_t_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {source_db}')
+    run_sql(admin, f'CREATE DATABASE {target_db}')
+    try:
+        for db, sql in ((source_db, SOURCE_SQL), (target_db, DIFFERING_TARGET_SQL)):
+            conn = db_connection(db)
+            try:
+                run_sql(conn, sql)
+            finally:
+                conn.close()
+
+        source_config, target_config = write_configs(tmp_path, source_db, target_db)
+        # print_exec off, which is what hid the differences
+        config = json.loads(source_config.read_text(encoding='utf-8'))
+        config['sql_script_params']['print_exec'] = False
+        source_config.write_text(json.dumps(config), encoding='utf-8')
+
+        result = run_tool(source_config, '--report-on', target_config)
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {source_db} WITH (FORCE)')
+        run_sql(admin, f'DROP DATABASE IF EXISTS {target_db} WITH (FORCE)')
+        admin.close()
+
+    assert result.returncode == 0, f'{result.stdout}\n{result.stderr}'
+    assert '0 statement(s) would be needed' not in result.stdout, (
+        'the databases differ, but the run reported no work to do:\n' + result.stdout)

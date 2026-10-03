@@ -169,7 +169,10 @@ def run_and_write_report(script: str, target_conn_settings, template_path: str, 
 
     Returns a summary: how many statements the target would need, and which files were written.
     """
-    script = set_script_flags(script, execCode=False, htmlReport=True, reportToCaller=True)
+    # printExec too: the statements come back as scriptoutput rows, and with it off they are all marked
+    # report_only and none are returned. The run then said '0 statement(s) would be needed' while the diff
+    # pages showed real differences - a comparison claiming agreement that is not there
+    script = set_script_flags(script, execCode=False, htmlReport=True, reportToCaller=True, printExec=True)
 
     target_label = f"{target_conn_settings.host}/{target_conn_settings.db_name}"
     print(f"Running the comparison against {target_label} (nothing is changed there) ...")
