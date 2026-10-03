@@ -272,6 +272,27 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write("\t\t\t\t\t\t\tAND tc.constraint_type = 'PRIMARY KEY'\n")
         sql_buffer.write("\t\t\t\t\t\tGROUP BY tc.constraint_name\n")
         sql_buffer.write("\t\t\t\t\t), '') ||\n")
+        # Unique constraints, which the index list below deliberately skips - and which nothing used to add
+        # back, so every table holding one showed a phantom difference: the script side had
+        # 'ADD CONSTRAINT x UNIQUE (...)' and this side had nothing. The dropped line also pushed the diff
+        # out of step, making the primary key above it read as changed too.
+        # Ordered by name so two databases list several of them the same way round
+        sql_buffer.write("\t\t\t\t\t-- Unique constraints (skipped by the index list below)\n")
+        sql_buffer.write("\t\t\t\t\tCOALESCE((\n")
+        sql_buffer.write("\t\t\t\t\t\tSELECT string_agg(E'\\nALTER TABLE ' || st.table_schema || '.' || st.table_name ||\n")
+        sql_buffer.write("\t\t\t\t\t\t\t' ADD CONSTRAINT ' || u.constraint_name || ' UNIQUE (' || u.cols || ');',\n")
+        sql_buffer.write("\t\t\t\t\t\t\t'' ORDER BY u.constraint_name)\n")
+        sql_buffer.write("\t\t\t\t\t\tFROM (\n")
+        sql_buffer.write("\t\t\t\t\t\t\tSELECT tc.constraint_name,\n")
+        sql_buffer.write("\t\t\t\t\t\t\t\tstring_agg(kcu.column_name, ', ' ORDER BY kcu.ordinal_position) AS cols\n")
+        sql_buffer.write("\t\t\t\t\t\t\tFROM information_schema.table_constraints tc\n")
+        sql_buffer.write("\t\t\t\t\t\t\tJOIN information_schema.key_column_usage kcu\n")
+        sql_buffer.write("\t\t\t\t\t\t\t\tON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema\n")
+        sql_buffer.write("\t\t\t\t\t\t\tWHERE tc.table_schema = st.table_schema AND tc.table_name = st.table_name\n")
+        sql_buffer.write("\t\t\t\t\t\t\t\tAND tc.constraint_type = 'UNIQUE'\n")
+        sql_buffer.write("\t\t\t\t\t\t\tGROUP BY tc.constraint_name\n")
+        sql_buffer.write("\t\t\t\t\t\t) u\n")
+        sql_buffer.write("\t\t\t\t\t), '') ||\n")
         sql_buffer.write("\t\t\t\t\t-- Indexes (non-primary key, non-unique constraint)\n")
         sql_buffer.write("\t\t\t\t\tCOALESCE((\n")
         sql_buffer.write("\t\t\t\t\t\tSELECT string_agg(E'\\n' || indexdef || ';', '')\n")
@@ -282,26 +303,12 @@ def generate_code_diffs(db_type: DBType, sql_buffer, input_output: InputOutput, 
         sql_buffer.write("\t\t\t\t\t\t\t\tWHERE tc.table_schema = st.table_schema AND tc.table_name = st.table_name\n")
         sql_buffer.write("\t\t\t\t\t\t\t\t\tAND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')\n")
         sql_buffer.write("\t\t\t\t\t\t\t)\n")
-        sql_buffer.write("\t\t\t\t\t), '') ||\n")
-        sql_buffer.write("\t\t\t\t\t-- Foreign Keys\n")
-        sql_buffer.write("\t\t\t\t\tCOALESCE((\n")
-        sql_buffer.write("\t\t\t\t\t\tSELECT string_agg(\n")
-        sql_buffer.write("\t\t\t\t\t\t\tE'\\nALTER TABLE ' || tc.table_schema || '.' || tc.table_name ||\n")
-        sql_buffer.write("\t\t\t\t\t\t\t' ADD CONSTRAINT ' || tc.constraint_name || ' FOREIGN KEY (' ||\n")
-        sql_buffer.write("\t\t\t\t\t\t\t(SELECT string_agg(kcu.column_name, ', ' ORDER BY kcu.ordinal_position)\n")
-        sql_buffer.write("\t\t\t\t\t\t\t FROM information_schema.key_column_usage kcu\n")
-        sql_buffer.write("\t\t\t\t\t\t\t WHERE kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema) ||\n")
-        sql_buffer.write("\t\t\t\t\t\t\t') REFERENCES ' ||\n")
-        sql_buffer.write("\t\t\t\t\t\t\t(SELECT ccu.table_schema || '.' || ccu.table_name || '(' ||\n")
-        sql_buffer.write("\t\t\t\t\t\t\t\tstring_agg(ccu.column_name, ', ') || ')'\n")
-        sql_buffer.write("\t\t\t\t\t\t\t FROM information_schema.constraint_column_usage ccu\n")
-        sql_buffer.write("\t\t\t\t\t\t\t WHERE ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema\n")
-        sql_buffer.write("\t\t\t\t\t\t\t GROUP BY ccu.table_schema, ccu.table_name) || ';',\n")
-        sql_buffer.write("\t\t\t\t\t\t\t'')\n")
-        sql_buffer.write("\t\t\t\t\t\tFROM information_schema.table_constraints tc\n")
-        sql_buffer.write("\t\t\t\t\t\tWHERE tc.table_schema = st.table_schema AND tc.table_name = st.table_name\n")
-        sql_buffer.write("\t\t\t\t\t\t\tAND tc.constraint_type = 'FOREIGN KEY'\n")
         sql_buffer.write("\t\t\t\t\t), '')\n")
+        # Foreign keys are deliberately not rendered on this side. The script side of this diff is
+        # ScriptTables.SQL_CREATE, which leaves them out on purpose - the script adds foreign keys after
+        # the data, so inserts cannot fail on ordering. Rendering them here and not there made every
+        # table holding one show a phantom difference. Real foreign key differences are still on the
+        # page, in the statement cards, which come from ScriptFKs and scriptoutput
         sql_buffer.write("\t\t\t\t) as db_code,\n")
         sql_buffer.write("\t\t\t\tst.tablestat,\n")
         # Statements to run on the target: what the script generated for the table, in execution order. Extra tables
