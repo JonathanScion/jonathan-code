@@ -146,3 +146,37 @@ def test_password_command_is_accepted_and_is_not_a_libpq_option(tmp_path):
     config = load_config(write_config(tmp_path, password=None, password_command=command))
     assert config.db_conn.password_command == command
     assert config.db_conn.libpq_options() == {}, 'password_command reached libpq, which would be rejected'
+
+
+def test_the_default_config_is_the_bundled_one_not_a_path_from_dunder_file():
+    """
+    Running with no config argument has to find the config that ships with the binary.
+
+    load_config's own fallback builds a path from __file__, which inside a PyInstaller bundle is
+    _MEIxxxx/src/config.json - the spec puts config.json at the bundle root, so the binary failed with
+
+        error: no config file at /tmp/_MEI00000d66GW25iZ/src/config.json
+
+    a temp path nobody can act on. get_default_config_path knows the right place; main has to use it.
+    """
+    import inspect
+
+    import src.main as main
+    from src.utils.resources import get_default_config_path
+
+    source = inspect.getsource(main.main)
+    assert 'get_default_config_path()' in source, (
+        'main does not use get_default_config_path, so the bundled default is resolved from __file__')
+
+    # and it has to point at a file that exists when running from source too
+    assert Path(get_default_config_path()).is_file(), (
+        f'the default config is not where get_default_config_path says: {get_default_config_path()}')
+
+
+def test_a_missing_config_says_what_to_pass(tmp_path):
+    """The path alone is no help when it is a default nobody typed."""
+    with pytest.raises(ConfigError) as caught:
+        load_config(tmp_path / 'nothing.json')
+    message = str(caught.value)
+    assert 'first argument' in message, message
+    assert '--report-on' in message, 'the message should say what --report-on is for, since that is the slip'

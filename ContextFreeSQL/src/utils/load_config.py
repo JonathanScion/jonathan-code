@@ -93,7 +93,14 @@ def load_config(config_path: Optional[Union[str, Path]] = None) -> ConfigVals:
 
     # Load and parse JSON
     if not config_path.exists():
-        raise ConfigError(f"no config file at {config_path}")
+        # Name the argument, not just the path. The path alone is unhelpful when it is the default nobody
+        # typed - and inside the binary that default is a temp folder that means nothing to anyone
+        raise ConfigError(
+            f"no config file at {config_path}\n"
+            f"  Give one as the first argument:  contextfreesql <your-config.json>\n"
+            f"  --report-on names the target to compare against, not the config to read:\n"
+            f"      contextfreesql source-config.json --report-on target-config.json"
+        )
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)

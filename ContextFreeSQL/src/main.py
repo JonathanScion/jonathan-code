@@ -473,7 +473,10 @@ def main():
     # Load configuration. A config that cannot be used is the user's to fix, so say what is wrong and stop -
     # a traceback out of a bundled binary tells them nothing they can act on
     try:
-        config_vals: ConfigVals = load_config(args.config)
+        # get_default_config_path knows where the bundled config lives; load_config's own fallback works
+        # out a path from __file__, which inside the binary is _MEIxxxx/src/config.json - the spec puts it
+        # at the bundle root, so running with no config argument failed with a temp path nobody can act on
+        config_vals: ConfigVals = load_config(args.config or get_default_config_path())
     except ConfigError as e:
         print(f"error: {e}", file=sys.stderr)
         sys.exit(1)
