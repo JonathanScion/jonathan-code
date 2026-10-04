@@ -133,7 +133,9 @@ def _generate(db_name, work_dir):
                         'script_data': True, 'max_rows_per_table_retain_fk_integrity': False},
         'input_output': {'html_template_path': '', 'html_output_path': str(Path(work_dir) / 'r.html'),
                          'diff_template_path': '', 'diff_output_dir': str(work_dir), 'output_sql': out_sql},
-        'sql_script_params': {'print': False, 'print_exec': False, 'exec_code': True,
+        # print_exec on, because the 'a second run has nothing left to do' check below reads what the
+        # script reported. With it off, scriptoutput stays empty and that check passes unconditionally
+        'sql_script_params': {'print': False, 'print_exec': True, 'exec_code': True,
                               'html_report': False, 'export_csv': False},
     }
     config_path = Path(work_dir) / 'config.json'

@@ -76,7 +76,11 @@ def generate(db_name, work_dir):
         'tables_data': {'tables': [], 'schemas': [], 'script_data': True},
         'input_output': {'html_template_path': '', 'html_output_path': os.path.join(work_dir, 'r.html'),
                          'diff_template_path': '', 'diff_output_dir': work_dir, 'output_sql': out_sql},
-        'sql_script_params': {'print': False, 'print_exec': False, 'exec_code': True,
+        # print_exec has to be on. It is what fills scriptoutput, which is the only way a test can see
+        # what the script decided to do - with it off, 'did the second run report anything' reads an
+        # empty table and passes whatever the script did. That is exactly how the setval that reported
+        # itself for ever got past the test written to catch it
+        'sql_script_params': {'print': False, 'print_exec': True, 'exec_code': True,
                               'html_report': False, 'export_csv': False},
     }
     path = os.path.join(work_dir, 'config.json')
@@ -172,3 +176,52 @@ def test_the_resync_is_quiet_about_tables_that_have_no_sequence(tmp_path):
         admin.close()
 
     assert not settled, f'the second run still wanted to change things: {settled[:5]}'
+
+
+@pytest.mark.data
+@pytest.mark.slow
+def test_the_script_reports_nothing_against_the_database_it_came_from(tmp_path):
+    """
+    The shortest statement of what this tool promises: run the script on its own source and there is
+    nothing to do.
+
+    The first version of the resync emitted setval unconditionally, so a script run against its own
+    source reported two statements - and reported the same two every run afterwards, since executing
+    them changed nothing. 'Run it until it says nothing' stopped terminating. The test above should have
+    caught that and did not, because printing was off.
+
+    The source's own sequences are put in step first, and that is the point rather than setup noise.
+    SOURCE_SQL spells its keys out, so the source is itself in the state the resync exists to repair -
+    and reporting a setval against such a database is correct, not a bug. The claim being made here is
+    narrower and is the one the user hit: a database that already agrees with the script is left alone.
+
+    Nothing is executed here: exec_code is irrelevant to the question, and a run that reports nothing
+    has nothing to execute anyway.
+    """
+    source = 'cfs_seq_o_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {source}')
+    try:
+        conn = db_connection(source)
+        try:
+            run_sql(conn, SOURCE_SQL)
+            for table in ('identity_rows', 'serial_rows'):
+                run_sql(conn, f"SELECT setval(pg_get_serial_sequence('app.{table}', 'id'),"
+                              f" (SELECT MAX(id) FROM app.{table}))")
+        finally:
+            conn.close()
+        script = generate(source, str(tmp_path))
+
+        conn = db_connection(source)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(script)
+                reported = [r[0] for r in cur.fetchall() if r and r[0]]
+        finally:
+            conn.close()
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {source} WITH (FORCE)')
+        admin.close()
+
+    assert not reported, (
+        'the script found work to do on the database it was generated from: ' + '; '.join(reported[:5]))

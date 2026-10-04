@@ -71,9 +71,20 @@ def generate_sequence_resync(db_type: DBType, schema_tables, tbl_ents: pd.DataFr
         name_literal = utils.quote_str_or_null(f"{table_schema}.{table_name}")
         column_literal = utils.quote_str_or_null(column)
 
+        # Two conditions, and the second matters as much as the first.
+        #
         # A column may be sequence-backed on the source and not on the target - the script is also what
-        # creates it there - so ask the target, and do nothing when there is no sequence to set
-        out_buffer.write(f"\tIF pg_get_serial_sequence({name_literal}, {column_literal}) IS NOT NULL THEN\n")
+        # creates it there - so ask the target rather than assume.
+        #
+        # And only when the sequence is actually behind the data. Setting it unconditionally meant the
+        # script reported work to do on a database that already matched it, every run, for ever - which
+        # breaks the one promise this tool makes: run it until it says nothing. pg_sequence_last_value is
+        # NULL for a sequence that has never been used, so that counts as behind
+        last_value = (f"COALESCE(pg_sequence_last_value(pg_get_serial_sequence("
+                      f"{name_literal}, {column_literal})::regclass), 0)")
+        highest_row = f"COALESCE((SELECT MAX({quoted_column}) FROM {qualified}), 0)"
+        out_buffer.write(f"\tIF pg_get_serial_sequence({name_literal}, {column_literal}) IS NOT NULL\n")
+        out_buffer.write(f"\t\tAND {last_value} < {highest_row} THEN\n")
         # is_called false when the table is empty, so the next value is 1 rather than 2
         out_buffer.write(f"\t\tsqlCode := 'SELECT setval(' || quote_literal(pg_get_serial_sequence("
                          f"{name_literal}, {column_literal}))\n")

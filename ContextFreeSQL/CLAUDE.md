@@ -55,11 +55,11 @@ It is read by `--version`, by `pyproject.toml` (dynamic version), and stamped in
 header comment, the HTML report and table pages' footers, and the data comparison pages. `build.bat` prints it.
 
 ```bash
-python -m src.main --version      # contextfreesql 0.9.0
+python -m src.main --version      # contextfreesql 0.9.1
 ```
 
 ### Testing
-177 tests, and they have teeth: most of them build a scratch database, generate a script from it,
+178 tests, and they have teeth: most of them build a scratch database, generate a script from it,
 run that script against a second database and compare the two. Bugs in this project are found by
 running real SQL against real PostgreSQL, so a test that only inspects generated text is worth
 little - make it execute.
@@ -74,11 +74,16 @@ Markers are registered in `tests/pytest.ini`: `schema`, `data`, `coded_entities`
 `complex`, `slow`. Connection settings come from `tests/test_config.json` (or the environment) via
 `load_test_config()` in `tests/conftest.py`; scratch databases are named `cfs_*` and dropped at the end.
 
-Two traps worth knowing before writing a test here:
+Three traps worth knowing before writing a test here:
 - The HTML report and CSV files are written **by the server**, to `basePath` in the script - not by
   Python. A test pointing that at pytest's `tmp_path` under AppData gets nothing and fails silently.
 - Assert on state the script can actually change. Several tests were written that could never have
   failed: printing was off, or the asserted constraint form was one PostgreSQL does not store.
+- **Any test asking what the script reported needs `print_exec: True`.** `print_exec` is what fills
+  the `scriptoutput` table; with it off that table is empty, so `assert not settled` passes no matter
+  what the script did. Two tests making the central claim of this tool - run it again and it reports
+  nothing - were passing that way while a release shipped a statement that reported itself for ever.
+  If a test reads `scriptoutput`, grep its config for `print_exec` before trusting a green run.
 
 ## Architecture Overview
 
