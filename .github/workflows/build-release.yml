@@ -82,9 +82,15 @@ jobs:
               throw "--show-config did not carry the configuration reference"
           }
           $out = (& $bin 2>&1 | Out-String)
+          # That run is expected to fail: there is no database here. Its exit code must not become the
+          # step's - PowerShell propagates the last one, which failed the build on a correct 'cannot
+          # connect' message
+          $global:LASTEXITCODE = 0
           $out -split "`n" | Select-Object -First 5
           if ($out -match 'no config file at') { throw "the binary cannot find its own default config" }
           if ($out -match '_MEI|Traceback') { throw "the binary leaked a bundle path or a traceback" }
+          Write-Host "smoke test passed"
+          exit 0
 
       - name: Rename artifact (Unix)
         if: matrix.os != 'windows-latest'
