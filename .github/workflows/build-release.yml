@@ -44,6 +44,48 @@ jobs:
       - name: Build executable
         run: pyinstaller contextfreesql.spec --clean
 
+      # A binary that cannot start should fail the build, not get published. Nothing here used to run the
+      # thing it shipped - not even --version - and the test suite only ever runs from source, so anything
+      # that behaves differently inside a PyInstaller bundle was invisible. That is how a release went out
+      # whose default config path pointed at <bundle>/src/config.json, which does not exist there: running
+      # it with no arguments failed with a temp path nobody could act on.
+      - name: Smoke-test the built binary (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          set -eu
+          BIN=dist/${{ matrix.artifact_name }}
+          chmod +x "$BIN"
+          "$BIN" --version
+          "$BIN" --help > /dev/null
+          "$BIN" --show-config | grep -q 'scripting_options'
+          # No arguments: it must find its own bundled config, not a path inside the extracted bundle.
+          # It cannot connect to anything here, so a connection error is the expected outcome
+          out=$("$BIN" 2>&1 || true)
+          printf '%s\n' "$out" | head -5
+          if printf '%s' "$out" | grep -q 'no config file at'; then
+            echo "FAIL: the binary cannot find its own default config"; exit 1
+          fi
+          if printf '%s' "$out" | grep -qE '_MEI|Traceback'; then
+            echo "FAIL: the binary leaked a bundle path or a traceback"; exit 1
+          fi
+
+      - name: Smoke-test the built binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $bin = "dist\${{ matrix.artifact_name }}"
+          & $bin --version
+          if ($LASTEXITCODE -ne 0) { throw "--version failed" }
+          & $bin --help > $null
+          if ($LASTEXITCODE -ne 0) { throw "--help failed" }
+          if (-not (& $bin --show-config | Select-String -Quiet 'scripting_options')) {
+              throw "--show-config did not carry the configuration reference"
+          }
+          $out = (& $bin 2>&1 | Out-String)
+          $out -split "`n" | Select-Object -First 5
+          if ($out -match 'no config file at') { throw "the binary cannot find its own default config" }
+          if ($out -match '_MEI|Traceback') { throw "the binary leaked a bundle path or a traceback" }
+
       - name: Rename artifact (Unix)
         if: matrix.os != 'windows-latest'
         run: mv dist/${{ matrix.artifact_name }} dist/${{ matrix.asset_name }}

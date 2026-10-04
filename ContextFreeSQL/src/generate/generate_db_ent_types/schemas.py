@@ -53,7 +53,15 @@ def create_db_state_schemas(dbtype: DBType, tbl_ents: pd.DataFrame, tbl_schemas:
 
     # Inside create_db_state_schemas function:
     create_schemas.write(f"{'\t' * ident_level}--INSERTing all existing schemas\n")
-    for _, row in tbl_schemas.iterrows():
+    # all_schemas off means only the schemas the scripted entities actually live in. The flag was
+    # declared and documented from the start and never read - every schema in the source was scripted
+    # regardless, so a two-table run still carried CREATE SCHEMA for every schema on the server
+    schemas_to_script = tbl_schemas
+    if not ops_all_schemas and tbl_ents is not None and not tbl_ents.empty and 'entschema' in tbl_ents:
+        used = {str(s).lower() for s in tbl_ents['entschema'].dropna().tolist()}
+        schemas_to_script = tbl_schemas[tbl_schemas['schema_name'].astype(str).str.lower().isin(used)]
+
+    for _, row in schemas_to_script.iterrows():
         create_schemas.write(f"{'\t' * ident_level}INSERT INTO {db_syntax.temp_table_prefix}ScriptSchemas (schema_name,principal_name, SQL_CREATE)\n")
         create_schemas.write(f"{'\t' * ident_level}VALUES (" + utils.quote_str_or_null(row['schema_name']) + ",")
         create_schemas.write(utils.quote_str_or_null(row['principal_name']) + ",")
@@ -100,25 +108,31 @@ def create_db_state_schemas(dbtype: DBType, tbl_ents: pd.DataFrame, tbl_schemas:
     create_schemas.write(f"{'\t' * ident_level}\n")
 
 
-    create_schemas.write(f"{'\t' * ident_level}--Schemas only on DB (need to drop)\n")
-    if dbtype == DBType.MSSQL:
-        create_schemas.write(f"{'\t' * ident_level}INSERT  INTO {db_syntax.temp_table_prefix}ScriptSchemas ( schema_name, SQL_DROP, schemaStat)\n")
-        create_schemas.write(f"{'\t' * ident_level}SELECT  DB.schema_name,'DROP SCHEMA ['+DB.schema_name+']', 2 \n")
-        create_schemas.write(f"{'\t' * ident_level}FROM    {db_syntax.temp_table_prefix}ScriptSchemas J \n")
-        create_schemas.write(f"{'\t' * ident_level}RIGHT JOIN ( SELECT name AS schema_name  \n")
-        #see comment above about reactivating with ms_schema_names_filter
-        #create_schemas.write(f"FROM   sys.schemas S WHERE {ms_schema_names_filter} AND s.NAME NOT LIKE 'db_%' \n")
-        create_schemas.write(f"{'\t' * ident_level}) DB ON J.schema_name = DB.schema_name \n")
-        create_schemas.write(f"{'\t' * ident_level}WHERE J.schema_name Is NULL; \n")
+    # Only when every schema was considered. With all_schemas off the list above holds just the scripted
+    # entities' schemas, so every other schema on the target would read as extra - and with
+    # remove_all_extra_ents on, that would drop schemas this run never looked at
+    if not ops_all_schemas:
+        create_schemas.write(f"{'\t' * ident_level}--Not looking for extra schemas: all_schemas is off\n")
+    else:
+        create_schemas.write(f"{'\t' * ident_level}--Schemas only on DB (need to drop)\n")
+        if dbtype == DBType.MSSQL:
+            create_schemas.write(f"{'\t' * ident_level}INSERT  INTO {db_syntax.temp_table_prefix}ScriptSchemas ( schema_name, SQL_DROP, schemaStat)\n")
+            create_schemas.write(f"{'\t' * ident_level}SELECT  DB.schema_name,'DROP SCHEMA ['+DB.schema_name+']', 2 \n")
+            create_schemas.write(f"{'\t' * ident_level}FROM    {db_syntax.temp_table_prefix}ScriptSchemas J \n")
+            create_schemas.write(f"{'\t' * ident_level}RIGHT JOIN ( SELECT name AS schema_name  \n")
+            #see comment above about reactivating with ms_schema_names_filter
+            #create_schemas.write(f"FROM   sys.schemas S WHERE {ms_schema_names_filter} AND s.NAME NOT LIKE 'db_%' \n")
+            create_schemas.write(f"{'\t' * ident_level}) DB ON J.schema_name = DB.schema_name \n")
+            create_schemas.write(f"{'\t' * ident_level}WHERE J.schema_name Is NULL; \n")
 
-    elif dbtype == DBType.PostgreSQL:  
-        create_schemas.write(f"{'\t' * ident_level}INSERT  INTO {db_syntax.temp_table_prefix}ScriptSchemas ( schema_name, SQL_DROP, schemaStat)\n")
-        create_schemas.write(f"{'\t' * ident_level}SELECT  J.schema_name,'DROP SCHEMA ' || J.schema_name || ';', 2 \n")
-        create_schemas.write(f"{'\t' * ident_level}FROM    information_schema.schemata J \n")
-        create_schemas.write(f"{'\t' * ident_level}Where J.schema_name Not In ('pg_catalog','information_schema') AND J.schema_name NOT LIKE 'pg_temp%' AND J.schema_name NOT LIKE 'pg_toast%' \n")
-        create_schemas.write(f"{'\t' * ident_level}AND LOWER(J.schema_name) Not IN (select LOWER(J1.schema_name) from {db_syntax.temp_table_prefix}scriptschemas J1);\n")
+        elif dbtype == DBType.PostgreSQL:  
+            create_schemas.write(f"{'\t' * ident_level}INSERT  INTO {db_syntax.temp_table_prefix}ScriptSchemas ( schema_name, SQL_DROP, schemaStat)\n")
+            create_schemas.write(f"{'\t' * ident_level}SELECT  J.schema_name,'DROP SCHEMA ' || J.schema_name || ';', 2 \n")
+            create_schemas.write(f"{'\t' * ident_level}FROM    information_schema.schemata J \n")
+            create_schemas.write(f"{'\t' * ident_level}Where J.schema_name Not In ('pg_catalog','information_schema') AND J.schema_name NOT LIKE 'pg_temp%' AND J.schema_name NOT LIKE 'pg_toast%' \n")
+            create_schemas.write(f"{'\t' * ident_level}AND LOWER(J.schema_name) Not IN (select LOWER(J1.schema_name) from {db_syntax.temp_table_prefix}scriptschemas J1);\n")
 
-    create_schemas.write(f"{'\t' * ident_level}\n")
+        create_schemas.write(f"{'\t' * ident_level}\n")
 
     #time to generate the code
     if ops_remove_all_extra_ents:

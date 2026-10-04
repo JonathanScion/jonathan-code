@@ -99,7 +99,11 @@ class ScriptingOptions:
    data_scripting_generate_dml_statements: bool = False
    data_comparison_include_equal_rows: bool = True  # if false, equal rows excluded from CSV/HTML comparison reports
    data_window_only: bool = False  # 3/31/15
-   data_window_got_specific_cells: bool = False  # in case the user wants specific cells not to be included
+   # NOT IMPLEMENTED, and accepted only so existing config files keep loading. The code behind it reads a
+   # per-column marker (_dataWindowcolused_) that nothing has ever populated, so there is no way to say
+   # which cells are meant. Setting it true changes nothing and the run says so. Left in place rather than
+   # removed because the strict unknown-key check would then reject every config that mentions it
+   data_window_got_specific_cells: bool = False
    # Rows per INSERT when scripting data: batching keeps the column list from repeating on every row (a much
    # smaller script, still plain SQL). 1 = one statement per row. Very large batches slow down GUI SQL editors
    data_insert_batch_rows: int = 200

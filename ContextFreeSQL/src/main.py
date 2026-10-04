@@ -528,6 +528,11 @@ def main():
     # A row filter means the scripted rows are a window, not the table. Without data_window_only the script
     # deletes every target row it does not carry - so scripting 'studentid = 1' would empty the table of
     # everyone else. Forgetting that is not a mistake worth leaving available, so the filter turns it on
+    if config_vals.script_ops.data_window_got_specific_cells:
+        print("WARNING: scripting_options.data_window_got_specific_cells is not implemented and does"
+              " nothing. The code behind it needs a per-column marker that nothing populates, so there is"
+              " no way to say which cells are meant. It is still accepted so existing configs keep loading.")
+
     if config_vals.tables_data.where and not config_vals.script_ops.data_window_only:
         config_vals.script_ops.data_window_only = True
         filtered = ', '.join(sorted(config_vals.tables_data.where))

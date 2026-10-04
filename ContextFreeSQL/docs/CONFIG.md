@@ -167,7 +167,7 @@ Controls what gets scripted and how.
 |--------|------|---------|-------------|
 | `remove_all_extra_ents` | bool | `true` | When `true`, generates DROP statements for entities that exist in the target database but not in the source. **Use with caution!** |
 | `script_schemas` | bool | `true` | Create and drop the schemas themselves - `CREATE SCHEMA`, `DROP SCHEMA`. Only the namespaces: a table's own DDL is not affected. Off, the target has to hold the schemas already, and anything the script creates in a missing one fails there with `schema "x" does not exist` |
-| `all_schemas` | bool | `true` | Script all schemas. If `false`, only scripts schemas used by selected entities |
+| `all_schemas` | bool | `true` | `true` scripts every schema in the source. `false` scripts only the schemas the entities being scripted actually live in, and then never looks for extra schemas on the target - with only some schemas considered, every other one would read as extra |
 | `script_security` | bool | `true` | Include security objects: roles, permissions, RLS policies |
 | `script_extensions` | bool | `true` | Create the extensions the scripted schema depends on, before the tables. Only the ones something needs: a column's type (`vector`, `citext`, `geometry`), an index's access method (`hnsw`) or its operator class (`vector_cosine_ops`). Extensions merely installed on the server are left out, since a managed PostgreSQL carries its own and creating those on a target is refused. Set `false` to leave extensions to whoever administers the target |
 | `column_collation` | bool | `true` | Include column collation settings |
@@ -179,7 +179,7 @@ Controls what gets scripted and how.
 | `data_scripting_generate_dml_statements` | bool | `false` | Generate INSERT/UPDATE/DELETE statements for data |
 | `data_comparison_include_equal_rows` | bool | `true` | Include unchanged rows in CSV/HTML comparison reports |
 | `data_window_only` | bool | `false` | Only compare data within a specific window |
-| `data_window_got_specific_cells` | bool | `false` | Exclude specific cells from data window |
+| `data_window_got_specific_cells` | bool | `false` | **Not implemented.** The code behind it needs a per-column marker that nothing populates, so there is no way to say which cells are meant. Setting it `true` changes nothing and the run says so. Still accepted so existing config files keep loading |
 | `data_insert_batch_rows` | int | `200` | Rows per INSERT when scripting data. Batching stops the column list from repeating on every row, which makes the script much smaller; `1` writes one statement per row. See below |
 
 **Example:**

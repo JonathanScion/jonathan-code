@@ -179,3 +179,99 @@ def test_off_against_a_target_without_the_schema_says_which_schema(source_db, tm
         f'the failure should name the missing schema, not be a syntax error: {message}')
     assert 'syntax error' not in message, (
         'the script is structurally broken rather than failing on the missing schema: ' + message)
+
+
+MULTI_SCHEMA_SQL = """
+CREATE SCHEMA wanted;
+CREATE SCHEMA unrelated;
+CREATE TABLE wanted.t (id int PRIMARY KEY);
+CREATE TABLE unrelated.u (id int PRIMARY KEY);
+"""
+
+
+def generate_with(db_name, work_dir, all_schemas, only_tables):
+    """A run scripting only the named entities, with all_schemas set either way."""
+    cfg = load_test_config()
+    out_sql = os.path.join(work_dir, f'all_{all_schemas}.sql')
+    config = {
+        'database': {'host': cfg.host, 'db_name': db_name, 'user': cfg.user,
+                     'password': cfg.password, 'port': cfg.port},
+        'scripting_options': {'remove_all_extra_ents': True, 'script_security': False,
+                              'all_schemas': all_schemas, 'script_schemas': True},
+        'table_script_ops': {'column_identity': True, 'indexes': True, 'foreign_keys': True,
+                             'defaults': True, 'check_constraints': True},
+        'db_ents_to_load': {'tables': only_tables, 'schemas': []},
+        'tables_data': {'tables': [], 'schemas': [], 'script_data': False},
+        'input_output': {'html_template_path': '', 'html_output_path': os.path.join(work_dir, 'r.html'),
+                         'diff_template_path': '', 'diff_output_dir': work_dir, 'output_sql': out_sql},
+        'sql_script_params': {'print': False, 'print_exec': True, 'exec_code': False,
+                              'html_report': False, 'export_csv': False},
+    }
+    path = os.path.join(work_dir, f'config_all_{all_schemas}.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(config, f)
+    result = subprocess.run([sys.executable, '-m', 'src.main', path],
+                            capture_output=True, text=True, cwd=str(PROJECT))
+    assert result.returncode == 0, f'{result.stdout}\n{result.stderr}'
+    with open(out_sql, encoding='utf-8') as f:
+        return f.read()
+
+
+@pytest.mark.schema
+@pytest.mark.slow
+def test_all_schemas_off_scripts_only_the_scripted_entities_schemas(tmp_path):
+    """
+    all_schemas was declared and documented from the start and never read.
+
+    Every schema in the source was scripted regardless, so a one-table run still carried CREATE SCHEMA for
+    every schema on the server - which on a managed database means naming schemas that are not yours.
+    """
+    db_name = 'cfs_as_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, MULTI_SCHEMA_SQL)
+        finally:
+            conn.close()
+        on = generate_with(db_name, str(tmp_path), True, ['wanted.t'])
+        off = generate_with(db_name, str(tmp_path), False, ['wanted.t'])
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert 'CREATE SCHEMA wanted' in off, 'the schema the scripted table lives in was left out'
+    assert 'CREATE SCHEMA unrelated' not in off, (
+        'all_schemas off still scripted a schema holding nothing the run was asked for')
+    # on is the old behaviour and must be unchanged
+    assert 'CREATE SCHEMA unrelated' in on, 'all_schemas on should still script every schema, as it always has'
+
+
+@pytest.mark.schema
+@pytest.mark.slow
+def test_all_schemas_off_never_hunts_for_extra_schemas(tmp_path):
+    """
+    The dangerous half.
+
+    The extras query marks every schema on the target that is not in the script's list. With all_schemas
+    off that list holds one schema, so with remove_all_extra_ents on it would drop every other schema on
+    the target - schemas the run never even looked at.
+    """
+    db_name = 'cfs_as_' + uuid.uuid4().hex[:8]
+    admin = admin_connection()
+    run_sql(admin, f'CREATE DATABASE {db_name}')
+    try:
+        conn = db_connection(db_name)
+        try:
+            run_sql(conn, MULTI_SCHEMA_SQL)
+        finally:
+            conn.close()
+        off = generate_with(db_name, str(tmp_path), False, ['wanted.t'])
+    finally:
+        run_sql(admin, f'DROP DATABASE IF EXISTS {db_name} WITH (FORCE)')
+        admin.close()
+
+    assert 'Schemas only on DB' not in off, (
+        'the script still looks for extra schemas while only considering one of them')
+    assert 'all_schemas is off' in off, 'the script should say why it is not looking'

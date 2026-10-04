@@ -7,6 +7,7 @@ from src.defs.script_defs import DBType, DBSyntax, ScriptingOptions, InputOutput
 from src.generate.generate_db_ent_types.schemas import create_db_state_schemas
 from src.generate.generate_db_ent_types.user_types import create_user_types
 from src.generate.generate_db_ent_types.extensions import create_extensions
+from src.generate.generate_final_sequences import generate_sequence_resync
 from src.generate.generate_db_ent_types.generate_state_tables.tables import create_db_state_temp_tables_for_tables
 from src.generate.generate_db_ent_types.generate_state_tables.coded import create_db_state_temp_tables_for_coded
 from src.generate.generate_db_ent_types.generate_state_tables.tables_check_constraints import create_db_state_check_constraints
@@ -107,7 +108,9 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
     # comment said what it was for ('turning it off from MA, when doing only data'), and the call below was
     # commented out in the line this replaces
     if scrpt_ops.script_schemas:
-        create_schemas, drop_schemas = create_db_state_schemas(db_type, schema_tables.tables, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
+        # tbl_ents, not schema_tables.tables: all_schemas off means the schemas the *scripted* entities live
+        # in, and schema_tables.tables is every table in the database, which would name every schema again
+        create_schemas, drop_schemas = create_db_state_schemas(db_type, tbl_ents, schema_tables.schemas , scrpt_ops.all_schemas, scrpt_ops.remove_all_extra_ents)
     else:
         create_schemas, drop_schemas = StringIO(), StringIO()
         # The schema block is not self-contained: it writes three END; for the two BEGINs it opens, and the
@@ -394,10 +397,13 @@ def generate_all_script(schema_tables: DBSchema, db_type: DBType, tbl_ents: pd.D
         buffer.write(j2_cols_add_alter_drop.getvalue())
         buffer.write("\n\n")
     
-    scrpt_ops.data_scripting_generate_dml_statements = True #! test, remove
     #scrpt_ops.data_scripting_leave_report_fields_updated_save_old_value = True #! test, remove
     script_data(schema_tables = schema_tables, db_type=db_type, tbl_ents=tbl_ents, script_ops=scrpt_ops, out_buffer=buffer, db_syntax=db_syntax, input_output=input_output, tables_data=tables_data, sql_script_params=sql_script_params, source_db_label=source_db_label)
     
+    # The rows went in with their keys spelled out, which leaves every identity sequence where it
+    # started - so put them in step before anything else writes to the database
+    generate_sequence_resync(db_type, schema_tables, tbl_ents, buffer)
+
     # Write not null alter columns if needed (after getting data)
     got_data = True  # This should be set based on the script_data function result
     if got_data and j2_alter_cols_not_null.getvalue():
