@@ -159,6 +159,32 @@ class TestTableOperations:
         schema_assertions.assert_column_exists('public', table_name, 'timestamp_col')
         schema_assertions.assert_column_exists('public', table_name, 'json_col')
 
+    def test_varchar_longer_than_smallint(self, test_connection, script_generator, unique_prefix, schema_assertions):
+        """
+        A varchar wider than 32767 must survive the script's own state table. ScriptCols.max_length
+        was smallint, so a varchar(100000) aborted the whole script with "smallint out of range".
+        """
+        table_name = f"{unique_prefix}wide_varchar"
+        full_table_name = f"public.{table_name}"
+
+        db_helpers.execute_sql(
+            test_connection,
+            f'CREATE TABLE public."{table_name}" (id INT PRIMARY KEY, wide_col VARCHAR(100000))'
+        )
+
+        script = script_generator.generate([full_table_name])
+
+        # Narrow it, so the script has to compare the length and put it back
+        db_helpers.execute_sql(
+            test_connection,
+            f'ALTER TABLE public."{table_name}" ALTER COLUMN wide_col TYPE VARCHAR(50)'
+        )
+
+        execute_generated_script(test_connection, script)
+
+        col = db_helpers.get_column_info(test_connection, 'public', table_name, 'wide_col')
+        assert col['character_maximum_length'] == 100000
+
     def test_table_recreate_preserves_primary_key(self, test_connection, script_generator, unique_prefix, schema_assertions):
         """
         Test that recreating a table preserves the primary key.
